@@ -506,7 +506,12 @@ def generate_model_with_claude(
     research: str, quant_data: dict | None = None,
     retry: bool = False,
 ) -> dict | None:
-    """Use Claude to generate a complete target price model configuration."""
+    """Use Claude to generate a complete target price model configuration.
+
+    Returns a dict with the model config plus an extra '_gen_meta' key containing:
+      tokens_used, repair_attempts, repair_method, archetype
+    The '_gen_meta' key is stripped before saving to Supabase but used for observability.
+    """
     if not ANTHROPIC_API_KEY:
         print(f"  [{ticker}] ANTHROPIC_API_KEY not set — cannot generate model")
         return None
@@ -535,6 +540,23 @@ def generate_model_with_claude(
 
     content = ""
     stop_reason = "unknown"
+    tokens_used = 0
+    repair_attempts = 0
+    repair_method = None
+
+    def _attach_meta(result: dict | None) -> dict | None:
+        """Attach generation metadata to the result dict."""
+        if result is None:
+            return None
+        archetype_info = result.get("archetype", {})
+        arch_primary = archetype_info.get("primary") if isinstance(archetype_info, dict) else None
+        result["_gen_meta"] = {
+            "tokens_used": tokens_used,
+            "repair_attempts": repair_attempts,
+            "repair_method": repair_method,
+            "archetype": arch_primary,
+        }
+        return result
 
     try:
         label = "Retrying" if retry else "Generating"
@@ -558,6 +580,11 @@ def generate_model_with_claude(
         data = resp.json()
         content = data.get("content", [{}])[0].get("text", "")
         stop_reason = data.get("stop_reason", "unknown")
+
+        # Extract token usage from Claude API response
+        usage = data.get("usage", {})
+        tokens_used = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+
         if stop_reason == "max_tokens":
             print(f"  [{ticker}] WARNING: response truncated (hit max_tokens)")
 
@@ -567,33 +594,38 @@ def generate_model_with_claude(
         clean = re.sub(r'^```(?:json)?\s*', '', clean)
         clean = re.sub(r'\s*```$', '', clean)
         try:
-            return json.loads(clean)
+            return _attach_meta(json.loads(clean))
         except json.JSONDecodeError:
             pass
 
         # Fallback 1: brace extraction
+        repair_attempts += 1
         first_brace = content.find('{')
         last_brace = content.rfind('}')
         if first_brace != -1 and last_brace > first_brace:
             extracted = content[first_brace:last_brace + 1]
             try:
-                return json.loads(extracted)
+                repair_method = "brace_extraction"
+                return _attach_meta(json.loads(extracted))
             except json.JSONDecodeError:
                 pass
 
             # Fallback 2: repair common JSON issues
+            repair_attempts += 1
             try:
                 repaired = extracted
                 # Remove trailing commas before } or ]
                 repaired = re.sub(r',\s*([}\]])', r'\1', repaired)
                 # Fix unescaped newlines inside string values
                 repaired = re.sub(r'(?<=": ")(.*?)(?="[,\s}])', lambda m: m.group(0).replace('\n', ' '), repaired)
-                return json.loads(repaired)
+                repair_method = "trailing_comma_fix"
+                return _attach_meta(json.loads(repaired))
             except (json.JSONDecodeError, Exception):
                 pass
 
         # Fallback 3: truncation repair — close open braces/brackets
         if stop_reason == "max_tokens":
+            repair_attempts += 1
             print(f"  [{ticker}] Attempting truncated JSON repair...")
             repaired = repair_truncated_json(content)
             if repaired:
@@ -602,7 +634,8 @@ def generate_model_with_claude(
                     # Validate it has the minimum required fields
                     if result.get("model_defaults") and result.get("scenarios"):
                         print(f"  [{ticker}] Truncation repair succeeded (some fields may be partial)")
-                        return result
+                        repair_method = "truncation_repair"
+                        return _attach_meta(result)
                     else:
                         print(f"  [{ticker}] Repaired JSON missing required fields")
                 except json.JSONDecodeError as e3:
@@ -688,8 +721,13 @@ def update_stock_in_supabase(ticker: str, model_config: dict, research_text: str
         return False
 
 
-def process_stock(stock: dict) -> dict | None:
-    """Full pipeline for one stock: load quant → research → generate → save."""
+def process_stock(stock: dict, metrics=None) -> dict | None:
+    """Full pipeline for one stock: load quant -> research -> generate -> save.
+
+    Args:
+        stock: Stock dict from watchlist/DB.
+        metrics: Optional PipelineMetrics instance for observability.
+    """
     ticker = stock["ticker"]
     name = stock["name"]
     sector = stock.get("sector", "Unknown")
@@ -723,14 +761,46 @@ def process_stock(stock: dict) -> dict | None:
         return None
 
     # Stage 2: Generate model via Claude (with quant facts + Perplexity research)
+    gen_start = time.monotonic()
     model_config = generate_model_with_claude(
         ticker, name, sector, thesis, kill_condition,
         target_price, timeline, research, quant_data,
     )
+    gen_duration = time.monotonic() - gen_start
+
+    # Extract and strip generation metadata before any further processing
+    gen_meta = {}
+    if model_config and "_gen_meta" in model_config:
+        gen_meta = model_config.pop("_gen_meta")
 
     if not model_config:
+        # Record failed generation in metrics
+        if metrics:
+            try:
+                metrics.record_model_gen(
+                    ticker=ticker, duration_s=gen_duration, success=False,
+                    tokens_used=gen_meta.get("tokens_used", 0),
+                    repair_attempts=gen_meta.get("repair_attempts", 0),
+                    repair_method=gen_meta.get("repair_method"),
+                    archetype=None,
+                )
+            except Exception:
+                pass
         print(f"  [{ticker}] ✗ Model generation failed")
         return None
+
+    # Record successful generation in metrics
+    if metrics:
+        try:
+            metrics.record_model_gen(
+                ticker=ticker, duration_s=gen_duration, success=True,
+                tokens_used=gen_meta.get("tokens_used", 0),
+                repair_attempts=gen_meta.get("repair_attempts", 0),
+                repair_method=gen_meta.get("repair_method"),
+                archetype=gen_meta.get("archetype"),
+            )
+        except Exception:
+            pass
 
     # Show what Claude produced
     arch = model_config.get("archetype", {})
@@ -890,7 +960,7 @@ def check_archetype_stability(ticker: str, current_archetype: dict) -> dict:
     return result
 
 
-def generate_for_ticker(ticker: str, target_override: float | None = None) -> dict | None:
+def generate_for_ticker(ticker: str, target_override: float | None = None, metrics=None) -> dict | None:
     """Generate model for a single ticker — callable from run_pipeline.py or external scripts."""
     watchlist = get_watchlist()
     stock = next((s for s in watchlist if s["ticker"].upper() == ticker.upper()), None)
@@ -922,7 +992,7 @@ def generate_for_ticker(ticker: str, target_override: float | None = None) -> di
     if target_override:
         stock.setdefault("target", {})["price"] = target_override
 
-    return process_stock(stock)
+    return process_stock(stock, metrics=metrics)
 
 
 def main():

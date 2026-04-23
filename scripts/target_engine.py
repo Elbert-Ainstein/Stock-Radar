@@ -1018,10 +1018,33 @@ SECTOR_PS_BENCHMARKS: dict[str, tuple[float, float, float]] = {
 }
 
 
+def _has_cyclical_history(fin: FinancialData) -> bool:
+    """Detect whether a stock has cyclical margin patterns in its history.
+
+    Returns True if the company has had positive operating margins in the past
+    but is currently at/below breakeven — i.e., it's in a cyclical trough,
+    not structurally pre-profit. This prevents routing cyclical-at-trough
+    companies (like AEHR in a semi-equipment downturn) to the P/S framework,
+    which is designed for companies that have NEVER been profitable.
+
+    Heuristic: if ≥3 of the last 10 annual periods had operating margin > 5%,
+    the company has demonstrated it CAN be profitable — current losses are
+    cyclical, not structural.
+    """
+    profitable_years = 0
+    for p in fin.annual_income[-10:]:
+        rev = p.get("Total Revenue")
+        oi = p.get("Operating Income")
+        if rev and rev > 0 and oi is not None and oi / rev > 0.05:
+            profitable_years += 1
+    return profitable_years >= 3
+
+
 def _should_use_revenue_multiple(
     fin: FinancialData,
     forward: dict[str, Any] | None = None,
     base_drivers: dict[str, float] | None = None,
+    archetype: str | None = None,
 ) -> bool | float:
     """Detect whether this stock should be valued via revenue multiples
     instead of the standard EV/EBITDA framework.
@@ -1035,6 +1058,9 @@ def _should_use_revenue_multiple(
 
     Triggers:
       1. TTM EBITDA ≤ 0 (pre-profit) → True
+         EXCEPTION: cyclical-at-trough companies (historically profitable
+         but currently at/below breakeven) should use the cyclical engine,
+         not P/S. Detected via archetype hint or historical margin analysis.
       2. TTM operating margin < 5% AND P/S > 12x → True
       3. EBITDA yield 0%–2% of market cap (transition zone):
          - yield < 0.5% → True (functionally pre-profit)
@@ -1067,9 +1093,35 @@ def _should_use_revenue_multiple(
         and ebitda_margin_target > 0.20
     )
 
+    # ── Cyclical-at-trough guard ──
+    # A cyclical company at the bottom of its cycle (AEHR in semi downturn,
+    # MU at memory trough) may have TTM EBITDA ≤ 0.  P/S mode treats this
+    # as "structurally pre-profit" (like early SNOW/PLTR) and produces absurdly
+    # low targets by applying conservative terminal P/S to trough revenue.
+    # The correct framework is the cyclical normalized-earnings engine, which
+    # uses historical mid-cycle margins.
+    #
+    # Detection: (a) archetype hint says "cyclical" or "special_situation",
+    # OR (b) historical data shows ≥3 profitable years out of last 10.
+    archetype_lower = (archetype or "").lower()
+    is_cyclical_hint = archetype_lower in ("cyclical", "special_situation")
+    is_cyclical_history = _has_cyclical_history(fin)
+
     # Trigger 1: truly pre-profit
     if ttm_ebitda <= 0:
-        print(f"  [routing] {ticker}: P/S mode — TTM EBITDA ≤ 0 (pre-profit)", file=sys.stderr)
+        if is_cyclical_hint or is_cyclical_history:
+            reason = (
+                f"archetype='{archetype_lower}'" if is_cyclical_hint
+                else "historical margin analysis shows ≥3 profitable years"
+            )
+            print(
+                f"  [routing] {ticker}: EV/EBITDA mode (cyclical-at-trough) — "
+                f"TTM EBITDA ≤ 0 but {reason}. "
+                f"Recommending cyclical normalized-earnings engine over P/S.",
+                file=sys.stderr,
+            )
+            return False
+        print(f"  [routing] {ticker}: P/S mode — TTM EBITDA ≤ 0 (structurally pre-profit)", file=sys.stderr)
         return True
 
     # Trigger 2: extreme P/S with near-zero margins
@@ -1829,13 +1881,41 @@ def build_target(
     use_rev_multiple = False
     if not use_cyclical:
         # Returns True (pure P/S), False (pure EV/EBITDA), or float 0-1 (blend weight for P/S)
-        routing_result = _should_use_revenue_multiple(fin, forward=forward, base_drivers=base_drivers)
+        routing_result = _should_use_revenue_multiple(fin, forward=forward, base_drivers=base_drivers, archetype=archetype)
         if routing_result is True:
             use_rev_multiple = True
             ps_blend_weight = 1.0
         elif isinstance(routing_result, float):
             ps_blend_weight = routing_result
             use_rev_multiple = False  # primary is EV/EBITDA, but we'll blend
+        elif routing_result is False and ttm_ebitda <= 0 and _has_cyclical_history(fin):
+            # Cyclical-at-trough auto-promotion: the routing guard rejected P/S
+            # mode because this company has a cyclical history, but use_cyclical
+            # is False (archetype wasn't explicitly "cyclical"). Auto-promote to
+            # cyclical mode so we use normalized mid-cycle margins instead of
+            # producing garbage from negative EBITDA × EV/EBITDA multiple.
+            print(
+                f"  [routing] {fin.ticker}: auto-promoting to cyclical mode — "
+                f"TTM EBITDA ≤ 0 with historically profitable business",
+                file=sys.stderr,
+            )
+            use_cyclical = True
+            try:
+                base_drivers = compute_cyclical_defaults(fin, forward=forward)
+                # Re-apply user overrides on top of cyclical defaults
+                if drivers:
+                    for k, v in drivers.items():
+                        if k in base_drivers:
+                            base_drivers[k] = v
+            except Exception as e:
+                print(f"  [target_engine] cyclical auto-promote failed: {e} — falling back to EV/EBITDA", file=sys.stderr)
+                use_cyclical = False
+            if use_cyclical:
+                warnings.append(
+                    f"Auto-promoted to cyclical mode: TTM EBITDA is negative but "
+                    f"historical data shows this company has been profitable in prior years. "
+                    f"Using normalized mid-cycle margins instead of P/S or negative-EBITDA EV/EBITDA."
+                )
 
     ebitda_yield = (ttm_ebitda / (fin.market_cap or 1)) if ttm_ebitda > 0 else 0
     if use_rev_multiple:

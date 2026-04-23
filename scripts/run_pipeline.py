@@ -5,8 +5,10 @@ Runs all scouts in parallel, then the analyst sequentially.
 Writes progress to .pipeline-progress for the dashboard to poll.
 
 Usage:
-    python scripts/run_pipeline.py           # run all scouts + analyst
-    python scripts/run_pipeline.py --free    # only free scouts (no API keys needed)
+    python scripts/run_pipeline.py                # smart mode (default) — archetype-aware scout routing
+    python scripts/run_pipeline.py --full         # force all scouts for every stock
+    python scripts/run_pipeline.py --fast         # minimal scout set (always-tier only, fastest)
+    python scripts/run_pipeline.py --free         # only free scouts (no API keys needed)
     python scripts/run_pipeline.py --ticker AAPL  # run pipeline for a single new stock
 """
 import sys
@@ -21,6 +23,8 @@ from pathlib import Path
 # ─── Ensure utils loads .env early ───
 from utils import load_env, set_run_id
 load_env()
+
+from observability import PipelineMetrics, ScoutMetrics
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 PROGRESS_FILE = DATA_DIR / ".pipeline-progress"
@@ -143,6 +147,11 @@ def run_single_ticker(ticker: str):
 
 def run():
     free_only = "--free" in sys.argv
+    # Default is smart routing (archetype-aware). Use --full to force all scouts,
+    # or --fast for minimum viable signal set only.
+    force_full = "--full" in sys.argv
+    smart_mode = not force_full
+    research_mode = "fast" if "--fast" in sys.argv else ("full" if force_full else "smart")
     single_ticker = None
     if "--ticker" in sys.argv:
         idx = sys.argv.index("--ticker")
@@ -169,10 +178,15 @@ def run():
         scouts.append("models")  # target price model generation
     total_stages = len(scouts)
 
+    metrics = PipelineMetrics()
+
+    mode_label = f"  Mode: {research_mode}" if smart_mode else ""
     print("+" + "=" * 58 + "+")
     print("|   STOCK RADAR — DAILY PIPELINE                           |")
     print("|   " + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + f"  Run: {run_id}              |")
     print(f"|   Stages: {total_stages} ({', '.join(scouts)})                     |")
+    if smart_mode:
+        print(f"|   Research mode: {research_mode:<40s}|")
     print("+" + "=" * 58 + "+")
 
     start = time.time()
@@ -187,13 +201,14 @@ def run():
         # All scouts are independent (different data sources), so we run
         # them concurrently to cut wall-clock time by ~80%.
 
-        scout_specs = [
+        # Build the default (full) scout list
+        all_scout_specs = [
             ("quant", "scout_quant"),
             ("insider", "scout_insider"),
             ("social", "scout_social"),
         ]
         if not free_only:
-            scout_specs += [
+            all_scout_specs += [
                 ("news", "scout_news"),
                 ("catalyst", "scout_catalyst"),
                 ("moat", "scout_moat"),
@@ -201,13 +216,72 @@ def run():
                 ("youtube", "scout_youtube"),
             ]
 
+        # Smart/fast mode: use research_manager to select scouts
+        research_plans = {}  # ticker -> ResearchPlan (populated in smart mode)
+        if smart_mode:
+            from research_manager import (
+                plan_research, SCOUT_MODULE_MAP,
+                detect_conflicts, check_sufficiency,
+                print_conflict_warnings, print_sufficiency_report,
+            )
+            # Load archetypes from Supabase to route per-stock
+            archetypes_by_ticker = {}
+            try:
+                from utils import get_watchlist as _get_wl_smart
+                wl_smart = _get_wl_smart()
+                for stock in wl_smart:
+                    t = stock["ticker"]
+                    arch = stock.get("archetype")  # jsonb or None
+                    plan = plan_research(t, archetype=arch, mode=research_mode)
+                    research_plans[t] = plan
+                    if arch and isinstance(arch, dict):
+                        archetypes_by_ticker[t] = arch.get("primary")
+                    print(f"  [plan] {t}: {plan.rationale}")
+            except Exception as e:
+                print(f"  [research_manager] Could not load archetypes: {e}")
+                print("  Falling back to full scout set.")
+                smart_mode = False  # disable smart routing, fall through to default
+
+        if smart_mode and research_plans:
+            # Union of all scouts needed across all stocks
+            needed_scouts = set()
+            for plan in research_plans.values():
+                needed_scouts.update(plan.scouts_to_run)
+            # Filter scout_specs to only the needed scouts
+            available = {name for name, _ in all_scout_specs}
+            scout_specs = [
+                (name, mod) for name, mod in all_scout_specs
+                if name in needed_scouts
+            ]
+            skipped = available - {name for name, _ in scout_specs}
+            if skipped:
+                print(f"\n  [smart] Skipping scouts not needed by any stock: {', '.join(sorted(skipped))}")
+            # Also include filings if needed and not already present
+            needed_but_missing = needed_scouts - available
+            for s in needed_but_missing:
+                if s in SCOUT_MODULE_MAP and not free_only:
+                    scout_specs.append((s, SCOUT_MODULE_MAP[s]))
+        else:
+            scout_specs = all_scout_specs
+
         def _run_scout(name, import_path, main_func_name="main"):
             """Run a single scout module, returning (name, success, error_msg)."""
+            t0 = time.monotonic()
             try:
                 mod = __import__(import_path)
                 getattr(mod, main_func_name)()
+                t1 = time.monotonic()
+                metrics.record_scout_run(ScoutMetrics(
+                    scout_name=name, start_time=t0, end_time=t1,
+                    duration_s=t1 - t0, success=True,
+                ))
                 return (name, True, None)
             except Exception as e:
+                t1 = time.monotonic()
+                metrics.record_scout_run(ScoutMetrics(
+                    scout_name=name, start_time=t0, end_time=t1,
+                    duration_s=t1 - t0, success=False, error_msg=str(e),
+                ))
                 return (name, False, str(e))
 
         num_scouts = len(scout_specs)
@@ -248,6 +322,22 @@ def run():
             print(f"  Failed scouts: {', '.join(failed)}")
             for n in failed:
                 print(f"    - {n}: {scout_results[n][2]}")
+
+        # ─── Research Manager: Conflict & Sufficiency Analysis ─────
+        if smart_mode and research_plans:
+            print("\n" + "-" * 60)
+            print("  RESEARCH MANAGER — POST-SCOUT ANALYSIS")
+            print("-" * 60)
+            # Conflict detection (runs once on the global scout results)
+            conflicts = detect_conflicts(scout_results)
+            print_conflict_warnings(conflicts)
+            # Sufficiency check per archetype (use the most common primary)
+            for ticker, plan in research_plans.items():
+                arch_primary = plan.archetype_primary
+                suff = check_sufficiency(arch_primary, scout_results)
+                if not suff.sufficient or suff.missing_recommended:
+                    print_sufficiency_report(suff, arch_primary)
+            print("-" * 60)
 
         # Advance stage_idx past the parallel scouts block (scouts count as 1 stage
         # in progress, but we keep old total_stages for a meaningful progress bar)
@@ -298,7 +388,7 @@ def run():
                     t = s["ticker"]
                     _write_progress("models", f"Generating model for {t}...", stage_idx, total_stages)
                     try:
-                        m = generate_for_ticker(t)
+                        m = generate_for_ticker(t, metrics=metrics)
                         if m:
                             model_count += 1
                             print(f"  [OK] {t} model generated")
@@ -318,8 +408,18 @@ def run():
     elapsed = time.time() - start
     success = error_msg is None
 
-    # Record completion in Supabase
-    _try_supabase_complete(run_id, success, stock_count, {}, error_msg, "", elapsed)
+    # Collect observability summary and record completion in Supabase
+    try:
+        scout_details = metrics.summarize()
+    except Exception:
+        scout_details = {}
+    _try_supabase_complete(run_id, success, stock_count, scout_details, error_msg, "", elapsed)
+
+    # Print observability summary before final status
+    try:
+        metrics.print_summary()
+    except Exception as obs_err:
+        print(f"  [observability] Could not print summary: {obs_err}")
 
     if success:
         _write_progress("complete", f"Pipeline complete — {stock_count} stocks analyzed in {elapsed:.1f}s", total_stages, total_stages)

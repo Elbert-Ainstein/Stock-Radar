@@ -118,8 +118,17 @@ def _validate_quarterly_revenue(periods: list[dict]) -> list[str]:
     """Detect quarters with suspicious revenue spikes.
 
     Checks two signals for each quarter:
-    1. Revenue > 2x the trailing 4Q average (rolling anomaly)
-    2. Revenue > 2.5x same-quarter-last-year (YoY anomaly)
+    1. Revenue > Nx the trailing 4Q average (rolling anomaly)
+    2. Revenue > Mx same-quarter-last-year (YoY anomaly)
+
+    Thresholds are size-aware:
+    - Large-cap (trailing avg ≥ $500M/Q): 2.0x trailing, 2.5x YoY
+      → catches data-provider errors (MU-class: $23B vs $8.7B actual)
+    - Mid-cap ($100M–$500M): 3.0x trailing, 4.0x YoY
+      → moderate tolerance for business lumpiness
+    - Micro/small-cap (< $100M/Q): 5.0x trailing, 6.0x YoY
+      → high tolerance; $5M→$15M quarter swings are normal order
+        lumpiness for semi-equipment, biotech, and niche industrials
 
     Returns a list of warning strings. Called AFTER period conversion so we can
     catch bad data before it poisons TTM calculations.
@@ -148,12 +157,22 @@ def _validate_quarterly_revenue(periods: list[dict]) -> list[str]:
 
         if len(prior_revs) >= 2:
             trailing_avg = sum(prior_revs) / len(prior_revs)
-            if trailing_avg > 0 and rev > 2.0 * trailing_avg:
+
+            # Size-aware thresholds: micro-caps have lumpy revenue by nature
+            if trailing_avg >= 500e6:       # Large-cap: ≥$500M/Q
+                trailing_thresh = 2.0
+            elif trailing_avg >= 100e6:     # Mid-cap: $100M–$500M/Q
+                trailing_thresh = 3.0
+            else:                           # Micro/small-cap: <$100M/Q
+                trailing_thresh = 5.0
+
+            if trailing_avg > 0 and rev > trailing_thresh * trailing_avg:
                 ratio = rev / trailing_avg
                 warnings.append(
                     f"SUSPECT DATA: {period_label} revenue "
                     f"${rev/1e9:.2f}B is {ratio:.1f}x the trailing "
-                    f"{len(prior_revs)}Q avg ${trailing_avg/1e9:.2f}B. "
+                    f"{len(prior_revs)}Q avg ${trailing_avg/1e9:.2f}B "
+                    f"(threshold: {trailing_thresh:.0f}x for this revenue scale). "
                     f"Possible data error — cross-check against "
                     f"10-Q filing before trusting this quarter."
                 )
@@ -161,13 +180,23 @@ def _validate_quarterly_revenue(periods: list[dict]) -> list[str]:
         # Check 2: same-quarter-last-year (4 periods back in quarterly data)
         if i >= 4:
             yoy_rev = periods[i - 4].get("Total Revenue")
-            if yoy_rev is not None and yoy_rev > 0 and rev > 2.5 * yoy_rev:
-                ratio = rev / yoy_rev
-                warnings.append(
-                    f"SUSPECT DATA: {period_label} revenue "
-                    f"${rev/1e9:.2f}B is {ratio:.1f}x same-quarter-"
-                    f"last-year ${yoy_rev/1e9:.2f}B. Verify against filing."
-                )
+            if yoy_rev is not None and yoy_rev > 0:
+                # Size-aware YoY thresholds
+                if yoy_rev >= 500e6:
+                    yoy_thresh = 2.5
+                elif yoy_rev >= 100e6:
+                    yoy_thresh = 4.0
+                else:
+                    yoy_thresh = 6.0
+
+                if rev > yoy_thresh * yoy_rev:
+                    ratio = rev / yoy_rev
+                    warnings.append(
+                        f"SUSPECT DATA: {period_label} revenue "
+                        f"${rev/1e9:.2f}B is {ratio:.1f}x same-quarter-"
+                        f"last-year ${yoy_rev/1e9:.2f}B "
+                        f"(threshold: {yoy_thresh:.1f}x). Verify against filing."
+                    )
 
     return warnings
 
