@@ -44,6 +44,9 @@ You are a risk analyst evaluating whether a stock's investment kill condition is
 STOCK: {ticker}
 KILL CONDITION: {kill_condition}
 
+INVESTMENT ARCHETYPE: {archetype}
+{archetype_guidance}
+
 CURRENT DATA:
 - Price: ${price}
 - Market cap: ${market_cap_b:.1f}B
@@ -68,6 +71,49 @@ Respond with ONLY valid JSON (no markdown, no explanation outside the JSON):
 }}
 """
 
+# Archetype-specific guidance for kill condition interpretation.
+# The meaning of a drawdown depends on what kind of stock you're holding.
+ARCHETYPE_KILL_GUIDANCE: dict[str, str] = {
+    "garp": (
+        "GARP CONTEXT: Standard kill condition evaluation. A significant price decline "
+        "combined with deteriorating fundamentals (growth stalling, margins compressing, "
+        "PEG expanding beyond sector median) is a genuine warning. Evaluate both the "
+        "kill condition text AND the fundamental trajectory."
+    ),
+    "cyclical": (
+        "CYCLICAL CONTEXT: Price drawdowns must be interpreted through the cycle lens. "
+        "A 30-40% decline at peak cycle is the EXPECTED bear case for cyclical stocks — "
+        "every semiconductor upcycle since 1996 ended with 30%+ correction. This is NOT "
+        "automatically a kill condition. The real kill signals for cyclicals are: (1) the "
+        "cycle turns AND the company loses structural market share, (2) a permanent shift "
+        "in industry structure (not a temporary downturn), (3) balance sheet stress that "
+        "threatens survival through the trough. Do NOT flag normal cyclical compression "
+        "as a kill — flag only structural thesis breaks."
+    ),
+    "transformational": (
+        "TRANSFORMATIONAL CONTEXT: This is a right-tail bet on platform dominance or "
+        "category creation. A 50% price drawdown with an INTACT structural thesis is a "
+        "buying opportunity, not a kill condition. The real kill signals for transformational "
+        "stocks are: (1) the structural thesis breaks (network effects fail to materialize, "
+        "TAM shrinks, technology obsoleted), (2) unit economics are permanently unworkable, "
+        "(3) competitive moat never forms. Do NOT flag price volatility as a kill — flag "
+        "only thesis-level breaks. Be MORE cautious about triggering kills for this archetype."
+    ),
+    "compounder": (
+        "COMPOUNDER CONTEXT: This is a quality-earnings-power holding. The kill signal is "
+        "moat deterioration, not price movement. Watch for: (1) ROIC trending toward WACC "
+        "over multiple quarters, (2) customer churn rising, (3) pricing power eroding, "
+        "(4) competitive advantages weakening. A temporary earnings miss is not a kill — "
+        "a permanent loss of competitive position is."
+    ),
+    "special_situation": (
+        "SPECIAL SITUATION CONTEXT: This is an event-driven position. The kill condition "
+        "should be evaluated purely against the event catalyst. Has the event failed? Has "
+        "the regulatory approval been denied? Has the merger been blocked? If the event "
+        "is still pending, evaluate the probability of success based on current evidence."
+    ),
+}
+
 
 def evaluate_kill_condition(
     ticker: str,
@@ -75,6 +121,7 @@ def evaluate_kill_condition(
     quant_data: dict | None = None,
     signals: list[dict] | None = None,
     news_data: dict | None = None,
+    archetype: str | None = None,
 ) -> dict:
     """Evaluate a single stock's kill condition against current data.
 
@@ -117,9 +164,15 @@ def evaluate_kill_condition(
     if not signal_lines:
         signal_lines.append("  (No recent signals available)")
 
+    # Resolve archetype for kill condition context
+    arch = (archetype or "garp").lower()
+    arch_guidance = ARCHETYPE_KILL_GUIDANCE.get(arch, ARCHETYPE_KILL_GUIDANCE["garp"])
+
     prompt = _EVAL_PROMPT.format(
         ticker=ticker,
         kill_condition=kill_condition,
+        archetype=arch.upper(),
+        archetype_guidance=arch_guidance,
         price=quant_data.get("price", "?"),
         market_cap_b=quant_data.get("market_cap_b", 0) or 0,
         rev_growth=quant_data.get("revenue_growth_pct", "?"),
@@ -208,13 +261,18 @@ def evaluate_watchlist_kill_conditions(
                 news_data = s.get("data", {})
                 break
 
-        print(f"  [{ticker}] Evaluating kill condition...")
+        # Resolve archetype from stock config (set by generate_model.py)
+        stock_archetype = (stock.get("archetype") or {})
+        arch_primary = stock_archetype.get("primary") if isinstance(stock_archetype, dict) else None
+
+        print(f"  [{ticker}] Evaluating kill condition (archetype: {(arch_primary or 'garp').upper()})...")
         result = evaluate_kill_condition(
             ticker=ticker,
             kill_condition=kill_condition,
             quant_data=quant,
             signals=sigs,
             news_data=news_data,
+            archetype=arch_primary,
         )
         results[ticker] = result
 

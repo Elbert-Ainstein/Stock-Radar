@@ -46,9 +46,14 @@ export default function SensitivityTable({
     return "text-[var(--secondary)]";
   }
 
-  const subtitle = method === "ps"
+  const isCyclical = method === "cyclical";
+  const subtitle = isCyclical
+    ? `Sensitivity — target price at varying EBIT margin \u00D7 EV/EBIT (${sharesM.toFixed(0)}M shares)`
+    : method === "ps"
     ? `Sensitivity — target price at varying revenue \u00D7 P/S (${sharesM.toFixed(0)}M shares)`
     : `Sensitivity — target price at varying revenue \u00D7 P/E (${(opMargin * 100).toFixed(0)}% op margin, ${(taxRate * 100).toFixed(0)}% tax, ${sharesM.toFixed(0)}M shares)`;
+
+  const rowLabel = isCyclical ? "EBIT Margin" : "Revenue";
 
   return (
     <div className="overflow-x-auto">
@@ -56,7 +61,7 @@ export default function SensitivityTable({
       <table className="w-full text-sm font-mono border-collapse">
         <thead>
           <tr>
-            <th className="py-2.5 px-3 text-left text-[var(--muted)] text-xs font-normal">Revenue \u2193 / {multipleLabel} \u2192</th>
+            <th className="py-2.5 px-3 text-left text-[var(--muted)] text-xs font-normal">{rowLabel} \u2193 / {multipleLabel} \u2192</th>
             {multiples.map((m, j) => (
               <th
                 key={m}
@@ -77,7 +82,7 @@ export default function SensitivityTable({
                 "py-2.5 px-3 text-[var(--secondary)] font-semibold border-t border-[var(--border)]",
                 i === baseRevIdx && "text-[var(--text)]"
               )}>
-                ${rev}B
+                {isCyclical ? `${(rev * 100).toFixed(0)}%` : `$${rev}B`}
               </td>
               {matrix[i].map((price, j) => {
                 const isBase = i === baseRevIdx && j === baseMIdx;

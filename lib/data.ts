@@ -311,6 +311,7 @@ export async function loadStocksForModel(): Promise<any[]> {
       sector: w.sector,
       thesis: w.thesis,
       killCondition: w.kill_condition,
+      archetype: w.archetype || null,
       target,
       criteria: mergedCriteria,
       currentPrice: quant.price || 0,

@@ -15,8 +15,15 @@ export interface EngineScenario {
   terminal_ebitda: number;
   ev_ebitda_multiple: number;
 }
+export interface ArchetypeInfo {
+  primary: "garp" | "cyclical" | "transformational" | "compounder" | "special_situation";
+  secondary?: string | null;
+  justification?: string;
+}
+
 export interface EnginePayload {
   ticker: string;
+  archetype?: ArchetypeInfo | null;
   target: {
     current_price: number;
     base: number;
@@ -29,11 +36,20 @@ export interface EnginePayload {
     scenarios: Record<string, EngineScenario>;
     drivers: Record<string, number>;
     terminal_year: string;
+    valuation_method?: string;
     price_horizon_months?: number;
     price_target_date?: string;
     exit_fiscal_year?: string;
+    net_debt?: number;
+    upside_base_pct?: number;
   };
-  historicals: { ttm: { revenue: number | null; operating_income: number | null } };
+  capitalization?: {
+    price: number;
+    market_cap: number;
+    shares_diluted: number;
+    net_debt: number;
+  };
+  historicals: { ttm: { revenue: number | null; operating_income: number | null; ebitda?: number | null } };
   warnings?: string[];
   error?: string;
 }
@@ -165,6 +181,7 @@ export interface StockData {
   sector: string;
   thesis: string;
   killCondition: string;
+  archetype?: ArchetypeInfo | null;
   target: StockTarget;
   criteria: Criterion[];
   currentPrice: number;
@@ -201,7 +218,7 @@ export interface Props {
 }
 
 // ─── Valuation Methods ───
-export type ValuationMethod = "pe" | "ps";
+export type ValuationMethod = "pe" | "ps" | "cyclical";
 
 export interface ValuationMethodInfo {
   method: ValuationMethod;

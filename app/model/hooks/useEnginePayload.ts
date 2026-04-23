@@ -55,18 +55,25 @@ export function useEnginePayload(
     const base = eng.scenarios?.base;
     if (!base) return;
 
+    const isCyclical = eng.valuation_method === "cyclical_normalized";
     const y3 = eng.forecast_annual?.[2];
     const isPS = valMethodInfo.method === "ps";
 
     const rev_raw = y3?.revenue ?? base.terminal_revenue ?? eng.ttm_revenue ?? 0;
     const rev_b = rev_raw / 1e9;
 
-    const oi_b = (y3?.operating_income ?? 0) / 1e9;
-    const op_mgn = rev_b > 0 && oi_b > 0 ? oi_b / rev_b : defaultOpMargin;
-    const tax = eng.drivers?.tax_rate ?? defaultTaxRate;
     const shares_m = (eng.shares_diluted ?? 0) / 1e6;
 
-    if (isPS) {
+    if (isCyclical) {
+      // Cyclical mode: populate normalized EBIT margin and EV/EBIT from drivers
+      const normMargin = eng.drivers?.ebit_margin_normalized ?? defaultOpMargin;
+      const evEbit = eng.drivers?.ev_ebit_multiple ?? 12;
+
+      if (rev_b > 0) setRevenue(Math.round(rev_b * 10) / 10);
+      if (normMargin > 0) setOpMargin(Math.round(normMargin * 1000) / 1000);
+      if (shares_m > 0) setSharesM(Math.round(shares_m));
+      if (evEbit > 0 && isFinite(evEbit)) setMultiple(Math.round(evEbit));
+    } else if (isPS) {
       const rps = rev_b > 0 && shares_m > 0 ? (rev_b * 1000) / shares_m : 0;
       const ps = rps > 0 ? eng.base / rps : defaultMultiple;
 
@@ -74,6 +81,9 @@ export function useEnginePayload(
       if (shares_m > 0) setSharesM(Math.round(shares_m));
       if (ps > 0 && isFinite(ps)) setMultiple(Math.max(1, Math.round(ps)));
     } else {
+      const oi_b = (y3?.operating_income ?? 0) / 1e9;
+      const op_mgn = rev_b > 0 && oi_b > 0 ? oi_b / rev_b : defaultOpMargin;
+      const tax = eng.drivers?.tax_rate ?? defaultTaxRate;
       const netIncB = rev_b * op_mgn * (1 - tax);
       const eps = netIncB > 0 && shares_m > 0 ? (netIncB * 1000) / shares_m : 0;
       const pe = eps > 0 ? eng.base / eps : defaultMultiple;

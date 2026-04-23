@@ -43,8 +43,14 @@ export async function GET(
   }
   overrideArgs.push(`horizon_months=${horizonMonths}`);
 
+  // Archetype override (string, not numeric — handled separately)
+  const archetypeRaw = url.searchParams.get("archetype");
+  if (archetypeRaw && /^[a-z_]+$/.test(archetypeRaw)) {
+    overrideArgs.push(`archetype=${archetypeRaw}`);
+  }
+
   for (const [k, v] of url.searchParams.entries()) {
-    if (k === "horizon") continue;
+    if (k === "horizon" || k === "archetype") continue;
     const n = Number(v);
     if (!Number.isFinite(n)) continue;
     // Allowlist of safe driver keys — prevents command-injection via arbitrary keys

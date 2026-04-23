@@ -1290,6 +1290,374 @@ def _scenario_price_revenue_multiple(
     )
 
 
+# ---------------------------------------------------------------------------
+# CYCLICAL NORMALIZED-EARNINGS ENGINE MODE
+# ---------------------------------------------------------------------------
+# For companies where value is driven by industry cycle position, not just
+# execution. The standard engine extrapolates TTM margins forward — which is
+# catastrophically wrong at cycle peaks (margins compress as the cycle turns)
+# and at cycle troughs (margins expand as demand recovers).
+#
+# Damodaran's approach: average EBIT margins over a full cycle (5-10 years),
+# apply a through-cycle EV/EBIT multiple, and adjust based on where the
+# company currently sits in the cycle.
+#
+# Key differences from standard mode:
+#   1. Uses NORMALIZED EBIT margin (historical average), not TTM EBITDA margin
+#   2. Uses EV/EBIT multiple (not EV/EBITDA — EBIT is more comparable across
+#      cycle phases since D&A fluctuates with capex timing)
+#   3. Scenario offsets are asymmetric: bear case models a full cycle turn
+#      (30-50% revenue decline possible), bull case is modest re-rating
+#   4. Exit trigger is cycle position, not price target
+# ---------------------------------------------------------------------------
+
+# Cyclical-specific drivers that augment DEFAULT_DRIVERS
+CYCLICAL_DRIVERS: dict[str, float] = {
+    "ebit_margin_normalized": 0.15,   # mid-cycle EBIT margin (historical average)
+    "ev_ebit_multiple": 12.0,         # through-cycle EV/EBIT
+    "cycle_position": 0.50,           # 0=trough, 0.5=mid-cycle, 1.0=peak
+}
+
+CYCLICAL_DRIVER_META: dict[str, dict[str, Any]] = {
+    "ebit_margin_normalized": {"label": "Normalized EBIT margin (mid-cycle avg)", "format": "pct", "min": -0.10, "max": 0.60, "step": 0.01},
+    "ev_ebit_multiple": {"label": "Through-cycle EV/EBIT", "format": "mult", "min": 4.0, "max": 40.0, "step": 0.5},
+    "cycle_position": {"label": "Cycle position (0=trough, 1=peak)", "format": "pct", "min": 0.0, "max": 1.0, "step": 0.05},
+}
+
+CYCLICAL_SLIDER_KEYS = [
+    "rev_growth_y1",
+    "rev_growth_terminal",
+    "ebit_margin_normalized",
+    "ev_ebit_multiple",
+    "cycle_position",
+    "discount_rate",
+]
+
+# Cyclical scenario offsets — asymmetric by design.
+# At peak cycle, the bear case must model a FULL cycle turn:
+# revenue -20 to -35% (semiconductor cycles: -30% typical, -50% worst),
+# margin compression back to mid-cycle, and multiple de-rating.
+CYCLICAL_SCENARIO_OFFSETS: dict[str, dict[str, float]] = {
+    "downside": {
+        "rev_growth_y1_mult": 0.50,         # Growth halved or goes negative
+        "rev_growth_terminal_mult": 0.80,
+        "ebit_margin_delta": -0.06,          # 6pp margin compression from normalized
+        "ev_ebit_multiple_mult": 0.70,       # Multiple de-rates 30% from through-cycle
+    },
+    "base": {
+        "rev_growth_y1_mult": 1.00,
+        "rev_growth_terminal_mult": 1.00,
+        "ebit_margin_delta": 0.0,
+        "ev_ebit_multiple_mult": 1.00,
+    },
+    "upside": {
+        "rev_growth_y1_mult": 1.15,
+        "rev_growth_terminal_mult": 1.10,
+        "ebit_margin_delta": 0.03,           # 3pp margin expansion (modest — cycle upside)
+        "ev_ebit_multiple_mult": 1.20,       # 20% re-rating (recovery premium)
+    },
+}
+
+
+def _compute_normalized_ebit_margin(fin: FinancialData) -> float:
+    """Average EBIT margin over all available annual history (up to 10 years).
+
+    This produces the "mid-cycle" margin that the company should earn on average
+    across a full industry cycle. At peak, TTM margins are above this; at trough,
+    below. The normalized margin is the correct steady-state assumption.
+
+    Falls back to TTM operating margin if insufficient annual data.
+    """
+    margins: list[float] = []
+    for p in fin.annual_income[-10:]:  # Up to 10 years
+        rev = p.get("Total Revenue")
+        oi = p.get("Operating Income")
+        if rev and rev > 0 and oi is not None:
+            margins.append(oi / rev)
+
+    if len(margins) >= 3:
+        # Trim extremes (remove best and worst if we have enough data)
+        if len(margins) >= 5:
+            margins_sorted = sorted(margins)
+            margins = margins_sorted[1:-1]  # Trim top and bottom
+        return sum(margins) / len(margins)
+
+    # Fallback: TTM operating margin
+    ttm_oi = fin.ttm_operating_income() or 0.0
+    ttm_rev = fin.ttm_revenue() or 0.0
+    if ttm_rev > 0:
+        return ttm_oi / ttm_rev
+    return 0.15  # Last resort: generic 15%
+
+
+def _compute_cycle_position(fin: FinancialData, normalized_margin: float) -> float:
+    """Estimate where the company is in the industry cycle (0=trough, 1=peak).
+
+    Uses the ratio of current TTM EBIT margin to normalized (mid-cycle) margin.
+    If current margin is 2× the normalized → near peak (0.9+).
+    If current margin is 0.5× → near trough (0.2-).
+    If roughly equal → mid-cycle (0.5).
+    """
+    ttm_oi = fin.ttm_operating_income() or 0.0
+    ttm_rev = fin.ttm_revenue() or 0.0
+    if ttm_rev <= 0 or normalized_margin <= 0:
+        return 0.50  # Can't determine → assume mid-cycle
+
+    current_margin = ttm_oi / ttm_rev
+    ratio = current_margin / normalized_margin
+
+    # Map ratio to 0-1 scale:
+    # ratio 0.3 → position 0.0 (deep trough)
+    # ratio 1.0 → position 0.5 (mid-cycle)
+    # ratio 2.0 → position 1.0 (peak)
+    # Linear interpolation within each half, clamped to [0, 1]
+    if ratio <= 1.0:
+        # Trough-to-mid: 0.3→0.0, 1.0→0.5
+        position = max(0.0, (ratio - 0.3) / (1.0 - 0.3) * 0.5)
+    else:
+        # Mid-to-peak: 1.0→0.5, 2.0→1.0
+        position = min(1.0, 0.5 + (ratio - 1.0) / (2.0 - 1.0) * 0.5)
+
+    return round(position, 2)
+
+
+def compute_cyclical_defaults(
+    fin: FinancialData,
+    forward: dict[str, Any] | None = None,
+) -> dict[str, float]:
+    """Smart defaults specifically for cyclical-mode stocks.
+
+    Uses the same base smart defaults as standard mode, but overrides
+    margin and multiple targets with cycle-normalized values.
+    """
+    # Start from standard smart defaults (gets growth, WACC, etc.)
+    out = compute_smart_defaults(fin, forward=forward)
+
+    # Override with cyclical-specific values
+    normalized_margin = _compute_normalized_ebit_margin(fin)
+    cycle_pos = _compute_cycle_position(fin, normalized_margin)
+
+    out["ebit_margin_normalized"] = normalized_margin
+    out["cycle_position"] = cycle_pos
+
+    # Through-cycle EV/EBIT: derive from current trading multiples + cycle adjustment.
+    # At peak (high margin), current EV/EBIT is LOW (earnings inflated).
+    # At trough (low margin), current EV/EBIT is HIGH (earnings depressed).
+    # The through-cycle multiple should be somewhere in between.
+    ttm_oi = fin.ttm_operating_income() or 0.0
+    mcap = fin.market_cap or 0.0
+    net_debt = fin.net_debt or 0.0
+    ev = mcap + net_debt
+    ttm_rev = fin.ttm_revenue() or 0.0
+
+    if ttm_oi > 0 and ev > 0:
+        current_ev_ebit = ev / ttm_oi
+        # Normalize: if at peak (pos=0.9), current multiple is too low (earnings inflated)
+        # so mid-cycle multiple should be higher. If at trough, current is too high.
+        # Adjust: mid_cycle_mult ≈ current_mult × (1 + (cycle_pos - 0.5) × 0.6)
+        cycle_adj = 1.0 + (cycle_pos - 0.5) * 0.6
+        through_cycle_mult = current_ev_ebit * cycle_adj
+        # Clamp to reasonable range (8-30x for cyclicals)
+        out["ev_ebit_multiple"] = max(8.0, min(30.0, through_cycle_mult))
+    elif ttm_rev > 0 and ev > 0:
+        # Can't derive from EBIT — use revenue-based heuristic
+        ev_rev = ev / ttm_rev
+        # Rough: EV/EBIT ≈ EV/Revenue ÷ normalized_margin
+        if normalized_margin > 0.05:
+            implied = ev_rev / normalized_margin
+            out["ev_ebit_multiple"] = max(8.0, min(30.0, implied))
+        else:
+            out["ev_ebit_multiple"] = 12.0  # Generic mid-cycle
+    else:
+        out["ev_ebit_multiple"] = 12.0
+
+    return out
+
+
+def _apply_cyclical_scenario(base_drivers: dict[str, float], scenario: str) -> dict[str, float]:
+    """Apply cyclical-specific scenario offsets.
+
+    Key difference from standard: bear case is much more severe (models cycle turn),
+    and margin targets use normalized EBIT margin (not EBITDA).
+    """
+    off = CYCLICAL_SCENARIO_OFFSETS[scenario]
+    d = dict(base_drivers)
+
+    # Revenue growth: same logic as standard for negative-base-growth safety
+    for key, mult_key in (
+        ("rev_growth_y1", "rev_growth_y1_mult"),
+        ("rev_growth_terminal", "rev_growth_terminal_mult"),
+    ):
+        base_g = base_drivers[key]
+        mult = off[mult_key]
+        if base_g >= 0:
+            d[key] = base_g * mult
+        else:
+            delta = abs(base_g) * (1 - mult)
+            d[key] = base_g - delta
+
+    # Cyclical uses normalized EBIT margin, not EBITDA margin
+    d["ebit_margin_normalized"] = max(
+        -0.10,
+        base_drivers.get("ebit_margin_normalized", 0.15) + off["ebit_margin_delta"]
+    )
+    d["ev_ebit_multiple"] = base_drivers.get("ev_ebit_multiple", 12.0) * off["ev_ebit_multiple_mult"]
+
+    # Carry through standard EBITDA/FCF drivers (for the forecast path used by UI)
+    d["ebitda_margin_target"] = d["ebit_margin_normalized"] + base_drivers.get("da_pct_rev", 0.05)
+    d["fcf_sbc_margin_target"] = d["ebit_margin_normalized"] - base_drivers.get("sbc_pct_rev", 0.05)
+
+    # WACC constant across scenarios
+    d["discount_rate"] = base_drivers["discount_rate"]
+    return d
+
+
+def _forecast_annual_cyclical(
+    fin: FinancialData,
+    d: dict[str, float],
+    base_year_label: str,
+) -> list[ForecastPeriod]:
+    """Build 5-year forecast using normalized (mid-cycle) margins.
+
+    Unlike the standard forecast which ramps FROM current TTM margins TO a target,
+    the cyclical forecast ramps FROM current margins TOWARD the normalized
+    (mid-cycle) margin. If we're at peak, margins compress. If at trough, they expand.
+    """
+    ttm_rev = fin.ttm_revenue() or 0.0
+    ttm_oi = fin.ttm_operating_income() or 0.0
+    ttm_ebitda = fin.ttm_ebitda() or 0.0
+    ttm_fcf_sbc = _ttm_fcf_sbc(fin) or 0.0
+
+    ttm_op_mgn = (ttm_oi / ttm_rev) if ttm_rev else 0.0
+    ttm_ebitda_mgn = (ttm_ebitda / ttm_rev) if ttm_rev else 0.0
+    ttm_fcf_sbc_mgn = (ttm_fcf_sbc / ttm_rev) if ttm_rev else 0.0
+
+    # Target margins: normalized (mid-cycle) EBIT + D&A overhead for EBITDA
+    norm_ebit = d.get("ebit_margin_normalized", 0.15)
+    da_pct = d.get("da_pct_rev", 0.05)
+    sbc_pct = d.get("sbc_pct_rev", 0.05)
+    ebitda_target = norm_ebit + da_pct
+    fcf_target = norm_ebit - sbc_pct
+    op_target = norm_ebit
+    tax = d["tax_rate"]
+
+    g1 = d["rev_growth_y1"]
+    g_term = d["rev_growth_terminal"]
+
+    out: list[ForecastPeriod] = []
+    rev = ttm_rev
+    try:
+        base_year_int = int(base_year_label[-4:]) if base_year_label else 2025
+    except Exception:
+        base_year_int = 2025
+
+    for y in range(1, FORECAST_YEARS + 1):
+        # Growth decay: linear from g1 (Y1) to g_term (Y5)
+        g = g1 + (g_term - g1) * (y - 1) / (FORECAST_YEARS - 1)
+        rev = rev * (1 + g)
+
+        # Margin mean-reversion: current → normalized over MARGIN_RAMP_YEARS
+        # This is the KEY cyclical behavior: at peak, margins compress toward
+        # normal. At trough, they expand. Speed = MARGIN_RAMP_YEARS.
+        ramp = min(1.0, y / MARGIN_RAMP_YEARS)
+        m_eb = ttm_ebitda_mgn + (ebitda_target - ttm_ebitda_mgn) * ramp
+        m_fcf = ttm_fcf_sbc_mgn + (fcf_target - ttm_fcf_sbc_mgn) * ramp
+        m_op = ttm_op_mgn + (op_target - ttm_op_mgn) * ramp
+
+        # Enforce invariants
+        m_op = min(m_op, m_eb - 0.005)
+        m_fcf = min(m_fcf, m_eb - 0.005)
+
+        ebitda = rev * m_eb
+        fcf_sbc = rev * m_fcf
+        oi = rev * m_op
+        ni = oi * (1 - tax)
+        fcf = fcf_sbc + sbc_pct * rev
+
+        out.append(ForecastPeriod(
+            period=f"FY{base_year_int + y}E",
+            revenue=rev,
+            ebitda=ebitda,
+            ebitda_margin=m_eb,
+            fcf_sbc=fcf_sbc,
+            fcf_sbc_margin=m_fcf,
+            operating_income=oi,
+            net_income=ni,
+            fcf=fcf,
+            op_margin=m_op,
+            rev_growth=g,
+            is_actual=False,
+        ))
+    return out
+
+
+def _scenario_price_cyclical(
+    fin: FinancialData,
+    d: dict[str, float],
+    scenario: str,
+    base_year_label: str,
+    discount_years: int = DISCOUNT_YEARS,
+) -> ScenarioResult:
+    """Cyclical normalized-earnings valuation.
+
+    Terminal value: Normalized EBIT × through-cycle EV/EBIT multiple.
+    This is the single-leg valuation (no 50/50 blend with FCF-SBC) because:
+    1. EBIT is the right metric for cyclical companies (comparable across phases)
+    2. FCF-SBC is noisy in cyclicals (capex timing dominates the signal)
+    """
+    annual = _forecast_annual_cyclical(fin, d, base_year_label)
+    terminal = annual[VALUATION_YEAR - 1]  # Y3
+
+    # Terminal EV = Y3 EBIT × through-cycle EV/EBIT multiple
+    # Y3 EBIT = Y3 operating income (which has mean-reverted toward normalized)
+    terminal_ebit = terminal.operating_income
+    ev_ebit_mult = d.get("ev_ebit_multiple", 12.0)
+    terminal_ev = terminal_ebit * ev_ebit_mult
+
+    # Also compute standard EV/EBITDA and EV/FCF for reporting
+    ev_from_ebitda = terminal.ebitda * d.get("ev_ebitda_multiple", 16.0)
+    ev_from_fcf = terminal.fcf_sbc * d.get("ev_fcf_sbc_multiple", 22.0)
+
+    # Discount
+    discount = (1 + d["discount_rate"]) ** discount_years
+    pv_ev = terminal_ev / discount if terminal_ev > 0 else 0.0
+    pv_ev_ebitda = ev_from_ebitda / discount
+    pv_ev_fcf = ev_from_fcf / discount
+
+    net_debt = fin.net_debt or 0.0
+    equity = pv_ev - net_debt
+
+    shares_0 = fin.shares_diluted or 0.0
+    shares_t = shares_0 * (1 + d["share_change_pct"]) ** (VALUATION_YEAR - discount_years)
+
+    price = max(0.0, equity / shares_t) if shares_t > 0 else 0.0
+
+    return ScenarioResult(
+        scenario=scenario,
+        price=price,
+        discount_rate=d["discount_rate"],
+        rev_growth_y1=d["rev_growth_y1"],
+        rev_growth_terminal=d["rev_growth_terminal"],
+        ebitda_margin_target=d.get("ebit_margin_normalized", 0.15),  # Store normalized EBIT here
+        fcf_sbc_margin_target=d["fcf_sbc_margin_target"],
+        ev_ebitda_multiple=ev_ebit_mult,  # Store EV/EBIT in the EV/EBITDA field
+        ev_fcf_sbc_multiple=d.get("ev_fcf_sbc_multiple", 22.0),
+        terminal_revenue=terminal.revenue,
+        terminal_ebitda=terminal_ebit,  # Store terminal EBIT (not EBITDA)
+        terminal_fcf_sbc=terminal.fcf_sbc,
+        ev_from_ebitda=terminal_ev,  # Overload: terminal EV from EBIT
+        ev_from_fcf_sbc=ev_from_fcf,
+        terminal_ev_blended=terminal_ev,
+        pv_ev_blended=pv_ev,
+        pv_ev_from_ebitda=pv_ev_ebitda,
+        pv_ev_from_fcf_sbc=pv_ev_fcf,
+        equity_value=equity,
+        price_from_ebitda=price,
+        price_from_fcf_sbc=max(0.0, (pv_ev_fcf - net_debt) / shares_t) if shares_t > 0 else 0.0,
+        forecast_annual=annual,
+    )
+
+
 def _validate_inputs(fin: FinancialData, drivers: dict[str, float]) -> list[str]:
     """Validate inputs before DCF computation.
 
@@ -1353,6 +1721,7 @@ def build_target(
     forward: dict[str, Any] | None = None,
     load_forward: bool = True,
     horizon_months: int = 12,
+    archetype: str | None = None,
 ) -> TargetResult:
     """Construct a three-scenario price-target range.
 
@@ -1373,6 +1742,9 @@ def build_target(
             tests that want pure-historical output, or for offline runs).
         horizon_months: price-target horizon, one of 12/24/36. Y3 fundamentals
             are the exit point in every case; only the discount back changes.
+        archetype: investment archetype from generate_model.py ("garp", "cyclical",
+            "transformational", "compounder", "special_situation"). When "cyclical",
+            activates normalized-earnings mode with through-cycle EV/EBIT valuation.
     """
     # --- Input validation (before any computation) ---
     _validate_inputs(fin, drivers or {})
@@ -1399,7 +1771,28 @@ def build_target(
             print(f"  [target_engine] forward_drivers load failed for {fin.ticker}: {e}", file=sys.stderr)
             forward = None
 
-    base_drivers = _merge_drivers(drivers, fin, forward=forward)
+    # ─── Cyclical mode detection ───
+    use_cyclical = (archetype or "").lower() == "cyclical"
+
+    if use_cyclical:
+        # Cyclical mode: use normalized-earnings defaults instead of standard
+        try:
+            base_drivers = compute_cyclical_defaults(fin, forward=forward)
+        except Exception as e:
+            print(f"  [target_engine] cyclical defaults failed: {e} — falling back to standard", file=sys.stderr)
+            base_drivers = _merge_drivers(drivers, fin, forward=forward)
+            use_cyclical = False
+        # Apply explicit driver overrides on top of cyclical defaults
+        if drivers and use_cyclical:
+            for k, v in drivers.items():
+                if v is not None:
+                    try:
+                        base_drivers[k] = float(v)
+                    except (TypeError, ValueError):
+                        continue
+    else:
+        base_drivers = _merge_drivers(drivers, fin, forward=forward)
+
     warnings: list[str] = []
 
     # Surface smart-defaults failure as a user-visible warning
@@ -1431,17 +1824,18 @@ def build_target(
             f"({ttm_ebitda_mgn:.1%}) — forecast assumes compression."
         )
 
-    # ─── Auto-detect valuation method ───
-    # Returns True (pure P/S), False (pure EV/EBITDA), or float 0-1 (blend weight for P/S)
-    routing_result = _should_use_revenue_multiple(fin, forward=forward, base_drivers=base_drivers)
+    # ─── Auto-detect valuation method (skip for cyclical mode) ───
     ps_blend_weight = 0.0  # 0 = pure EV, 1 = pure P/S
     use_rev_multiple = False
-    if routing_result is True:
-        use_rev_multiple = True
-        ps_blend_weight = 1.0
-    elif isinstance(routing_result, float):
-        ps_blend_weight = routing_result
-        use_rev_multiple = False  # primary is EV/EBITDA, but we'll blend
+    if not use_cyclical:
+        # Returns True (pure P/S), False (pure EV/EBITDA), or float 0-1 (blend weight for P/S)
+        routing_result = _should_use_revenue_multiple(fin, forward=forward, base_drivers=base_drivers)
+        if routing_result is True:
+            use_rev_multiple = True
+            ps_blend_weight = 1.0
+        elif isinstance(routing_result, float):
+            ps_blend_weight = routing_result
+            use_rev_multiple = False  # primary is EV/EBITDA, but we'll blend
 
     ebitda_yield = (ttm_ebitda / (fin.market_cap or 1)) if ttm_ebitda > 0 else 0
     if use_rev_multiple:
@@ -1470,51 +1864,68 @@ def build_target(
     # Build scenarios
     base_year_label = _annual_label_from_q(fin.latest_quarter_label() or "")
     scenarios: dict[str, ScenarioResult] = {}
-    for name in ("downside", "base", "upside"):
-        d = _apply_scenario(base_drivers, name)
-        if use_rev_multiple:
-            scenarios[name] = _scenario_price_revenue_multiple(
+
+    if use_cyclical:
+        # ─── Cyclical mode: normalized-earnings valuation ───
+        cycle_pos = base_drivers.get("cycle_position", 0.5)
+        norm_ebit = base_drivers.get("ebit_margin_normalized", 0.15)
+        ev_ebit = base_drivers.get("ev_ebit_multiple", 12.0)
+        warnings.append(
+            f"Cyclical normalized-earnings mode: EBIT margin normalized to {norm_ebit:.1%} "
+            f"(mid-cycle avg), cycle position {cycle_pos:.0%} (0=trough, 100%=peak), "
+            f"through-cycle EV/EBIT {ev_ebit:.1f}×. Bear case models full cycle turn."
+        )
+        for name in ("downside", "base", "upside"):
+            d = _apply_cyclical_scenario(base_drivers, name)
+            scenarios[name] = _scenario_price_cyclical(
                 fin, d, name, base_year_label, discount_years=discount_years
             )
-        elif ps_blend_weight > 0:
-            # Transition zone: compute both methods and blend
-            ev_result = _scenario_price(
-                fin, d, name, base_year_label, discount_years=discount_years
-            )
-            ps_result = _scenario_price_revenue_multiple(
-                fin, d, name, base_year_label, discount_years=discount_years
-            )
-            # Blend the per-share prices; keep EV result's forecast/details as primary
-            blended_price = ps_blend_weight * ps_result.price + (1 - ps_blend_weight) * ev_result.price
-            # Replace the price in the EV result (it carries the richer forecast data)
-            scenarios[name] = ScenarioResult(
-                scenario=ev_result.scenario,
-                price=blended_price,
-                discount_rate=ev_result.discount_rate,
-                rev_growth_y1=ev_result.rev_growth_y1,
-                rev_growth_terminal=ev_result.rev_growth_terminal,
-                ebitda_margin_target=ev_result.ebitda_margin_target,
-                fcf_sbc_margin_target=ev_result.fcf_sbc_margin_target,
-                ev_ebitda_multiple=ev_result.ev_ebitda_multiple,
-                ev_fcf_sbc_multiple=ev_result.ev_fcf_sbc_multiple,
-                terminal_revenue=ev_result.terminal_revenue,
-                terminal_ebitda=ev_result.terminal_ebitda,
-                terminal_fcf_sbc=ev_result.terminal_fcf_sbc,
-                ev_from_ebitda=ev_result.ev_from_ebitda,
-                ev_from_fcf_sbc=ev_result.ev_from_fcf_sbc,
-                terminal_ev_blended=ev_result.terminal_ev_blended,
-                pv_ev_blended=ev_result.pv_ev_blended,
-                pv_ev_from_ebitda=ev_result.pv_ev_from_ebitda,
-                pv_ev_from_fcf_sbc=ev_result.pv_ev_from_fcf_sbc,
-                equity_value=ev_result.equity_value,
-                price_from_ebitda=ev_result.price_from_ebitda,
-                price_from_fcf_sbc=ev_result.price_from_fcf_sbc,
-                forecast_annual=ev_result.forecast_annual,
-            )
-        else:
-            scenarios[name] = _scenario_price(
-                fin, d, name, base_year_label, discount_years=discount_years
-            )
+    else:
+        for name in ("downside", "base", "upside"):
+            d = _apply_scenario(base_drivers, name)
+            if use_rev_multiple:
+                scenarios[name] = _scenario_price_revenue_multiple(
+                    fin, d, name, base_year_label, discount_years=discount_years
+                )
+            elif ps_blend_weight > 0:
+                # Transition zone: compute both methods and blend
+                ev_result = _scenario_price(
+                    fin, d, name, base_year_label, discount_years=discount_years
+                )
+                ps_result = _scenario_price_revenue_multiple(
+                    fin, d, name, base_year_label, discount_years=discount_years
+                )
+                # Blend the per-share prices; keep EV result's forecast/details as primary
+                blended_price = ps_blend_weight * ps_result.price + (1 - ps_blend_weight) * ev_result.price
+                # Replace the price in the EV result (it carries the richer forecast data)
+                scenarios[name] = ScenarioResult(
+                    scenario=ev_result.scenario,
+                    price=blended_price,
+                    discount_rate=ev_result.discount_rate,
+                    rev_growth_y1=ev_result.rev_growth_y1,
+                    rev_growth_terminal=ev_result.rev_growth_terminal,
+                    ebitda_margin_target=ev_result.ebitda_margin_target,
+                    fcf_sbc_margin_target=ev_result.fcf_sbc_margin_target,
+                    ev_ebitda_multiple=ev_result.ev_ebitda_multiple,
+                    ev_fcf_sbc_multiple=ev_result.ev_fcf_sbc_multiple,
+                    terminal_revenue=ev_result.terminal_revenue,
+                    terminal_ebitda=ev_result.terminal_ebitda,
+                    terminal_fcf_sbc=ev_result.terminal_fcf_sbc,
+                    ev_from_ebitda=ev_result.ev_from_ebitda,
+                    ev_from_fcf_sbc=ev_result.ev_from_fcf_sbc,
+                    terminal_ev_blended=ev_result.terminal_ev_blended,
+                    pv_ev_blended=ev_result.pv_ev_blended,
+                    pv_ev_from_ebitda=ev_result.pv_ev_from_ebitda,
+                    pv_ev_from_fcf_sbc=ev_result.pv_ev_from_fcf_sbc,
+                    equity_value=ev_result.equity_value,
+                    price_from_ebitda=ev_result.price_from_ebitda,
+                    price_from_fcf_sbc=ev_result.price_from_fcf_sbc,
+                    forecast_annual=ev_result.forecast_annual,
+                )
+            else:
+                scenarios[name] = _scenario_price(
+                    fin, d, name, base_year_label, discount_years=discount_years
+                )
 
     # ─── Scenario monotonicity enforcement ───
     # By construction, upside drivers ≥ base ≥ downside for every input
@@ -1550,7 +1961,69 @@ def build_target(
     base_s = scenarios["base"]
     f_b = lambda x: x / 1e9  # display in $B
 
-    if use_rev_multiple:
+    if use_cyclical:
+        # Cyclical normalized-earnings deduction chain
+        norm_ebit_mgn = base_drivers.get("ebit_margin_normalized", 0.15)
+        ev_ebit_m = base_drivers.get("ev_ebit_multiple", 12.0)
+        cycle_pos = base_drivers.get("cycle_position", 0.5)
+        ttm_op_mgn = (fin.ttm_operating_income() or 0.0) / ttm_rev if ttm_rev else 0
+        steps: list[DeductionStep] = [
+            DeductionStep("TTM revenue", "sum(last 4Q revenue)", f_b(ttm_rev), "$B"),
+            DeductionStep(
+                "Current EBIT margin",
+                "TTM operating income / TTM revenue",
+                ttm_op_mgn * 100, "%",
+            ),
+            DeductionStep(
+                "Normalized EBIT margin",
+                f"avg of {len(fin.annual_income[-10:])} annual periods (mid-cycle)",
+                norm_ebit_mgn * 100, "%",
+            ),
+            DeductionStep(
+                "Cycle position",
+                "current margin vs normalized (0=trough, 100%=peak)",
+                cycle_pos * 100, "%",
+            ),
+            DeductionStep(
+                "Revenue Y3",
+                f"TTM × growth path ({base_drivers['rev_growth_y1']:.1%} → {base_drivers['rev_growth_terminal']:.1%})",
+                f_b(base_s.terminal_revenue), "$B",
+            ),
+            DeductionStep(
+                "Y3 normalized EBIT",
+                f"Rev Y3 × {norm_ebit_mgn:.1%} (mean-reverted margin)",
+                f_b(base_s.terminal_ebitda), "$B",  # terminal_ebitda stores EBIT in cyclical mode
+            ),
+            DeductionStep(
+                "Terminal EV",
+                f"Y3 EBIT × {ev_ebit_m:.1f}× through-cycle EV/EBIT",
+                f_b(base_s.terminal_ev_blended), "$B",
+            ),
+            DeductionStep(
+                "PV of terminal EV",
+                f"÷ (1 + {base_drivers['discount_rate']:.1%})^{discount_years}",
+                f_b(base_s.pv_ev_blended), "$B",
+            ),
+            DeductionStep(
+                "Equity value",
+                "PV EV − Net debt",
+                f_b(base_s.equity_value), "$B",
+            ),
+            DeductionStep(
+                "Diluted shares",
+                f"current × (1+{base_drivers['share_change_pct']:.1%})^{VALUATION_YEAR - discount_years}",
+                (fin.shares_diluted or 0) * (1 + base_drivers["share_change_pct"]) ** (VALUATION_YEAR - discount_years) / 1e6,
+                "M",
+            ),
+            DeductionStep(
+                "Base target",
+                "Equity / Diluted shares (cyclical normalized-earnings)",
+                base_px, "$",
+            ),
+            DeductionStep("Downside target", "cycle-turn scenario (margin + multiple compression)", scenarios["downside"].price, "$"),
+            DeductionStep("Upside target", "recovery scenario (margin expansion + re-rating)", scenarios["upside"].price, "$"),
+        ]
+    elif use_rev_multiple:
         # Revenue-multiple deduction chain
         terminal_ps_base = _compute_terminal_ps(fin, base_drivers, "base")
         steps: list[DeductionStep] = [
@@ -1799,7 +2272,8 @@ def build_target(
         price_target_date=price_target_date,
         exit_fiscal_year=exit_fy,
         valuation_method=(
-            "revenue_multiple" if use_rev_multiple
+            "cyclical_normalized" if use_cyclical
+            else "revenue_multiple" if use_rev_multiple
             else f"blend_ps_{ps_blend_weight:.0%}" if ps_blend_weight > 0
             else "ev_ebitda"
         ),
@@ -1860,15 +2334,18 @@ if __name__ == "__main__":
         sys.exit(1)
 
     drivers_override: dict[str, float] = {}
+    arch_override = None
     for arg in sys.argv[2:]:
-        if "=" in arg:
+        if arg.startswith("--archetype="):
+            arch_override = arg.split("=", 1)[1]
+        elif "=" in arg:
             k, v = arg.split("=", 1)
             try:
                 drivers_override[k] = float(v)
             except ValueError:
                 pass
 
-    res = build_target(fin, drivers_override)
+    res = build_target(fin, drivers_override, archetype=arch_override)
     print(f"\n=== {res.ticker} target ===")
     print(f"Current:  ${res.current_price:,.2f}")
     print(f"  Low:    ${res.low:,.2f}  ({res.upside_low_pct:+.1%})")

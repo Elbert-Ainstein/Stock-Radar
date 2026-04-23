@@ -121,6 +121,25 @@ export function detectValuationMethod(stock: StockData): ValuationMethodInfo {
   };
 }
 
+/**
+ * Build ValuationMethodInfo for cyclical mode.
+ * Used when the engine returns valuation_method = "cyclical_normalized".
+ */
+export function cyclicalMethodInfo(ticker: string): ValuationMethodInfo {
+  return {
+    method: "cyclical",
+    label: "Cyclical Normalized (EV/EBIT)",
+    multipleLabel: "EV/EBIT",
+    justification: `${ticker} uses normalized-earnings valuation — mid-cycle EBIT margins averaged over the business cycle, valued at a through-cycle EV/EBIT multiple (Damodaran approach).`,
+    reasons: [
+      "Cyclical archetype: current earnings may be at peak or trough — normalizing prevents buying at peak multiples",
+      "Uses 5-10 year average EBIT margins as 'normalized' baseline",
+      "Through-cycle EV/EBIT multiple reflects fair value across the full business cycle",
+      "Cycle position indicator adjusts scenario spread (bear case models full cycle turn)",
+    ],
+  };
+}
+
 // ─── Core Equations ───
 export function computeTargetPrice(
   revenueB: number,
@@ -145,6 +164,30 @@ export function computeTargetPricePS(
   return revenuePerShare * psMultiple;
 }
 
+/**
+ * Cyclical normalized-earnings valuation (Damodaran approach):
+ *   Normalized EBIT = Revenue × Normalized EBIT Margin (mid-cycle average)
+ *   Enterprise Value = Normalized EBIT × Through-cycle EV/EBIT multiple
+ *   Equity Value = EV − Net Debt
+ *   Price = Equity Value / Diluted Shares
+ *
+ * Cycle position adjusts the scenario spread (handled in engine), not the base price.
+ */
+export function computeTargetPriceCyclical(
+  revenueB: number,
+  normalizedEbitMargin: number,
+  evEbitMultiple: number,
+  sharesM: number,
+  netDebtB: number = 0
+): number {
+  if (sharesM <= 0) return 0;
+  const normalizedEbitB = revenueB * normalizedEbitMargin;
+  const evB = normalizedEbitB * evEbitMultiple;
+  const equityB = evB - netDebtB;
+  if (equityB <= 0) return 0;
+  return (equityB * 1000) / sharesM; // B to M conversion -> price per share
+}
+
 // ─── Sensitivity Matrix ───
 export function buildSensitivityMatrix(
   baseRevenueB: number,
@@ -152,8 +195,49 @@ export function buildSensitivityMatrix(
   taxRate: number,
   sharesM: number,
   baseMultiple: number,
-  method: ValuationMethod = "pe"
+  method: ValuationMethod = "pe",
+  netDebtB: number = 0
 ) {
+  // For cyclical mode, the Y-axis is EBIT margins (not revenues) and X-axis is EV/EBIT multiples
+  if (method === "cyclical") {
+    // Margin rows: spread around normalized margin (opMargin is reused as normalized EBIT margin)
+    const marginBase = opMargin;
+    const marginStep = 0.03; // 3pp steps
+    const margins = [
+      marginBase - marginStep * 2,
+      marginBase - marginStep,
+      marginBase,
+      marginBase + marginStep,
+      marginBase + marginStep * 2,
+    ].filter(m => m > -0.05).map(m => Math.round(m * 1000) / 1000);
+
+    // Multiple columns (EV/EBIT)
+    const mStep = Math.max(1, Math.round(baseMultiple * 0.15));
+    const multiples = [
+      baseMultiple - mStep * 2,
+      baseMultiple - mStep,
+      baseMultiple,
+      baseMultiple + mStep,
+      baseMultiple + mStep * 2,
+    ].filter(p => p > 0).map(p => Math.round(p));
+
+    const matrix = margins.map(mgn =>
+      multiples.map(m => computeTargetPriceCyclical(baseRevenueB, mgn, m, sharesM, netDebtB))
+    );
+
+    const baseMarginIdx = margins.findIndex(m => Math.abs(m - marginBase) < 0.001);
+    const baseMIdx = multiples.findIndex(p => p === Math.round(baseMultiple));
+
+    return {
+      revenues: margins, // repurposed as margins for cyclical
+      multiples,
+      matrix,
+      baseRevIdx: baseMarginIdx >= 0 ? baseMarginIdx : 2,
+      baseMIdx: baseMIdx >= 0 ? baseMIdx : 2,
+      isCyclical: true,
+    };
+  }
+
   // Revenue rows: spread around base
   const revMin = Math.max(0.5, Math.floor(baseRevenueB * 0.6));
   const revMax = Math.ceil(baseRevenueB * 1.3);
@@ -192,6 +276,10 @@ export function buildSensitivityMatrix(
 }
 
 // ─── Time Path ───
+// Uses convex multiple compression via Gordon Growth Model at each quarterly step.
+// The prompt instructs Claude to reason about front-loaded compression:
+//   "the 30%→20% growth phase destroys more multiple than 10%→0%"
+// This function now matches that convexity instead of linearly interpolating.
 export function buildTimePath(
   baseRevenueB: number,
   revenueGrowthRate: number,
@@ -201,27 +289,53 @@ export function buildTimePath(
   startMultiple: number,
   endMultiple: number,
   years: number,
-  method: ValuationMethod = "pe"
+  method: ValuationMethod = "pe",
+  requiredReturn: number = 0.12
 ) {
   const path = [];
   const quarters = years * 4;
+
+  // Derive implied terminal growth from the end multiple via Gordon Growth:
+  //   endMultiple = 1 / (r - g_terminal)  →  g_terminal = r - 1/endMultiple
+  // This gives us the growth rate the end multiple implies, so we can
+  // interpolate growth (which decays) and let the multiple follow convexly.
+  const impliedTerminalGrowth = endMultiple > 0
+    ? Math.max(0, requiredReturn - 1 / endMultiple)
+    : 0.02;
+
+  // Starting growth = the rate that produces startMultiple via Gordon Growth
+  const impliedStartGrowth = startMultiple > 0
+    ? Math.max(0, requiredReturn - 1 / Math.min(startMultiple, 200))
+    : revenueGrowthRate;
+
   for (let q = 0; q <= quarters; q++) {
     const t = q / 4;
     const rev = baseRevenueB * Math.pow(1 + revenueGrowthRate, t);
-    const multiple = startMultiple + (endMultiple - startMultiple) * (t / years);
+
+    // Growth decays linearly from start to terminal (same as engine)
+    const growthAtT = impliedStartGrowth + (impliedTerminalGrowth - impliedStartGrowth) * (t / years);
+
+    // Multiple follows convexly from Gordon Growth: P/E = 1/(r - g)
+    // This is strictly convex in g: compression is front-loaded when
+    // growth is high and decelerating, exactly matching the prompt's guidance.
+    const multiple = gordonPE(requiredReturn, growthAtT);
+
+    // Clamp to reasonable range to avoid infinity near r ≈ g
+    const clampedMultiple = clamp(multiple, 1, 200);
+
     let price: number;
     if (method === "ps") {
       const rps = sharesM > 0 ? (rev * 1000) / sharesM : 0;
-      price = rps * multiple;
+      price = rps * clampedMultiple;
     } else {
       const netIncomeB = rev * opMargin * (1 - taxRate);
       const eps = sharesM > 0 ? (netIncomeB * 1000) / sharesM : 0;
-      price = eps * multiple;
+      price = eps * clampedMultiple;
     }
     path.push({
       year: Math.round(t * 100) / 100,
       revenue: rev,
-      multiple: Math.round(multiple * 10) / 10,
+      multiple: Math.round(clampedMultiple * 10) / 10,
       price: Math.round(price * 100) / 100,
     });
   }

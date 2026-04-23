@@ -20,9 +20,14 @@ import json
 import re
 import sys
 import time
+import functools
 import requests
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils import load_env, get_watchlist, timestamp
+
+# Force unbuffered output so status lines appear immediately
+print = functools.partial(print, flush=True)
 
 load_env()
 
@@ -50,7 +55,7 @@ def load_quant_data(ticker: str) -> dict:
     Fallback: local quant_signals.json (may be stale — save_signals returns
     after a successful Supabase insert without writing JSON).
 
-    This provides hard financial facts from yfinance that should NOT be
+    This provides hard financial facts from quant scout that should NOT be
     re-fetched via Perplexity.
     """
     # ── Supabase first (source of truth) ──
@@ -87,9 +92,9 @@ def load_quant_data(ticker: str) -> dict:
 
 def format_quant_facts(ticker: str, quant_data: dict) -> str:
     """Format quant data as hard facts for the Claude prompt.
-    These numbers come from yfinance and should be treated as ground truth."""
+    These numbers come from quant scout and should be treated as ground truth."""
     if not quant_data:
-        return f"[No yfinance data available for {ticker} — rely on Perplexity research below]"
+        return f"[No quant scout data available for {ticker} — rely on Perplexity research below]"
 
     price = quant_data.get("price") or 0
     market_cap_b = quant_data.get("market_cap_b") or 0
@@ -104,18 +109,18 @@ def format_quant_facts(ticker: str, quant_data: dict) -> str:
     short_pct = quant_data.get("short_pct") or 0
     fcf = quant_data.get("free_cash_flow") or 0
 
-    # TTM revenue: prefer direct yfinance value, fall back to market_cap / P/S
+    # TTM revenue: prefer direct quant scout value, fall back to market_cap / P/S
     ttm_rev = quant_data.get("ttm_revenue")
     current_rev_b = ttm_rev if ttm_rev and ttm_rev > 0 else (round(market_cap_b / ps_ratio, 2) if ps_ratio and ps_ratio > 0 else None)
     rev_source = "TTM" if (ttm_rev and ttm_rev > 0) else "derived from mktcap/PS"
 
-    # Shares: prefer direct yfinance value, fall back to market_cap / price
+    # Shares: prefer direct quant scout value, fall back to market_cap / price
     shares_direct = quant_data.get("shares_outstanding_m")
     shares_m = shares_direct if shares_direct and shares_direct > 0 else (round((market_cap_b * 1000) / price) if price > 0 else None)
     shares_source = "reported" if (shares_direct and shares_direct > 0) else "derived from mktcap/price"
 
     lines = [
-        f"HARD FINANCIAL DATA (from yfinance — treat as ground truth, do NOT override with estimates):",
+        f"HARD FINANCIAL DATA (from quant scout — treat as ground truth, do NOT override with estimates):",
         f"  Stock price: ${price:.2f}",
         f"  Market cap: ${market_cap_b:.1f}B",
     ]
@@ -144,12 +149,12 @@ def format_quant_facts(ticker: str, quant_data: dict) -> str:
 
 def research_financials(ticker: str, name: str, sector: str) -> str:
     """Use Perplexity for FORWARD-LOOKING data only.
-    Hard financials (revenue, margins, P/E) come from yfinance via quant scout.
+    Hard financials (revenue, margins, P/E) come from quant scout via quant scout.
     Perplexity fills in: guidance, analyst targets, catalysts, industry dynamics."""
     if not PERPLEXITY_API_KEY:
         return ""
 
-    # Focus Perplexity on what yfinance CAN'T provide
+    # Focus Perplexity on what quant scout CAN'T provide
     queries = [
         f"{ticker} {name} FY2025 FY2026 FY2027 revenue guidance analyst consensus estimates forward outlook",
         f"{ticker} {name} management guidance targets long-term margin goals TAM market share competitive moat",
@@ -159,7 +164,9 @@ def research_financials(ticker: str, name: str, sector: str) -> str:
     ]
 
     research_parts = []
-    for q in queries:
+    query_labels = ["guidance/moat", "bull-bear/catalysts", "industry cycle"]
+    for i, q in enumerate(queries):
+        label = query_labels[i] if i < len(query_labels) else f"query {i+1}"
         try:
             resp = requests.post(
                 "https://api.perplexity.ai/chat/completions",
@@ -192,17 +199,89 @@ def research_financials(ticker: str, name: str, sector: str) -> str:
             resp.raise_for_status()
             content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
             research_parts.append(content)
+            print(f"    ✓ {label} ({len(content)} chars)")
+        except requests.exceptions.Timeout:
+            print(f"    ✗ {label} — TIMEOUT (Perplexity took >30s)")
         except Exception as e:
-            print(f"    Research query failed: {e}")
+            err_msg = str(e)
+            if len(err_msg) > 100:
+                err_msg = err_msg[:100] + "..."
+            print(f"    ✗ {label} — {err_msg}")
         time.sleep(1.5)
+
+    success = len(research_parts)
+    total = len(queries)
+    if success < total:
+        print(f"    Research: {success}/{total} queries succeeded{' — proceeding with partial data' if success > 0 else ' — NO research data'}")
 
     return "\n\n---\n\n".join(research_parts)
 
 
-MODEL_GEN_PROMPT = """You are a senior equity research analyst building a target price model.
+def repair_truncated_json(text: str) -> str | None:
+    """Attempt to repair JSON that was truncated mid-stream (hit max_tokens).
 
-GUIDELINE:
-{guideline}
+    Strategy:
+    1. Find the outermost opening brace
+    2. Walk the string tracking open/close braces and brackets
+    3. Strip the last incomplete key-value pair
+    4. Close all remaining open braces/brackets
+    """
+    first = text.find('{')
+    if first == -1:
+        return None
+
+    text = text[first:]
+
+    # Strip trailing incomplete string/value — find last complete key:value
+    # by looking for the last comma or opening brace that's followed by valid JSON
+    # Simple approach: strip back to last comma or opening brace at depth > 0
+    stack = []
+    in_string = False
+    escape = False
+    last_good = 0
+
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == '\\' and in_string:
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+
+        if ch in '{[':
+            stack.append(ch)
+        elif ch == '}' and stack and stack[-1] == '{':
+            stack.pop()
+            last_good = i + 1
+        elif ch == ']' and stack and stack[-1] == '[':
+            stack.pop()
+            last_good = i + 1
+        elif ch == ',' and stack:
+            last_good = i + 1
+
+    if not stack:
+        # JSON is already complete — just parse it
+        return text[:last_good] if last_good > 0 else text
+
+    # Truncated — cut back to last_good and close the stack
+    result = text[:last_good] if last_good > 0 else text.rstrip()
+
+    # Remove any trailing comma
+    result = result.rstrip().rstrip(',')
+
+    # Close remaining open braces/brackets in reverse order
+    for opener in reversed(stack):
+        result += ']' if opener == '[' else '}'
+
+    return result
+
+
+MODEL_GEN_PROMPT = """You are a senior equity research analyst building a target price model.
 
 COMPANY: {ticker} ({name}), {sector} sector
 INVESTMENT HORIZON: {timeline} years
@@ -213,6 +292,48 @@ KILL CONDITION: {kill_condition}
 
 FORWARD-LOOKING RESEARCH (from Perplexity — guidance, analyst targets, catalysts, industry dynamics):
 {research}
+
+─── STEP 0: ARCHETYPE CLASSIFICATION (do this FIRST) ───
+
+Before deriving any inputs, classify this stock into its PRIMARY investment archetype.
+The archetype determines which analytical questions matter most, which valuation
+framework to emphasize, and how to interpret drawdowns and kill conditions.
+
+ARCHETYPES:
+  "garp" — Growth at a Reasonable Price (Lynch). Revenue growing 10-30%, positive
+    earnings, moderate P/E. The DEFAULT mode. Forecast growth, ramp margins, apply
+    growth-adjusted multiple. Exit when PEG exceeds sector median substantially.
+
+  "cyclical" — Normalized Earnings (Damodaran). Company's value is driven by where
+    it sits in the industry cycle, not just its execution. TTM EBITDA may be
+    unsustainably high (peak) or depressed (trough). CRITICAL: do NOT extrapolate
+    peak-cycle margins forward — use normalized (mid-cycle average) margins for the
+    base case. Bear case must model the cycle turning. Criteria should track cycle
+    indicators (inventory/sales, capacity utilization, order backlog, commodity pricing).
+    A 40% drawdown at peak cycle is the EXPECTED bear case, not a kill condition.
+
+  "transformational" — Right-Tail Optionality (Baillie Gifford). Revenue growing >30%,
+    negative or minimal EBITDA, large TAM, platform/network effects. Widen the scenario
+    spread significantly — bear and bull should NOT be symmetric around base. Criteria
+    should track TAM penetration, network density, unit economics trajectory, NOT
+    sequential revenue beats. A 50% price drawdown with intact structural thesis is a
+    buying opportunity, not a kill condition.
+
+  "compounder" — Quality Earnings Power (Buffett/Munger). Durable moat, ROIC
+    consistently >15%, stable margins. The right question is NOT "what's the 3-year
+    target?" but "how long can this company sustain above-WACC returns?" (the
+    Competitive Advantage Period). Criteria should track moat health: customer
+    retention, pricing power, ROIC stability. Exit trigger is moat deterioration,
+    not price target.
+
+  "special_situation" — Event-Driven. Value depends on a specific catalyst (spin-off,
+    merger, regulatory approval, activist campaign). The primary valuation is
+    P(event) × value-if-succeeds + (1-P) × value-if-fails. Criteria should be
+    entirely event-specific. Exit is binary: the event resolves.
+
+Choose based on the financial data and research above. A company can have secondary
+characteristics (e.g., LITE = GARP primary + Cyclical secondary), but the PRIMARY
+archetype determines the analytical framework. Include secondary if relevant.
 
 METHODOLOGY:
 Your outputs feed into a 5-year DCF engine that computes:
@@ -227,6 +348,12 @@ Based on the guideline and research, produce a STRUCTURED JSON model configurati
 Return ONLY valid JSON — no markdown fences, no commentary.
 
 {{
+  "archetype": {{
+    "primary": "garp" | "cyclical" | "transformational" | "compounder" | "special_situation",
+    "secondary": null or one of the above (if the stock has meaningful hybrid characteristics),
+    "justification": "1-2 sentences explaining why this archetype was chosen and what it means for the analysis"
+  }},
+
   "valuation_method": "pe" or "ps",
   "valuation_justification": "1-2 sentences explaining why this method was chosen",
 
@@ -359,6 +486,17 @@ POST-DERIVATION CHECK (do this AFTER completing the JSON above):
   Do NOT adjust your derived inputs to close the gap — the whole point is independent
   derivation. If your model says $800 and the hypothesis says $1500, report $800 and
   explain why.
+
+OUTPUT SIZE RULES (CRITICAL — responses that exceed the token limit get truncated and fail):
+- target_notes: MAX 3 sentences. No preambles, no restating what the JSON already shows.
+- criteria detail: MAX 2 sentences per criterion.
+- scenario trigger: MAX 2 sentences per scenario.
+- valuation_justification: MAX 2 sentences.
+- archetype justification: MAX 2 sentences.
+- Do NOT include fields not in the schema above (no sensitivity_table, time_path,
+  confidence_mapping, decision_framework, expected_value, or divergence_note unless
+  the 20% divergence check actually triggers).
+- Return ONLY the JSON object. No markdown, no commentary before or after.
 """
 
 
@@ -366,19 +504,17 @@ def generate_model_with_claude(
     ticker: str, name: str, sector: str, thesis: str,
     kill_condition: str, target_price: float, timeline: int,
     research: str, quant_data: dict | None = None,
+    retry: bool = False,
 ) -> dict | None:
     """Use Claude to generate a complete target price model configuration."""
     if not ANTHROPIC_API_KEY:
         print(f"  [{ticker}] ANTHROPIC_API_KEY not set — cannot generate model")
         return None
 
-    guideline = load_analyst_guideline()
-
     target_price_display = f"${target_price}" if target_price else "UNKNOWN — estimate a realistic 10x target from the research data"
     quant_facts = format_quant_facts(ticker, quant_data or {})
 
     prompt = MODEL_GEN_PROMPT.format(
-        guideline=guideline,
         ticker=ticker,
         name=name,
         sector=sector,
@@ -386,12 +522,23 @@ def generate_model_with_claude(
         timeline=timeline,
         thesis=thesis or "High-growth company with potential for significant appreciation",
         kill_condition=kill_condition or "Fundamental thesis break — management missteps or market share loss",
-        research=research[:8000],  # Trim to fit context
+        research=research[:6000],  # Trim to fit context
         quant_facts=quant_facts,
     )
 
+    if retry:
+        prompt = (
+            "RETRY — your previous response was truncated. Be MAXIMALLY CONCISE. "
+            "Every text field must be 1-2 sentences max. No extra fields.\n\n"
+            + prompt
+        )
+
+    content = ""
+    stop_reason = "unknown"
+
     try:
-        print(f"  [{ticker}] Generating model via Claude...")
+        label = "Retrying" if retry else "Generating"
+        print(f"  [{ticker}] {label} model via Claude...")
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
             headers={
@@ -400,16 +547,19 @@ def generate_model_with_claude(
                 "content-type": "application/json",
             },
             json={
-                "model": "claude-opus-4-6",
-                "max_tokens": 4000,
+                "model": "claude-sonnet-4-6" if retry else "claude-opus-4-6",
+                "max_tokens": 32000,
                 "temperature": 0,
                 "messages": [{"role": "user", "content": prompt}],
             },
-            timeout=90,
+            timeout=180,
         )
         resp.raise_for_status()
         data = resp.json()
         content = data.get("content", [{}])[0].get("text", "")
+        stop_reason = data.get("stop_reason", "unknown")
+        if stop_reason == "max_tokens":
+            print(f"  [{ticker}] WARNING: response truncated (hit max_tokens)")
 
         # Parse JSON — robust extraction handles preambles/postambles
         clean = content.strip()
@@ -419,11 +569,61 @@ def generate_model_with_claude(
         try:
             return json.loads(clean)
         except json.JSONDecodeError:
-            # Fallback: find first '{' and last '}' — handles Claude adding text
-            first_brace = content.find('{')
-            last_brace = content.rfind('}')
-            if first_brace != -1 and last_brace > first_brace:
-                return json.loads(content[first_brace:last_brace + 1])
+            pass
+
+        # Fallback 1: brace extraction
+        first_brace = content.find('{')
+        last_brace = content.rfind('}')
+        if first_brace != -1 and last_brace > first_brace:
+            extracted = content[first_brace:last_brace + 1]
+            try:
+                return json.loads(extracted)
+            except json.JSONDecodeError:
+                pass
+
+            # Fallback 2: repair common JSON issues
+            try:
+                repaired = extracted
+                # Remove trailing commas before } or ]
+                repaired = re.sub(r',\s*([}\]])', r'\1', repaired)
+                # Fix unescaped newlines inside string values
+                repaired = re.sub(r'(?<=": ")(.*?)(?="[,\s}])', lambda m: m.group(0).replace('\n', ' '), repaired)
+                return json.loads(repaired)
+            except (json.JSONDecodeError, Exception):
+                pass
+
+        # Fallback 3: truncation repair — close open braces/brackets
+        if stop_reason == "max_tokens":
+            print(f"  [{ticker}] Attempting truncated JSON repair...")
+            repaired = repair_truncated_json(content)
+            if repaired:
+                try:
+                    result = json.loads(repaired)
+                    # Validate it has the minimum required fields
+                    if result.get("model_defaults") and result.get("scenarios"):
+                        print(f"  [{ticker}] Truncation repair succeeded (some fields may be partial)")
+                        return result
+                    else:
+                        print(f"  [{ticker}] Repaired JSON missing required fields")
+                except json.JSONDecodeError as e3:
+                    print(f"  [{ticker}] Truncation repair failed: {e3}")
+
+        # Fallback 4: retry with compact prompt if first attempt truncated
+        if stop_reason == "max_tokens" and not retry:
+            print(f"  [{ticker}] Retrying with compact prompt...")
+            return generate_model_with_claude(
+                ticker, name, sector, thesis, kill_condition,
+                target_price, timeline,
+                research[:3000],  # Halve research text
+                quant_data,
+                retry=True,
+            )
+
+        print(f"  [{ticker}] All JSON parse attempts failed")
+        # Dump first/last 200 chars for debugging
+        print(f"  Start: {content[:200]}")
+        print(f"  End: ...{content[-200:]}")
+        return None
 
     except json.JSONDecodeError as e:
         print(f"  [{ticker}] Claude returned non-JSON: {e}")
@@ -447,6 +647,7 @@ def update_stock_in_supabase(ticker: str, model_config: dict, research_text: str
             "scenarios": model_config.get("scenarios", {}),
             "criteria": model_config.get("criteria", []),
             "target_notes": model_config.get("target_notes", ""),
+            "archetype": model_config.get("archetype", {}),
         }
 
         # Cache research data so models are auditable and reproducible
@@ -455,11 +656,33 @@ def update_stock_in_supabase(ticker: str, model_config: dict, research_text: str
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "perplexity_research": research_text[:10000] if research_text else "",
                 "quant_snapshot": quant_data or {},
-                "sources": ["yfinance (financials)", "Perplexity Sonar (guidance/catalysts)"],
+                "sources": ["Quant Scout (financials)", "Perplexity Sonar (guidance/catalysts)"],
             }
 
-        resp = sb.table("stocks").update(update).eq("ticker", ticker).execute()
-        return bool(resp.data)
+        # Try update; if column doesn't exist, strip it and retry (loop for multiple missing)
+        stripped = []
+        for attempt in range(5):  # max 5 missing columns before giving up
+            try:
+                resp = sb.table("stocks").update(update).eq("ticker", ticker).execute()
+                if stripped:
+                    print(f"  [{ticker}] Saved (stripped missing columns: {', '.join(stripped)})")
+                return bool(resp.data)
+            except Exception as col_err:
+                err_msg = str(col_err)
+                if "column" in err_msg:
+                    import re as _re
+                    match = _re.search(r"['\"](\w+)['\"].*column", err_msg) or _re.search(r"column[^'\"]*['\"](\w+)['\"]", err_msg)
+                    if match and match.group(1) in update:
+                        missing_col = match.group(1)
+                        stripped.append(missing_col)
+                        print(f"  [{ticker}] Column '{missing_col}' missing in DB — stripping")
+                        update.pop(missing_col)
+                        if not update:
+                            print(f"  [{ticker}] No columns left to save!")
+                            return False
+                        continue
+                raise
+
     except Exception as e:
         print(f"  [{ticker}] Supabase update failed: {e}")
         return False
@@ -483,14 +706,14 @@ def process_stock(stock: dict) -> dict | None:
     print(f"  MODEL GENERATOR: {ticker} ({name}) → ${target_price}")
     print(f"  {'='*55}")
 
-    # Stage 0: Load quant data (hard financials from yfinance — ground truth)
+    # Stage 0: Load quant data (hard financials from quant scout — ground truth)
     quant_data = load_quant_data(ticker)
     if quant_data:
         price = quant_data.get("price") or 0
         mcap = quant_data.get("market_cap_b") or 0
-        print(f"  Stage 0: Loaded yfinance data — ${price:.2f}, ${mcap:.1f}B market cap")
+        print(f"  Stage 0: Loaded quant scout data — ${price:.2f}, ${mcap:.1f}B market cap")
     else:
-        print(f"  Stage 0: No yfinance data available — Perplexity will be primary source")
+        print(f"  Stage 0: No quant scout data available — Perplexity will be primary source")
 
     # Stage 1: Research (forward-looking only — guidance, catalysts, industry)
     print(f"  Stage 1: Researching forward guidance via Perplexity...")
@@ -506,16 +729,39 @@ def process_stock(stock: dict) -> dict | None:
     )
 
     if not model_config:
-        print(f"  [{ticker}] Model generation failed")
+        print(f"  [{ticker}] ✗ Model generation failed")
         return None
 
+    # Show what Claude produced
+    arch = model_config.get("archetype", {})
+    arch_primary = arch.get("primary", "?") if isinstance(arch, dict) else "?"
+    arch_secondary = arch.get("secondary") if isinstance(arch, dict) else None
+    val_method = model_config.get("valuation_method", "?")
+    scenarios = model_config.get("scenarios", {})
+    base_price = scenarios.get("base", {}).get("price", 0)
+    bear_price = scenarios.get("bear", {}).get("price", 0)
+    bull_price = scenarios.get("bull", {}).get("price", 0)
+    n_criteria = len(model_config.get("criteria", []))
+    arch_str = arch_primary.upper() + (f" + {arch_secondary}" if arch_secondary else "")
+    print(f"  Stage 2: ✓ Claude response parsed")
+    print(f"    Archetype: {arch_str}  |  Method: {val_method}  |  Criteria: {n_criteria}")
+    print(f"    Scenarios: bear ${bear_price:,.0f} / base ${base_price:,.0f} / bull ${bull_price:,.0f}")
+
     # Stage 3: Save to Supabase (with cached research for auditability)
-    print(f"  [{ticker}] Saving model config + research cache to Supabase...")
+    print(f"  Stage 3: Saving to Supabase...")
     if update_stock_in_supabase(ticker, model_config, research, quant_data):
         print(f"  [{ticker}] Model saved successfully!")
     else:
         print(f"  [{ticker}] Supabase save failed — dumping to stdout")
         print(json.dumps(model_config, indent=2))
+
+    # Stage 4: Archetype stability tracking (4-run lookback window)
+    archetype = model_config.get("archetype", {})
+    if archetype.get("primary"):
+        stability = check_archetype_stability(ticker, archetype)
+        model_config["archetype_stability"] = stability
+    else:
+        print(f"  [{ticker}] No archetype in model output — Claude may not have included it")
 
     # Print summary
     defaults = model_config.get("model_defaults", {})
@@ -523,7 +769,11 @@ def process_stock(stock: dict) -> dict | None:
     criteria = model_config.get("criteria", [])
     method = model_config.get("valuation_method", "pe")
 
+    arch_primary = archetype.get("primary", "?")
+    arch_secondary = archetype.get("secondary")
+
     print(f"\n  Model Summary:")
+    print(f"    Archetype: {arch_primary.upper()}{f' + {arch_secondary}' if arch_secondary else ''}")
     print(f"    Method: {method.upper()}")
     print(f"    Revenue: ${defaults.get('revenue_b', '?')}B | Margin: {defaults.get('op_margin', '?')}")
     print(f"    Multiple: {defaults.get('pe_multiple') or defaults.get('ps_multiple', '?')}x")
@@ -532,6 +782,112 @@ def process_stock(stock: dict) -> dict | None:
     print(f"    Notes: {model_config.get('target_notes', '')[:100]}...")
 
     return model_config
+
+
+ARCHETYPE_LOOKBACK = 4  # rolling window for stability tracking
+
+
+def check_archetype_stability(ticker: str, current_archetype: dict) -> dict:
+    """Track archetype classification stability over a rolling 4-run window.
+
+    Returns:
+      {
+        "current": "garp",
+        "history": ["garp", "cyclical", "garp", "garp"],
+        "pattern": "stable" | "regime_change" | "unstable",
+        "auto_hybrid": false,
+        "note": "..."
+      }
+
+    Patterns:
+      - stable: all runs in the window agree (or only 1 change that stuck)
+      - regime_change: classification was consistent, then changed and stayed
+        changed — the stock's narrative is shifting (real signal)
+      - unstable: flipping back and forth — auto-flag as hybrid because the
+        boundary is genuinely ambiguous for this stock
+    """
+    primary = (current_archetype.get("primary") or "garp").lower()
+
+    # Load archetype history from Supabase
+    history: list[str] = []
+    try:
+        from supabase_helper import get_client
+        sb = get_client()
+        resp = (
+            sb.table("archetype_history")
+            .select("archetype")
+            .eq("ticker", ticker.upper())
+            .order("created_at", desc=True)
+            .limit(ARCHETYPE_LOOKBACK)
+            .execute()
+        )
+        if resp.data:
+            history = [r["archetype"] for r in reversed(resp.data)]
+    except Exception as e:
+        # Table may not exist yet — that's fine, treat as no history
+        print(f"  [{ticker}] Archetype history lookup: {e} (OK if table doesn't exist yet)")
+
+    # Save current classification
+    try:
+        from supabase_helper import get_client
+        from datetime import datetime, timezone
+        sb = get_client()
+        sb.table("archetype_history").insert({
+            "ticker": ticker.upper(),
+            "archetype": primary,
+            "secondary": current_archetype.get("secondary"),
+            "justification": (current_archetype.get("justification") or "")[:500],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+    except Exception as e:
+        print(f"  [{ticker}] Archetype history save: {e} (non-fatal)")
+
+    # Determine pattern
+    if len(history) < 2:
+        return {
+            "current": primary,
+            "history": history + [primary],
+            "pattern": "stable",
+            "auto_hybrid": False,
+            "note": "Insufficient history for stability analysis",
+        }
+
+    window = history[-(ARCHETYPE_LOOKBACK - 1):] + [primary]
+    unique = set(window)
+
+    if len(unique) == 1:
+        pattern = "stable"
+        auto_hybrid = False
+        note = f"Consistent {primary} classification across {len(window)} runs"
+    else:
+        # Check if it's a regime change (old values agree, then switch to new)
+        # vs. unstable (alternating back and forth)
+        changes = sum(1 for i in range(1, len(window)) if window[i] != window[i - 1])
+        if changes == 1:
+            # Single transition — regime change
+            pattern = "regime_change"
+            auto_hybrid = False
+            old = window[0]
+            note = f"Classification shifted from {old} to {primary} — market narrative may be changing"
+        else:
+            # Multiple flips — genuinely ambiguous boundary
+            pattern = "unstable"
+            auto_hybrid = True
+            archetypes_seen = sorted(unique)
+            note = f"Classification alternating between {' and '.join(archetypes_seen)} — auto-flagged as hybrid"
+
+    result = {
+        "current": primary,
+        "history": window,
+        "pattern": pattern,
+        "auto_hybrid": auto_hybrid,
+        "note": note,
+    }
+
+    emoji = {"stable": "\u2705", "regime_change": "\u26A0\uFE0F", "unstable": "\U0001F504"}
+    print(f"    {emoji.get(pattern, '?')} Archetype stability: {pattern} — {note}")
+
+    return result
 
 
 def generate_for_ticker(ticker: str, target_override: float | None = None) -> dict | None:
@@ -610,17 +966,39 @@ def main():
         print("    python generate_model.py --all")
         return
 
-    print(f"\n  Generating models for {len(watchlist)} stocks")
+    # Parallelism: --parallel N (default 3 for --all, 1 for single ticker)
+    max_workers = 1 if specific_ticker else 3
+    for i, arg in enumerate(sys.argv):
+        if arg == "--parallel" and i + 1 < len(sys.argv):
+            max_workers = max(1, min(6, int(sys.argv[i + 1])))
+
+    print(f"\n  Generating models for {len(watchlist)} stocks ({max_workers} parallel)")
     print(f"  Research: Perplexity Sonar")
-    print(f"  Analysis: Claude Sonnet")
+    print(f"  Analysis: Claude Opus")
     print("-" * 60)
 
     results = []
-    for stock in watchlist:
-        result = process_stock(stock)
-        if result:
-            results.append(result)
-        time.sleep(3)  # Rate limiting between stocks
+    if max_workers == 1:
+        # Sequential — simpler output, no interleaving
+        for stock in watchlist:
+            result = process_stock(stock)
+            if result:
+                results.append(result)
+    else:
+        # Parallel — run stocks concurrently with thread pool
+        futures = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            for stock in watchlist:
+                f = pool.submit(process_stock, stock)
+                futures[f] = stock["ticker"]
+            for f in as_completed(futures):
+                ticker = futures[f]
+                try:
+                    result = f.result()
+                    if result:
+                        results.append(result)
+                except Exception as e:
+                    print(f"  [{ticker}] ✗ Unhandled error: {e}")
 
     print(f"\n{'='*60}")
     print(f"  COMPLETE: Generated {len(results)}/{len(watchlist)} models")

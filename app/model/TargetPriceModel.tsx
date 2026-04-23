@@ -6,8 +6,10 @@ import type { Props, StockTarget } from "./types";
 import {
   cn,
   detectValuationMethod,
+  cyclicalMethodInfo,
   computeTargetPrice,
   computeTargetPricePS,
+  computeTargetPriceCyclical,
   buildSensitivityMatrix,
   buildTimePath,
 } from "./helpers";
@@ -128,8 +130,13 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
   const hasAnalysis = stock ? !!(stock.sector && stock.sector !== "Unknown" && stock.thesis && !stock.thesis.includes("pipeline will generate")) : false;
   const stockHasData = hasQuant && hasAnalysis;
 
-  // Detect valuation method for this stock
-  const valMethodInfo = useMemo(() => stock ? detectValuationMethod(stock) : { method: "pe" as const, label: "", multipleLabel: "", justification: "", reasons: [] }, [stock]);
+  // Detect valuation method — initial guess from stock data (may be overridden by engine)
+  const baseValMethodInfo = useMemo(() => {
+    if (!stock) return { method: "pe" as const, label: "", multipleLabel: "", justification: "", reasons: [] };
+    // If stock has cyclical archetype, start with cyclical assumption
+    if (stock.archetype?.primary === "cyclical") return cyclicalMethodInfo(stock.ticker);
+    return detectValuationMethod(stock);
+  }, [stock]);
 
   // Derive initial values
   const target = stock?.target || {} as StockTarget;
@@ -149,7 +156,9 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
   const defaultTaxRate = defaults?.tax_rate ?? 0.17;
   const defaultSharesM = defaults?.shares_m || Math.round(initialSharesM);
 
-  const defaultMultiple = valMethodInfo.method === "ps"
+  const defaultMultiple = baseValMethodInfo.method === "cyclical"
+    ? 12 // default through-cycle EV/EBIT — will be overridden by engine
+    : baseValMethodInfo.method === "ps"
     ? (defaults?.ps_multiple || (stock?.psRatio && stock.psRatio > 0 ? Math.round(stock.psRatio) : 10))
     : (defaults?.pe_multiple || target.target_multiple || (stock?.forwardPe && stock.forwardPe > 0 ? Math.round(stock.forwardPe) : 20));
 
@@ -165,7 +174,9 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
   const [termGrowth, setTermGrowth] = useState(0.05);
 
   // Time path
-  const currentMultiple = valMethodInfo.method === "ps"
+  const currentMultiple = baseValMethodInfo.method === "cyclical"
+    ? defaultMultiple // cyclical: start at the through-cycle multiple
+    : baseValMethodInfo.method === "ps"
     ? (stock?.psRatio && stock.psRatio > 0 ? Math.round(stock.psRatio) : defaultMultiple)
     : (stock?.forwardPe && stock.forwardPe > 0 ? Math.round(stock.forwardPe) : Math.round(defaultMultiple * 1.5));
   const [startMultiple, setStartMultiple] = useState(currentMultiple);
@@ -181,7 +192,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
   const { enginePayload, engineLoading, engineError } = useEnginePayload(
     selectedTicker,
     priceHorizonMonths,
-    valMethodInfo,
+    baseValMethodInfo,
     defaultOpMargin,
     defaultTaxRate,
     defaultMultiple,
@@ -191,12 +202,38 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
     setMultiple,
   );
 
+  // Final valuation method: engine may confirm/override cyclical mode
+  const valMethodInfo = useMemo(() => {
+    if (enginePayload?.target?.valuation_method === "cyclical_normalized" && stock) {
+      return cyclicalMethodInfo(stock.ticker);
+    }
+    return baseValMethodInfo;
+  }, [enginePayload, baseValMethodInfo, stock]);
+
+  // Net debt for cyclical EV-to-equity bridge
+  const netDebtB = useMemo(() => {
+    if (enginePayload?.capitalization?.net_debt) return enginePayload.capitalization.net_debt / 1e9;
+    if (enginePayload?.target?.net_debt) return enginePayload.target.net_debt / 1e9;
+    return 0;
+  }, [enginePayload]);
+
+  // Cycle position (for display)
+  const cyclePosition = useMemo(() => {
+    return enginePayload?.target?.drivers?.cycle_position ?? 0.5;
+  }, [enginePayload]);
+
   // Derived
   const targetPrice = useMemo(
-    () => valMethodInfo.method === "ps"
-      ? computeTargetPricePS(revenue, sharesM, multiple)
-      : computeTargetPrice(revenue, opMargin, taxRate, sharesM, multiple),
-    [revenue, opMargin, taxRate, sharesM, multiple, valMethodInfo.method]
+    () => {
+      if (valMethodInfo.method === "cyclical") {
+        return computeTargetPriceCyclical(revenue, opMargin, multiple, sharesM, netDebtB);
+      }
+      if (valMethodInfo.method === "ps") {
+        return computeTargetPricePS(revenue, sharesM, multiple);
+      }
+      return computeTargetPrice(revenue, opMargin, taxRate, sharesM, multiple);
+    },
+    [revenue, opMargin, taxRate, sharesM, multiple, valMethodInfo.method, netDebtB]
   );
 
   // Scenario prices
@@ -241,8 +278,8 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
 
   // Sensitivity
   const sens = useMemo(
-    () => buildSensitivityMatrix(revenue, opMargin, taxRate, sharesM, multiple, valMethodInfo.method),
-    [revenue, opMargin, taxRate, sharesM, multiple, valMethodInfo.method]
+    () => buildSensitivityMatrix(revenue, opMargin, taxRate, sharesM, multiple, valMethodInfo.method, netDebtB),
+    [revenue, opMargin, taxRate, sharesM, multiple, valMethodInfo.method, netDebtB]
   );
 
   // Time path
@@ -258,7 +295,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
     if (s) {
       const st = s.target || {} as StockTarget;
       const d = st.model_defaults;
-      const vm = detectValuationMethod(s);
+      const vm = s.archetype?.primary === "cyclical" ? cyclicalMethodInfo(s.ticker) : detectValuationMethod(s);
 
       const revB = d?.revenue_b || (s.psRatio > 0 ? s.marketCapB / s.psRatio : s.marketCapB / 10);
       setRevenue(revB > 0 ? Math.round(revB * 10) / 10 : 1);
@@ -269,12 +306,16 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
       setOpMargin(d?.op_margin ?? (s.operatingMarginPct !== 0 ? s.operatingMarginPct / 100 : 0.15));
       setTaxRate(d?.tax_rate ?? 0.17);
 
-      const defaultM = vm.method === "ps"
+      const defaultM = vm.method === "cyclical"
+        ? 12
+        : vm.method === "ps"
         ? (d?.ps_multiple || (s.psRatio > 0 ? Math.round(s.psRatio) : 10))
         : (d?.pe_multiple || st.target_multiple || (s.forwardPe > 0 ? Math.round(s.forwardPe) : 20));
       setMultiple(defaultM);
 
-      const curM = vm.method === "ps"
+      const curM = vm.method === "cyclical"
+        ? defaultM
+        : vm.method === "ps"
         ? (s.psRatio > 0 ? Math.round(s.psRatio) : defaultM)
         : (s.forwardPe > 0 ? Math.round(s.forwardPe) : Math.round(defaultM * 1.5));
       setStartMultiple(curM);
@@ -371,8 +412,39 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
               {s.ticker}
             </button>
           ))}
-          <div className="ml-auto text-xs text-[var(--muted)]">
-            {stock.name} \u00B7 {stock.sector}
+          <div className="ml-auto flex items-center gap-2 text-xs text-[var(--muted)]">
+            {stock.name} &middot; {stock.sector}
+            {/* Archetype badge — from Supabase (set by generate_model.py) or engine payload */}
+            {(stock.archetype?.primary || enginePayload?.archetype?.primary) && (() => {
+              const arch = stock.archetype?.primary || enginePayload?.archetype?.primary || "";
+              const labels: Record<string, string> = {
+                garp: "GARP",
+                cyclical: "Cyclical",
+                transformational: "Transformational",
+                compounder: "Compounder",
+                special_situation: "Special Sit.",
+              };
+              const colors: Record<string, string> = {
+                garp: "bg-blue-500/20 text-blue-300 border-blue-500/30",
+                cyclical: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+                transformational: "bg-violet-500/20 text-violet-300 border-violet-500/30",
+                compounder: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+                special_situation: "bg-rose-500/20 text-rose-300 border-rose-500/30",
+              };
+              return (
+                <span className={cn("px-2 py-0.5 rounded-full border text-[10px] font-medium", colors[arch] || "bg-gray-500/20 text-gray-300 border-gray-500/30")}>
+                  {labels[arch] || arch}
+                </span>
+              );
+            })()}
+            {/* Valuation method badge from engine */}
+            {enginePayload?.target?.valuation_method && enginePayload.target.valuation_method !== "ev_ebitda" && (
+              <span className="px-2 py-0.5 rounded-full border text-[10px] font-medium bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
+                {enginePayload.target.valuation_method === "cyclical_normalized" ? "Cyclical Engine"
+                  : enginePayload.target.valuation_method === "revenue_multiple" ? "P/S Mode"
+                  : enginePayload.target.valuation_method}
+              </span>
+            )}
           </div>
         </div>
 
@@ -515,6 +587,11 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
               </div>
             ))}
           </div>
+          {valMethodInfo.method === "cyclical" && (
+            <div className="mt-3 text-[10px] text-[var(--faint)] border-t border-[var(--border)] pt-3">
+              Equation: EV = Revenue \u00D7 Normalized EBIT Margin \u00D7 EV/EBIT \u2192 Equity = EV \u2212 Net Debt \u2192 Price = Equity / Shares
+            </div>
+          )}
           {valMethodInfo.method === "ps" && (
             <div className="mt-3 text-[10px] text-[var(--faint)] border-t border-[var(--border)] pt-3">
               Equation: Target Price = (Revenue / Diluted Shares) \u00D7 P/S Multiple
@@ -571,34 +648,89 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
         {/* SLIDERS */}
         <div className="rounded-xl bg-[var(--card)] border border-[var(--border)] px-6 py-4 mb-8">
           <div className="text-[13px] text-[var(--muted)] mb-2">
-            Y3 exit fundamentals (FY{2026 + timeline}) \u2014 adjust sliders or click values to type
+            {valMethodInfo.method === "cyclical"
+              ? "Normalized mid-cycle fundamentals (Damodaran approach) \u2014 adjust sliders or click values to type"
+              : `Y3 exit fundamentals (FY${2026 + timeline}) \u2014 adjust sliders or click values to type`}
           </div>
-          <SliderRow label="Annual revenue" value={revenue} onChange={setRevenue}
-            min={Math.max(0.5, Math.round(currentRevB * 0.3 * 10) / 10)}
-            max={Math.max(Math.round(currentRevB * 5), 10)} step={0.1}
-            format={v => `$${v.toFixed(1)}B`} />
-          {valMethodInfo.method === "pe" && (
+          {valMethodInfo.method === "cyclical" ? (
             <>
-              <SliderRow label="Operating margin" value={opMargin} onChange={setOpMargin}
+              <SliderRow label="Annual revenue" value={revenue} onChange={setRevenue}
+                min={Math.max(0.5, Math.round(currentRevB * 0.3 * 10) / 10)}
+                max={Math.max(Math.round(currentRevB * 5), 10)} step={0.1}
+                format={v => `$${v.toFixed(1)}B`} />
+              <SliderRow label="Normalized EBIT margin (mid-cycle avg)" value={opMargin} onChange={setOpMargin}
                 min={-0.10} max={0.60} step={0.01}
-                format={v => `${(v * 100).toFixed(0)}%`} />
-              <SliderRow label="Tax rate" value={taxRate} onChange={setTaxRate}
-                min={0} max={0.40} step={0.01}
-                format={v => `${(v * 100).toFixed(0)}%`} />
+                format={v => `${(v * 100).toFixed(1)}%`} />
+              <SliderRow
+                label="Through-cycle EV/EBIT"
+                value={multiple}
+                onChange={setMultiple}
+                min={4}
+                max={40}
+                step={1}
+                format={v => `${v}\u00D7`}
+              />
+              <SliderRow label="Diluted shares" value={sharesM} onChange={setSharesM}
+                min={Math.round(initialSharesM * 0.7)} max={Math.round(initialSharesM * 1.5)} step={1}
+                format={v => `${v.toFixed(0)}M`} />
+              {/* Cycle position indicator (read-only display from engine) */}
+              <div className="flex items-center justify-between py-2 text-[12px]">
+                <span className="text-[var(--muted)]">Cycle position</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-32 h-2 rounded-full bg-[var(--bg)] overflow-hidden relative">
+                    <div
+                      className="absolute top-0 left-0 h-full rounded-full transition-all"
+                      style={{
+                        width: `${cyclePosition * 100}%`,
+                        background: cyclePosition > 0.7 ? '#f59e0b' : cyclePosition < 0.3 ? '#3b82f6' : '#10b981',
+                      }}
+                    />
+                  </div>
+                  <span className="font-mono text-[var(--secondary)]">
+                    {cyclePosition < 0.3 ? 'Trough' : cyclePosition > 0.7 ? 'Peak' : 'Mid-cycle'}
+                    {' '}({(cyclePosition * 100).toFixed(0)}%)
+                  </span>
+                </div>
+              </div>
+              {netDebtB !== 0 && (
+                <div className="flex items-center justify-between py-2 text-[12px]">
+                  <span className="text-[var(--muted)]">Net debt</span>
+                  <span className="font-mono text-[var(--secondary)]">
+                    ${netDebtB.toFixed(1)}B
+                  </span>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <SliderRow label="Annual revenue" value={revenue} onChange={setRevenue}
+                min={Math.max(0.5, Math.round(currentRevB * 0.3 * 10) / 10)}
+                max={Math.max(Math.round(currentRevB * 5), 10)} step={0.1}
+                format={v => `$${v.toFixed(1)}B`} />
+              {valMethodInfo.method === "pe" && (
+                <>
+                  <SliderRow label="Operating margin" value={opMargin} onChange={setOpMargin}
+                    min={-0.10} max={0.60} step={0.01}
+                    format={v => `${(v * 100).toFixed(0)}%`} />
+                  <SliderRow label="Tax rate" value={taxRate} onChange={setTaxRate}
+                    min={0} max={0.40} step={0.01}
+                    format={v => `${(v * 100).toFixed(0)}%`} />
+                </>
+              )}
+              <SliderRow label="Diluted shares" value={sharesM} onChange={setSharesM}
+                min={Math.round(initialSharesM * 0.7)} max={Math.round(initialSharesM * 1.5)} step={1}
+                format={v => `${v.toFixed(1)}M`} />
+              <SliderRow
+                label={valMethodInfo.multipleLabel}
+                value={multiple}
+                onChange={setMultiple}
+                min={valMethodInfo.method === "ps" ? 1 : 5}
+                max={valMethodInfo.method === "ps" ? 50 : 100}
+                step={1}
+                format={v => `${v}\u00D7`}
+              />
             </>
           )}
-          <SliderRow label="Diluted shares" value={sharesM} onChange={setSharesM}
-            min={Math.round(initialSharesM * 0.7)} max={Math.round(initialSharesM * 1.5)} step={1}
-            format={v => `${v.toFixed(1)}M`} />
-          <SliderRow
-            label={valMethodInfo.multipleLabel}
-            value={multiple}
-            onChange={setMultiple}
-            min={valMethodInfo.method === "ps" ? 1 : 5}
-            max={valMethodInfo.method === "ps" ? 50 : 100}
-            step={1}
-            format={v => `${v}\u00D7`}
-          />
         </div>
 
         {/* IMPLIED TARGET PRICE */}
@@ -614,7 +746,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
         {/* DEDUCTION CHAIN */}
         <div className="mb-8">
           <div className="text-sm text-[var(--secondary)] mb-3">
-            The deduction chain {valMethodInfo.method === "ps" ? "(revenue-based)" : "(earnings-based)"}
+            The deduction chain {valMethodInfo.method === "cyclical" ? "(normalized EV/EBIT)" : valMethodInfo.method === "ps" ? "(revenue-based)" : "(earnings-based)"}
           </div>
           <DeductionChain
             revenueB={revenue}
@@ -624,6 +756,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
             multiple={multiple}
             targetPrice={targetPrice}
             method={valMethodInfo.method}
+            netDebtB={netDebtB}
           />
         </div>
 

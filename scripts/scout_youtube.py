@@ -134,7 +134,7 @@ def get_transcript(video_id: str, timeout: int = 15) -> str | None:
         return None
 
 
-GEMINI_CALL_TIMEOUT = 45  # seconds per Gemini API call
+GEMINI_CALL_TIMEOUT = 30  # seconds per Gemini API call
 
 
 def _gemini_with_timeout(client, model_name: str, prompt: str, timeout: int = GEMINI_CALL_TIMEOUT):
@@ -161,7 +161,7 @@ def analyze_with_gemini(ticker: str, company_name: str, videos_with_transcripts:
     # Build the prompt with all transcripts
     transcript_block = ""
     for v in videos_with_transcripts[:3]:
-        transcript_block += f"\n\n--- VIDEO: {v['title']} ---\n{v['transcript'][:5000]}\n"
+        transcript_block += f"\n\n--- VIDEO: {v['title']} ---\n{v['transcript'][:2000]}\n"
 
     prompt = f"""You are a financial analyst extracting stock intelligence from YouTube video transcripts.
 
@@ -227,8 +227,8 @@ If the stock is NOT mentioned in any transcript, return:
                     print(f"    {model_name}: timed out after {GEMINI_CALL_TIMEOUT}s, trying next model...")
                     break  # Don't retry same model on timeout
                 if is_retryable and attempt == 0:
-                    print(f"    {model_name}: retryable error, waiting 15s...")
-                    time.sleep(15)
+                    print(f"    {model_name}: retryable error, waiting 5s...")
+                    time.sleep(5)
                     continue
                 elif is_retryable:
                     print(f"    {model_name}: still failing, trying next model...")
@@ -370,7 +370,7 @@ def main():
         print(f"  {emoji} [{ticker}] Signal: {sentiment}")
         print(f"  [{ticker}] {thesis[:80]}")
 
-        time.sleep(5)  # Rate limit between stocks
+        time.sleep(2)  # Rate limit between stocks
 
     save_signals("youtube", signals)
 
