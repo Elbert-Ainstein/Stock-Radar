@@ -1,0 +1,61 @@
+{
+  "_note": "Financial YouTube channels to monitor. Add/remove as you see fit. channel_id is from the channel URL.",
+  "channels": [
+    {
+      "name": "Tom Nash",
+      "channel_id": "UCyBjJsFaXCkcLsi9MxDovgQ",
+      "focus": "AI stocks, tech deep-dives, growth investing",
+      "quality": "high",
+      "search_terms": ["Tom Nash"]
+    },
+    {
+      "name": "Joseph Carlson",
+      "channel_id": "UCbta0n8i6Rljh0obO7HzG9A",
+      "focus": "Dividend growth, portfolio management, long-term investing",
+      "quality": "high",
+      "search_terms": ["Joseph Carlson Show"]
+    },
+    {
+      "name": "Ticker Symbol YOU",
+      "channel_id": "UCMBmQHR1WCuIAePLPed1yig",
+      "focus": "Deep-dive company analysis, industry breakdowns",
+      "quality": "high",
+      "search_terms": ["Ticker Symbol YOU"]
+    },
+    {
+      "name": "Cameron Stewart CFA",
+      "channel_id": "UC6C7_bLgQK9KkYdAOFSuxGQ",
+      "focus": "DCF valuation, analytical stock analysis, CFA perspective",
+      "quality": "high",
+      "search_terms": ["Cameron Stewart CFA"]
+    },
+    {
+      "name": "The Plain Bagel",
+      "channel_id": "UCFCEuCsyWP0YkP3CZ3Mr01Q",
+      "focus": "Investment education, market analysis, CFA perspective",
+      "quality": "high",
+      "search_terms": ["Plain Bagel investing"]
+    },
+    {
+      "name": "Learn to Invest - Investors Grow",
+      "channel_id": "UCSglJMvX-zSgv3PEJIE_inw",
+      "focus": "Analytical stock breakdowns, growth investing",
+      "quality": "medium",
+      "search_terms": ["Learn to Invest Jimmy"]
+    },
+    {
+      "name": "Sven Carlin",
+      "channel_id": "UCrTTBSUr0zhPU56UQljag5A",
+      "focus": "Value investing, contrarian picks, European perspective",
+      "quality": "high",
+      "search_terms": ["Sven Carlin"]
+    },
+    {
+      "name": "Everything Money",
+      "channel_id": "UCkCLhMm5XMbnhoeOdMsKsOQ",
+      "focus": "Stock screener analysis, 8-pillar scoring system",
+      "quality": "medium",
+      "search_terms": ["Everything Money stock"]
+    }
+  ]
+}

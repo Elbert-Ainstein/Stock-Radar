@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stock Radar — AI Agent Workflow</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #09090b;
+    color: #fafafa;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+  .subtitle { font-size: 12px; color: #71717a; margin-bottom: 32px; }
+  svg { max-width: 100%; height: auto; }
+
+  .node-box { rx: 8; ry: 8; stroke-width: 1.5; }
+  .node-user    { fill: #16161a; stroke: #71717a; }
+  .node-system  { fill: #16161a; stroke: #27272a; }
+  .node-scout   { fill: #16161a; stroke: #22c55e; stroke-opacity: 0.45; }
+  .node-deep    { fill: #16161a; stroke: #3b82f6; stroke-opacity: 0.5; }
+  .node-analyst { fill: #16161a; stroke: #a78bfa; stroke-opacity: 0.55; }
+  .node-output  { fill: #16161a; stroke: #fafafa; stroke-opacity: 0.18; }
+
+  .label  { font-family: 'Inter',system-ui,sans-serif; font-size: 13px; font-weight: 600; fill: #fafafa; }
+  .desc   { font-family: 'Inter',system-ui,sans-serif; font-size: 10px; fill: #a1a1aa; }
+  .tag    { font-family: 'SF Mono','Fira Code',monospace; font-size: 9px; fill: #52525b; }
+  .phase  { font-family: 'Inter',system-ui,sans-serif; font-size: 10px; font-weight: 500; fill: #52525b; letter-spacing: .08em; text-transform: uppercase; }
+
+  .edge        { fill: none; stroke: #27272a; stroke-width: 1.5; marker-end: url(#arrow); }
+  .edge-strong { fill: none; stroke: #3f3f46; stroke-width: 1.5; marker-end: url(#arrow); }
+  .edge-dash   { fill: none; stroke: #27272a; stroke-width: 1.2; stroke-dasharray: 5 3; marker-end: url(#arrow); }
+
+  .legend-text { font-family:'Inter',system-ui,sans-serif; font-size:10px; fill:#71717a; }
+</style>
+</head>
+<body>
+
+<h1>Stock Radar — Full AI Agent Workflow</h1>
+<p class="subtitle">From adding a stock through the complete analysis pipeline to target-price model output</p>
+
+<svg viewBox="0 0 1060 900" width="1060" height="900">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#3f3f46" />
+    </marker>
+  </defs>
+
+  <!-- ────────────────────── PHASE 1: INPUT ────────────────────── -->
+  <text x="30" y="28" class="phase">Phase 1 — User Input</text>
+
+  <rect x="60"  y="44" width="240" height="56" class="node-box node-user"/>
+  <text x="180" y="67" text-anchor="middle" class="label">User Adds Stock</text>
+  <text x="180" y="83" text-anchor="middle" class="desc">Dashboard search bar → pick ticker → Add</text>
+
+  <rect x="380" y="44" width="240" height="56" class="node-box node-system"/>
+  <text x="500" y="67" text-anchor="middle" class="label">POST /api/stocks/add</text>
+  <text x="500" y="83" text-anchor="middle" class="desc">Persists to watchlist.json · spawns pipeline</text>
+
+  <rect x="710" y="44" width="240" height="56" class="node-box node-system"/>
+  <text x="830" y="67" text-anchor="middle" class="label">watchlist.json</text>
+  <text x="830" y="83" text-anchor="middle" class="desc">Ticker, thesis, criteria, model_defaults, scenarios</text>
+
+  <path d="M300 72 L375 72" class="edge"/>
+  <path d="M620 72 L705 72" class="edge"/>
+
+  <!-- ────────────────────── PHASE 2: PIPELINE ────────────────────── -->
+  <text x="30" y="138" class="phase">Phase 2 — Pipeline Orchestration</text>
+
+  <rect x="340" y="152" width="300" height="50" class="node-box node-system"/>
+  <text x="490" y="173" text-anchor="middle" class="label">run_pipeline.py</text>
+  <text x="490" y="188" text-anchor="middle" class="desc">Sequences all scouts → analyst · --free flag for free-only</text>
+
+  <path d="M500 100 L500 147" class="edge-strong"/>
+
+  <!-- ────────────────────── PHASE 3: SCOUTS (FREE) ────────────────────── -->
+  <text x="30" y="238" class="phase">Phase 3a — Free Data Scouts (no API keys)</text>
+
+  <!-- Quant -->
+  <rect x="30"  y="254" width="200" height="70" class="node-box node-scout"/>
+  <text x="130" y="278" text-anchor="middle" class="label">Quant Scout</text>
+  <text x="130" y="293" text-anchor="middle" class="desc">Price, P/E, P/S, margins, growth, FCF</text>
+  <text x="130" y="308" text-anchor="middle" class="tag">yfinance · free · script</text>
+
+  <!-- Insider -->
+  <rect x="260" y="254" width="200" height="70" class="node-box node-scout"/>
+  <text x="360" y="278" text-anchor="middle" class="label">Insider Scout</text>
+  <text x="360" y="293" text-anchor="middle" class="desc">SEC Form 4 filings, transaction counts</text>
+  <text x="360" y="308" text-anchor="middle" class="tag">SEC EDGAR · free · script</text>
+
+  <!-- Social -->
+  <rect x="490" y="254" width="200" height="70" class="node-box node-scout"/>
+  <text x="590" y="278" text-anchor="middle" class="label">Social Scout</text>
+  <text x="590" y="293" text-anchor="middle" class="desc">Reddit + StockTwits sentiment</text>
+  <text x="590" y="308" text-anchor="middle" class="tag">reddit · stocktwits · free</text>
+
+  <!-- Edges: pipeline → free scouts -->
+  <path d="M400 202 Q260 230 130 249" class="edge"/>
+  <path d="M460 202 L360 249" class="edge"/>
+  <path d="M520 202 L590 249" class="edge"/>
+
+  <!-- ────────────────────── PHASE 3b: AI SCOUTS ────────────────────── -->
+  <text x="30" y="360" class="phase">Phase 3b — AI-Powered Scouts (API keys required)</text>
+
+  <!-- News -->
+  <rect x="30"  y="376" width="220" height="70" class="node-box node-deep"/>
+  <text x="140" y="400" text-anchor="middle" class="label">News Scout</text>
+  <text x="140" y="415" text-anchor="middle" class="desc">Headlines, sentiment, catalysts, analyst actions</text>
+  <text x="140" y="430" text-anchor="middle" class="tag">Perplexity Sonar · search + chat</text>
+
+  <!-- Fundamentals -->
+  <rect x="280" y="376" width="240" height="70" class="node-box node-deep"/>
+  <text x="400" y="396" text-anchor="middle" class="label">Business Fundamentals Scout</text>
+  <text x="400" y="411" text-anchor="middle" class="desc">Moat, TAM, revenue mix, management, ROIC</text>
+  <text x="400" y="426" text-anchor="middle" class="desc">Unit economics, competitive position, risks</text>
+  <text x="400" y="440" text-anchor="middle" class="tag">Perplexity research → Claude Opus analysis</text>
+
+  <!-- YouTube -->
+  <rect x="550" y="376" width="220" height="70" class="node-box node-deep"/>
+  <text x="660" y="400" text-anchor="middle" class="label">YouTube Scout</text>
+  <text x="660" y="415" text-anchor="middle" class="desc">Finance channel transcript analysis</text>
+  <text x="660" y="430" text-anchor="middle" class="tag">yt-dlp + Gemini 2.5 Flash</text>
+
+  <!-- Filings (coming soon) -->
+  <rect x="800" y="376" width="220" height="70" class="node-box node-deep" stroke-dasharray="4 3"/>
+  <text x="910" y="400" text-anchor="middle" class="label" fill="#71717a">Filings Scout</text>
+  <text x="910" y="415" text-anchor="middle" class="desc">Earnings calls, 10-K/10-Q analysis</text>
+  <text x="910" y="430" text-anchor="middle" class="tag">Claude / OpenAI · on-demand</text>
+
+  <!-- Edges: pipeline → AI scouts -->
+  <path d="M400 202 Q200 360 140 371" class="edge"/>
+  <path d="M490 202 L400 371" class="edge"/>
+  <path d="M530 202 Q600 320 660 371" class="edge"/>
+  <path d="M570 202 Q800 320 910 371" class="edge-dash"/>
+
+  <!-- ────────────────────── DATA FILES ────────────────────── -->
+  <text x="30" y="483" class="phase">Scout Outputs</text>
+
+  <rect x="130" y="496" width="160" height="40" class="node-box node-system"/>
+  <text x="210" y="514" text-anchor="middle" class="desc">quant_signals.json</text>
+  <text x="210" y="528" text-anchor="middle" class="tag">price · ratios · margins</text>
+
+  <rect x="310" y="496" width="160" height="40" class="node-box node-system"/>
+  <text x="390" y="514" text-anchor="middle" class="desc">news_signals.json</text>
+  <text x="390" y="528" text-anchor="middle" class="tag">headlines · sentiment</text>
+
+  <rect x="490" y="496" width="190" height="40" class="node-box node-system"/>
+  <text x="585" y="514" text-anchor="middle" class="desc">fundamentals_signals.json</text>
+  <text x="585" y="528" text-anchor="middle" class="tag">moat · TAM · BQ score</text>
+
+  <rect x="700" y="496" width="160" height="40" class="node-box node-system"/>
+  <text x="780" y="514" text-anchor="middle" class="desc">+ insider, social, youtube</text>
+  <text x="780" y="528" text-anchor="middle" class="tag">3 more signal files</text>
+
+  <!-- Edges: scouts → data files -->
+  <path d="M130 324 L210 491" class="edge"/>
+  <path d="M140 446 L210 491" class="edge"/>
+  <path d="M400 446 L390 491" class="edge"/>
+  <path d="M400 446 L585 491" class="edge"/>
+  <path d="M660 446 L780 491" class="edge"/>
+
+  <!-- ────────────────────── PHASE 4: ANALYST ────────────────────── -->
+  <text x="30" y="574" class="phase">Phase 4 — Analyst Agent (Aggregation + Evaluation)</text>
+
+  <rect x="180" y="588" width="520" height="90" class="node-box node-analyst"/>
+  <text x="440" y="611" text-anchor="middle" class="label">Analyst Agent (analyst.py)</text>
+  <text x="440" y="628" text-anchor="middle" class="desc">Convergence detection · Weighted composite score (0-10)</text>
+  <text x="440" y="644" text-anchor="middle" class="desc">Criteria auto-evaluation (threshold matching + progress tracking)</text>
+  <text x="440" y="660" text-anchor="middle" class="desc">Confidence tiers · Adjusted target price · Fundamentals integration</text>
+  <text x="440" y="672" text-anchor="middle" class="tag">Weights: Quant 25% · Convergence 20% · Fundamentals 20% · News 15% · Insider 10% · Momentum 10%</text>
+
+  <!-- Edges: data → analyst -->
+  <path d="M210 536 L350 583" class="edge-strong"/>
+  <path d="M390 536 L400 583" class="edge-strong"/>
+  <path d="M585 536 L480 583" class="edge-strong"/>
+  <path d="M780 536 L560 583" class="edge-strong"/>
+
+  <!-- watchlist criteria feed -->
+  <path d="M830 100 Q 950 400 700 640" class="edge-dash"/>
+  <text x="940" y="330" class="tag" text-anchor="start">criteria + eval_hints</text>
+  <text x="940" y="342" class="tag" text-anchor="start">+ model_defaults</text>
+
+  <!-- ────────────────────── analysis.json ────────────────────── -->
+  <rect x="310" y="710" width="260" height="44" class="node-box node-system"/>
+  <text x="440" y="730" text-anchor="middle" class="label">data/analysis.json</text>
+  <text x="440" y="744" text-anchor="middle" class="desc">Scores, signals, criteria eval, tiers, fundamentals</text>
+
+  <path d="M440 678 L440 705" class="edge-strong"/>
+
+  <!-- ────────────────────── PHASE 5: UI ────────────────────── -->
+  <text x="30" y="790" class="phase">Phase 5 — Rendering</text>
+
+  <rect x="40"  y="806" width="240" height="70" class="node-box node-output"/>
+  <text x="160" y="830" text-anchor="middle" class="label">Dashboard</text>
+  <text x="160" y="846" text-anchor="middle" class="desc">Score rankings · Scout signals · Sparklines</text>
+  <text x="160" y="862" text-anchor="middle" class="desc">Add stock · Pipeline controls · Theme toggle</text>
+
+  <rect x="310" y="806" width="240" height="70" class="node-box node-output"/>
+  <text x="430" y="830" text-anchor="middle" class="label">Target Price Model</text>
+  <text x="430" y="846" text-anchor="middle" class="desc">Reverse-valuation sliders · Sensitivity table</text>
+  <text x="430" y="862" text-anchor="middle" class="desc">Gordon model · Time path · Scenarios</text>
+
+  <rect x="580" y="806" width="240" height="70" class="node-box node-output"/>
+  <text x="700" y="830" text-anchor="middle" class="label">Criteria + Confidence</text>
+  <text x="700" y="846" text-anchor="middle" class="desc">Auto-eval progress bars · Price impact</text>
+  <text x="700" y="862" text-anchor="middle" class="desc">Confidence meter · Adjusted target</text>
+
+  <rect x="850" y="806" width="180" height="70" class="node-box node-output"/>
+  <text x="940" y="830" text-anchor="middle" class="label">Fundamentals</text>
+  <text x="940" y="846" text-anchor="middle" class="desc">Moat · TAM · Management</text>
+  <text x="940" y="862" text-anchor="middle" class="desc">Revenue mix · Risks · Peers</text>
+
+  <!-- Edges: analysis → UI -->
+  <path d="M370 754 Q280 780 160 801" class="edge"/>
+  <path d="M440 754 L430 801" class="edge"/>
+  <path d="M510 754 Q580 780 700 801" class="edge"/>
+  <path d="M510 754 Q730 780 940 801" class="edge"/>
+
+  <!-- ────────────────────── LEGEND ────────────────────── -->
+  <g transform="translate(30, 895)">
+    <circle cx="0" cy="0" r="5" fill="#16161a" stroke="#71717a" stroke-width="1.5"/>
+    <text x="12" y="4" class="legend-text">User</text>
+
+    <circle cx="70" cy="0" r="5" fill="#16161a" stroke="#27272a" stroke-width="1.5"/>
+    <text x="82" y="4" class="legend-text">System</text>
+
+    <circle cx="150" cy="0" r="5" fill="#16161a" stroke="#22c55e" stroke-width="1.5" stroke-opacity="0.45"/>
+    <text x="162" y="4" class="legend-text">Free Scout</text>
+
+    <circle cx="250" cy="0" r="5" fill="#16161a" stroke="#3b82f6" stroke-width="1.5" stroke-opacity="0.5"/>
+    <text x="262" y="4" class="legend-text">AI Scout</text>
+
+    <circle cx="340" cy="0" r="5" fill="#16161a" stroke="#a78bfa" stroke-width="1.5" stroke-opacity="0.55"/>
+    <text x="352" y="4" class="legend-text">Analyst</text>
+
+    <circle cx="420" cy="0" r="5" fill="#16161a" stroke="#fafafa" stroke-width="1.5" stroke-opacity="0.18"/>
+    <text x="432" y="4" class="legend-text">UI Output</text>
+
+    <line x1="520" y1="-3" x2="560" y2="-3" stroke="#27272a" stroke-width="1.2" stroke-dasharray="5 3"/>
+    <text x="572" y="1" class="legend-text">Coming soon / config feed</text>
+  </g>
+</svg>
+
+</body>
+</html>

@@ -1,0 +1,777 @@
+{
+  "watchlist": [
+    {
+      "ticker": "LITE",
+      "name": "Lumentum Holdings",
+      "sector": "Photonics / AI Infra",
+      "thesis": "AI era 'light supplier' — makes EML laser chips (50-60% global share), 1.6T optical modules, and OCS optical circuit switches. Demand exceeds supply by 25-30%. Management guides $2B/quarter ($8B annualized) revenue at 40%+ operating margin. $1500 = $8B × 40% × 83% ÷ 74M shares × 42 P/E = $1,508.",
+      "kill_condition": "Gross margin stuck below 40% for 2 quarters OR management says 'supply normalizing' on EML OR AI capex cut by 2+ hyperscalers",
+      "tags": [
+        "AI Infrastructure",
+        "Photonics",
+        "Sole-Source",
+        "OCS",
+        "EML"
+      ],
+      "target": {
+        "price": 1500,
+        "timeline_years": 3,
+        "valuation_method": "pe",
+        "target_multiple": 42,
+        "notes": "P/E 42x from NVIDIA/Arista peer range for high-growth AI infra. Revenue $8B (mgmt target), Op margin 40% (mgmt mid-term), Tax 17% (actual FY2026), Shares 74M (fully diluted incl. convertibles + NVIDIA preferred).",
+        "model_defaults": {
+          "revenue_b": 8,
+          "op_margin": 0.4,
+          "tax_rate": 0.17,
+          "shares_m": 74,
+          "pe_multiple": 42
+        },
+        "scenarios": {
+          "bull": {
+            "probability": 0.25,
+            "price": 1900,
+            "trigger": "OCS exceeds $10B/yr, gross margin breaks 50%, revenue $9-10B, margin 42-45%"
+          },
+          "base": {
+            "probability": 0.5,
+            "price": 1500,
+            "trigger": "Management guidance met: $8B revenue, 40% op margin, 42x P/E"
+          },
+          "bear": {
+            "probability": 0.25,
+            "price": 1000,
+            "trigger": "AI capex slows, revenue $6-6.5B, P/E compresses to 30-35x"
+          }
+        }
+      },
+      "criteria": [
+        {
+          "id": "gross_margin",
+          "label": "Gross margin trending toward 48%+",
+          "detail": "Currently 42.5%, management target 50.5%. Each 1 ppt increase lifts fair value. Key threshold: break 48% by FY2027 (June 2027). If stuck at 40%, $1500 thesis severely weakened.",
+          "variable": "M",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 12,
+          "price_impact_direction": "up",
+          "eval_hint": "Check latest quarterly gross margin from earnings. Met if ≥46% or trending up ≥2 ppt QoQ toward 48%."
+        },
+        {
+          "id": "ocs_revenue_share",
+          "label": "OCS revenue reaches 15-20% of total",
+          "detail": "$4B+ order book converting. When OCS breaks 15-20% of quarterly revenue, market re-rates Lumentum from 'components company' to 'systems company' — completely different valuation level.",
+          "variable": "P",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 15,
+          "price_impact_direction": "up",
+          "eval_hint": "Check OCS revenue as % of total quarterly revenue from earnings breakdown. Met if OCS ≥15% of total."
+        },
+        {
+          "id": "qoq_growth",
+          "label": "QoQ revenue growth sustains 15%+",
+          "detail": "Q1→Q2 was 24.7%, Q2→Q3 guided ~21%. Sustaining ≥15% QoQ gets to $2B/quarter target ahead of schedule. Any sequential decline (even 1-2%) is a major red flag.",
+          "variable": "R",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 10,
+          "price_impact_direction": "up",
+          "eval_hint": "Calculate QoQ revenue growth from last 2 quarterly revenue figures. Met if ≥15%."
+        },
+        {
+          "id": "eml_pricing",
+          "label": "EML supply gap maintained, pricing power intact",
+          "detail": "25-30% demand exceeds supply. On earnings calls listen for: (1) supply gap size and (2) ASP/pricing mentions. WARNING: if management says 'supply returning to balance', pricing power is weakening.",
+          "variable": "R,M",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 8,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for management commentary on EML demand/supply dynamics in earnings calls or news. Met if demand still exceeds supply by 15%+."
+        },
+        {
+          "id": "diluted_shares",
+          "label": "Fully diluted shares stay below 80M",
+          "detail": "$3.18B convertible bonds + NVIDIA preferred stock could convert. If shares exceed 80M, EPS gets diluted and $1500 becomes significantly harder. Watch convertible triggers closely.",
+          "variable": "S",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": -8,
+          "price_impact_direction": "down_if_failed",
+          "eval_hint": "Check diluted share count from latest 10-Q. Met if fully diluted shares ≤80M."
+        },
+        {
+          "id": "customer_diversification",
+          "label": "2nd and 3rd customers exceed 10% revenue",
+          "detail": "Historically dependent on one customer (Google). Disclosure of 2nd and 3rd 10%+ revenue customers = lower concentration risk = higher justified P/E.",
+          "variable": "P",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 7,
+          "price_impact_direction": "up",
+          "eval_hint": "Check 10-K/10-Q customer concentration disclosures. Met if ≥2 customers above 10% revenue."
+        },
+        {
+          "id": "cpo_orders",
+          "label": "CPO order execution on track or early",
+          "detail": "Multi-hundred-million CPO orders planned for H1 2027 delivery. Early delivery or additional CPO orders = leading indicator that CPO business will explode ahead of analyst models.",
+          "variable": "R",
+          "weight": "monitoring",
+          "status": "not_yet",
+          "price_impact_pct": 5,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for CPO delivery timeline updates or new CPO order announcements in earnings/news. Met if deliveries on or ahead of schedule."
+        },
+        {
+          "id": "operating_leverage",
+          "label": "Opex growth < 50% of revenue growth for 3 quarters",
+          "detail": "Q2 operating margin expanded 1700 bps YoY — this operating leverage separates '$1000 stock' from '$1500 stock'. If opex growth stays below half of revenue growth rate, profitability explosion incoming.",
+          "variable": "M",
+          "weight": "monitoring",
+          "status": "not_yet",
+          "price_impact_pct": 5,
+          "price_impact_direction": "up",
+          "eval_hint": "Compare opex growth rate vs revenue growth rate over last 3 quarters. Met if opex growth < 50% of revenue growth consistently."
+        }
+      ]
+    },
+    {
+      "ticker": "PLTR",
+      "name": "Palantir Technologies",
+      "sector": "AI Software / Defense",
+      "thesis": "AIP platform creating a new category of AI-driven enterprise software. Government contracts provide stable base, US commercial growth at 137% YoY is explosive. FY2026 guided $7.2B revenue at 57% adj operating margin. If AIP adoption follows CRM-like S-curve, $500+ is achievable.",
+      "kill_condition": "US commercial revenue growth drops below 50% YoY for 2 quarters OR adjusted operating margin falls below 35%",
+      "tags": [
+        "AI Software",
+        "Defense",
+        "Government",
+        "AIP"
+      ],
+      "target": {
+        "price": 500,
+        "timeline_years": 3,
+        "valuation_method": "pe",
+        "target_multiple": 65,
+        "notes": "P/E 65x justified by 61% revenue growth guidance, 57% adj operating margin, AIP-driven category creation. Revenue $12B (FY2028E at 40% CAGR from $7.2B), Op margin 40% GAAP, Tax 21%, Shares 2600M.",
+        "model_defaults": {
+          "revenue_b": 12,
+          "op_margin": 0.4,
+          "tax_rate": 0.21,
+          "shares_m": 2600,
+          "pe_multiple": 65
+        },
+        "scenarios": {
+          "bull": {
+            "probability": 0.25,
+            "price": 700,
+            "trigger": "AIP adoption exceeds expectations, US commercial 150%+ growth, operating margin 45%+, revenue $15B+"
+          },
+          "base": {
+            "probability": 0.5,
+            "price": 500,
+            "trigger": "Revenue $12B by FY2028, 40% GAAP operating margin, P/E 65x sustained"
+          },
+          "bear": {
+            "probability": 0.25,
+            "price": 250,
+            "trigger": "AIP adoption slows, growth decelerates to 30%, P/E compresses to 40x"
+          }
+        }
+      },
+      "criteria": [
+        {
+          "id": "us_commercial_growth",
+          "label": "US commercial revenue growth sustains 80%+ YoY",
+          "detail": "Q4 2025 was 137% YoY. This is the single most important metric — proves AIP is not just hype. Must sustain ≥80% for the next 4 quarters. Deceleration to 50% seriously wounds the thesis.",
+          "variable": "R",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 15,
+          "price_impact_direction": "up",
+          "eval_hint": "Check quarterly US commercial revenue YoY growth from earnings. Met if ≥80% YoY."
+        },
+        {
+          "id": "adj_operating_margin",
+          "label": "Adjusted operating margin stays above 55%",
+          "detail": "Q4 2025 adj operating margin was 57%. This validates Palantir's software-level economics. Sustained 55%+ proves AIP scales without proportional cost increases.",
+          "variable": "M",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 10,
+          "price_impact_direction": "up",
+          "eval_hint": "Check adjusted operating margin from quarterly earnings. Met if ≥55%."
+        },
+        {
+          "id": "aip_customer_count",
+          "label": "AIP customer count growing 50%+ YoY",
+          "detail": "AIP bootcamp → production conversion rate and net-new AIP customers are the leading indicators. More customers = more durable growth, less concentration risk.",
+          "variable": "R",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 12,
+          "price_impact_direction": "up",
+          "eval_hint": "Check total customer count or AIP-specific customer count growth from earnings. Met if 50%+ YoY growth."
+        },
+        {
+          "id": "total_revenue_guidance",
+          "label": "FY2026 revenue guidance maintained or raised above $7.2B",
+          "detail": "Initial FY2026 guidance was $7.18-7.20B (61% YoY). Any guidance raise signals management confidence. A cut would be devastating to the multiple.",
+          "variable": "R",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 8,
+          "price_impact_direction": "up",
+          "eval_hint": "Check latest FY2026 revenue guidance from earnings. Met if guidance ≥$7.2B and not lowered."
+        },
+        {
+          "id": "government_stability",
+          "label": "Government revenue growth stays positive (15%+ YoY)",
+          "detail": "Government is the stable base. If DOGE-related budget cuts hit Palantir's government contracts, it removes the floor under the thesis. Needs to stay growing, even if slowly.",
+          "variable": "R",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": -10,
+          "price_impact_direction": "down_if_failed",
+          "eval_hint": "Check government segment revenue YoY growth from earnings. Met if ≥15% YoY."
+        },
+        {
+          "id": "fcf_conversion",
+          "label": "Adjusted FCF exceeds $4B annualized",
+          "detail": "FY2026 guidance: adj FCF $3.9-4.1B. Exceeding $4B proves the business is a genuine cash machine, not just an accounting story. FCF/share is the ultimate validation.",
+          "variable": "M",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 7,
+          "price_impact_direction": "up",
+          "eval_hint": "Check trailing 4Q adjusted free cash flow from earnings or 10-K. Met if ≥$4B annualized."
+        },
+        {
+          "id": "international_expansion",
+          "label": "International revenue re-accelerates to 25%+ YoY",
+          "detail": "International has been the weak spot. If AIP drives international acceleration, it's a massive TAM expansion signal. Currently lagging US growth significantly.",
+          "variable": "R",
+          "weight": "monitoring",
+          "status": "not_yet",
+          "price_impact_pct": 5,
+          "price_impact_direction": "up",
+          "eval_hint": "Check international revenue YoY growth from earnings. Met if ≥25% YoY."
+        },
+        {
+          "id": "sbc_dilution",
+          "label": "Stock-based comp stays below 15% of revenue",
+          "detail": "SBC has been a persistent concern. If SBC stays below 15% of revenue, GAAP profitability improves and dilution concerns ease. Above 20% is a red flag.",
+          "variable": "S",
+          "weight": "monitoring",
+          "status": "not_yet",
+          "price_impact_pct": -5,
+          "price_impact_direction": "down_if_failed",
+          "eval_hint": "Check SBC as % of revenue from quarterly financials. Met if SBC < 15% of revenue."
+        }
+      ]
+    },
+    {
+      "ticker": "RKLB",
+      "name": "Rocket Lab USA",
+      "sector": "Space / Aerospace",
+      "thesis": "Only credible SpaceX competitor. Electron is the proven small-launch workhorse (50+ launches). Neutron medium-lift rocket targeting Q4 2026 first flight unlocks $10B+ addressable market. Space Systems (66% of revenue) diversifies with $1.85B backlog including $816M SDA contract.",
+      "kill_condition": "Neutron first flight delayed beyond mid-2027 OR catastrophic test failure OR backlog drops below $1B",
+      "tags": [
+        "Space",
+        "Defense",
+        "Neutron Catalyst",
+        "Space Systems"
+      ],
+      "target": {
+        "price": 200,
+        "timeline_years": 3,
+        "valuation_method": "pe",
+        "target_multiple": 80,
+        "notes": "Pre-profit, so P/E is aspirational FY2028 target. Revenue $2.5B (backlog conversion + Neutron), Op margin 15% first-time profitability, Tax 21%, Shares 580M. High P/E justified by SpaceX-like scarcity premium.",
+        "model_defaults": {
+          "revenue_b": 2.5,
+          "op_margin": 0.15,
+          "tax_rate": 0.21,
+          "shares_m": 580,
+          "pe_multiple": 80
+        },
+        "scenarios": {
+          "bull": {
+            "probability": 0.25,
+            "price": 350,
+            "trigger": "Neutron flies on time, wins 3+ commercial contracts, Space Systems backlog $3B+, revenue $3B+"
+          },
+          "base": {
+            "probability": 0.5,
+            "price": 200,
+            "trigger": "Neutron flies Q4 2026, revenue $2.5B by FY2028, first GAAP profit"
+          },
+          "bear": {
+            "probability": 0.25,
+            "price": 80,
+            "trigger": "Neutron delayed to 2028, continued losses, dilution, backlog stalls"
+          }
+        }
+      },
+      "criteria": [
+        {
+          "id": "neutron_first_flight",
+          "label": "Neutron first flight achieved by Q4 2026",
+          "detail": "This is THE binary catalyst. Tank test failure pushed timeline to Q4 2026. Successful first flight unlocks medium-launch TAM and validates $200+ thesis. Delay to 2028 = bear case.",
+          "variable": "R,P",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 25,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for Neutron test flight announcements, launch date updates, or management commentary on timeline. Met if first flight completed or imminent (within 30 days)."
+        },
+        {
+          "id": "backlog_growth",
+          "label": "Backlog exceeds $2.5B",
+          "detail": "Ended 2025 at $1.85B (+73% YoY). Backlog is the best forward indicator. $2.5B+ signals strong demand even before Neutron flies. 37% of backlog converts within 12 months.",
+          "variable": "R",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 12,
+          "price_impact_direction": "up",
+          "eval_hint": "Check total backlog figure from quarterly earnings. Met if backlog ≥$2.5B."
+        },
+        {
+          "id": "revenue_growth_50",
+          "label": "Revenue growth sustains 50%+ YoY",
+          "detail": "Q1 2026 guided $185-200M (57% YoY growth). Sustaining 50%+ proves the business is scaling independently of Neutron. FY2025 was $602M (+38% YoY).",
+          "variable": "R",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 10,
+          "price_impact_direction": "up",
+          "eval_hint": "Check quarterly revenue YoY growth from earnings. Met if ≥50% YoY."
+        },
+        {
+          "id": "electron_cadence",
+          "label": "Electron launch cadence reaches 25+ per year",
+          "detail": "2025 had 21 launches. Increasing cadence proves operational maturity and drives launch services revenue. Target 25+ in 2026, building toward 30+ by 2027.",
+          "variable": "R",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 6,
+          "price_impact_direction": "up",
+          "eval_hint": "Count Electron launches YTD and annualize. Met if on pace for 25+ launches in current year."
+        },
+        {
+          "id": "gross_margin_expansion",
+          "label": "Non-GAAP gross margin reaches 40%+",
+          "detail": "Q1 2026 guided 39-41% non-GAAP. Breaking above 40% consistently shows improving unit economics even as SDA lower-margin programs scale up.",
+          "variable": "M",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 8,
+          "price_impact_direction": "up",
+          "eval_hint": "Check non-GAAP gross margin from quarterly earnings. Met if ≥40%."
+        },
+        {
+          "id": "space_systems_diversification",
+          "label": "Space Systems wins 2+ new prime contracts",
+          "detail": "SDA Tranche III ($816M) was a breakthrough. Additional prime contracts beyond SDA prove Rocket Lab is a credible space systems company, not just a launch provider.",
+          "variable": "R,P",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 7,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for new prime contract announcements from Rocket Lab in news/press releases. Met if 2+ new prime contracts since Jan 2026."
+        },
+        {
+          "id": "neutron_commercial_contracts",
+          "label": "Neutron secures 3+ commercial launch contracts pre-flight",
+          "detail": "Pre-flight commercial demand for Neutron validates market need. SpaceX backlog proves demand exists — Neutron just needs to credibly offer an alternative.",
+          "variable": "R",
+          "weight": "monitoring",
+          "status": "not_yet",
+          "price_impact_pct": 8,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for Neutron-specific contract announcements. Met if 3+ commercial customers have signed for Neutron launches."
+        },
+        {
+          "id": "cash_runway",
+          "label": "Cash runway exceeds 18 months without dilutive raise",
+          "detail": "Rocket Lab burns cash while scaling. If they need another equity raise before Neutron revenue starts, dilution hits shareholders. Monitor cash + credit facility headroom.",
+          "variable": "S",
+          "weight": "monitoring",
+          "status": "not_yet",
+          "price_impact_pct": -6,
+          "price_impact_direction": "down_if_failed",
+          "eval_hint": "Check cash position and quarterly burn rate from 10-Q. Met if cash / quarterly burn ≥ 6 quarters remaining."
+        }
+      ]
+    },
+    {
+      "ticker": "ACHR",
+      "name": "Archer Aviation",
+      "sector": "eVTOL / Urban Air Mobility",
+      "thesis": "First-mover in commercial eVTOL with 100% FAA Means of Compliance acceptance for Midnight aircraft. $6B indicative order backlog (1,200 aircraft), United Airlines $1.5B conditional purchase, Stellantis manufacturing partnership. $2B cash runway. First commercial flights targeted 2026.",
+      "kill_condition": "FAA Type Certificate delayed beyond Q2 2027 OR cash burn exceeds $800M/year without revenue ramp OR United Airlines cancels order",
+      "tags": [
+        "eVTOL",
+        "Pre-Revenue",
+        "High Risk/Reward",
+        "FAA Certification"
+      ],
+      "target": {
+        "price": 30,
+        "timeline_years": 3,
+        "valuation_method": "pe",
+        "target_multiple": 50,
+        "notes": "Pre-revenue event-driven. FY2028E: 200 aircraft delivered at $3.5M each = $700M revenue, 10% operating margin (early production), Tax 0% (NOL usage), ~500M shares. P/E 50x for category-creation premium. Probability-weighted.",
+        "model_defaults": {
+          "revenue_b": 0.7,
+          "op_margin": 0.1,
+          "tax_rate": 0,
+          "shares_m": 500,
+          "pe_multiple": 50
+        },
+        "scenarios": {
+          "bull": {
+            "probability": 0.25,
+            "price": 50,
+            "trigger": "FAA cert by mid-2026, Abu Dhabi + US routes live, 300+ aircraft orders converting, revenue $1B+ run rate"
+          },
+          "base": {
+            "probability": 0.4,
+            "price": 25,
+            "trigger": "FAA cert Q4 2026, limited commercial ops begin, 100-200 aircraft in production pipeline"
+          },
+          "bear": {
+            "probability": 0.35,
+            "price": 5,
+            "trigger": "FAA cert delayed to 2028, cash burn accelerates, major dilutive raise needed, order cancellations"
+          }
+        }
+      },
+      "criteria": [
+        {
+          "id": "faa_type_cert",
+          "label": "FAA Type Certificate received for Midnight",
+          "detail": "100% Means of Compliance accepted. Type Inspection Authorization (TIA) expected 2026. The Type Certificate is the single gate to commercial operations. Everything else is noise until this happens.",
+          "variable": "R,P",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 35,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for FAA Type Certificate or TIA announcement for Archer Midnight. Met if TC granted or TIA activities underway with clear timeline."
+        },
+        {
+          "id": "first_commercial_flight",
+          "label": "First revenue-generating commercial flight completed",
+          "detail": "Abu Dhabi is the initial target market. First passenger-carrying revenue flight proves the product works commercially. Targeted for 2026.",
+          "variable": "R",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 20,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for news about Archer's first commercial/revenue flight operations. Met if at least one revenue flight has occurred."
+        },
+        {
+          "id": "cash_runway_18m",
+          "label": "Cash runway exceeds 18 months at current burn",
+          "detail": "Ended 2025 with $2B cash, but Q1 2026 EBITDA loss guided $160-180M. At $180M/quarter burn, runway is ~11 quarters. Must not need dilutive raise before revenue starts.",
+          "variable": "S",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": -15,
+          "price_impact_direction": "down_if_failed",
+          "eval_hint": "Calculate: cash / quarterly adjusted EBITDA loss from latest financials. Met if ≥6 quarters of runway remaining."
+        },
+        {
+          "id": "united_order_conversion",
+          "label": "United Airlines converts conditional order to firm order",
+          "detail": "The $1.5B conditional purchase agreement becomes a firm order once Midnight gets FAA certification. Conversion de-risks the revenue pipeline dramatically.",
+          "variable": "R",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 12,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for United Airlines firm order conversion announcement. Met if conditional order converted to firm/binding agreement."
+        },
+        {
+          "id": "manufacturing_ramp",
+          "label": "Stellantis manufacturing facility operational",
+          "detail": "Stellantis partnership provides manufacturing scale. Facility must be producing aircraft at rate to meet order backlog. Without manufacturing scale, orders can't convert to revenue.",
+          "variable": "R",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 8,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for Stellantis/Archer manufacturing facility updates, production rate announcements. Met if facility is producing aircraft."
+        },
+        {
+          "id": "additional_city_contracts",
+          "label": "2+ additional city/region launch contracts signed",
+          "detail": "Abu Dhabi is first. Additional cities (US cities, India, etc.) expand the addressable market and prove global demand. Each new city = incremental TAM.",
+          "variable": "R",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 7,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for new city/region partnership or launch contract announcements. Met if 2+ new markets announced beyond Abu Dhabi."
+        },
+        {
+          "id": "flight_test_hours",
+          "label": "500+ flight test hours accumulated",
+          "detail": "More flight hours = more data = faster certification path. Also builds confidence in reliability. Track cumulative flight hours from press releases.",
+          "variable": "P",
+          "weight": "monitoring",
+          "status": "not_yet",
+          "price_impact_pct": 4,
+          "price_impact_direction": "up",
+          "eval_hint": "Check cumulative flight test hours from Archer press releases or earnings. Met if ≥500 hours accumulated."
+        },
+        {
+          "id": "competitor_gap",
+          "label": "Maintains 6+ month lead over Joby in certification",
+          "detail": "Joby Aviation is the primary competitor. If Archer maintains its certification lead, first-mover advantage compounds. If Joby catches up, the premium narrows.",
+          "variable": "P",
+          "weight": "monitoring",
+          "status": "not_yet",
+          "price_impact_pct": 5,
+          "price_impact_direction": "up",
+          "eval_hint": "Compare Archer vs Joby FAA certification milestones from news. Met if Archer has clear timeline lead in certification."
+        }
+      ]
+    },
+    {
+      "ticker": "CELH",
+      "name": "Celsius Holdings",
+      "sector": "Consumer / Beverages",
+      "thesis": "Third-largest US energy drink brand with ~20% market share. $2.5B revenue (2025). Pepsi distribution partnership as energy category captain. International approaching $100M run rate with expansion into Australia, UK, France. Gross margin improving to low 50s%. Forward P/E ~38x with growth premium.",
+      "kill_condition": "US market share loss for 2 consecutive quarters OR gross margin drops below 45% OR Pepsi partnership restructured negatively",
+      "tags": [
+        "Consumer",
+        "Beverages",
+        "Distribution Play",
+        "International Expansion"
+      ],
+      "target": {
+        "price": 100,
+        "timeline_years": 2,
+        "valuation_method": "pe",
+        "target_multiple": 38,
+        "notes": "Consumer staples growth company. Revenue $3.5B (FY2027E), Op margin 18% (mature brand + scale), Tax 23%, Shares 260M. P/E 38x for category disruptor with Pepsi distribution moat.",
+        "model_defaults": {
+          "revenue_b": 3.5,
+          "op_margin": 0.18,
+          "tax_rate": 0.23,
+          "shares_m": 260,
+          "pe_multiple": 38
+        },
+        "scenarios": {
+          "bull": {
+            "probability": 0.25,
+            "price": 140,
+            "trigger": "International revenue $300M+, US share 25%+, gross margin 55%+, operating margin 22%+"
+          },
+          "base": {
+            "probability": 0.5,
+            "price": 100,
+            "trigger": "Revenue $3.5B, operating margin 18%, sustained 20% market share, P/E 38x"
+          },
+          "bear": {
+            "probability": 0.25,
+            "price": 55,
+            "trigger": "Market share erodes to 16%, international stalls, gross margin stuck at 48%, P/E compresses to 25x"
+          }
+        }
+      },
+      "criteria": [
+        {
+          "id": "us_market_share",
+          "label": "US energy drink market share holds 20%+ (dollar share)",
+          "detail": "Reached 20% in Q4 2025. Maintaining or growing share against Monster and Red Bull validates the brand. Two consecutive quarters of share loss triggers kill condition.",
+          "variable": "R",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 10,
+          "price_impact_direction": "up",
+          "eval_hint": "Check US energy drink dollar market share from Nielsen/IRI data referenced in earnings. Met if ≥20%."
+        },
+        {
+          "id": "gross_margin_50",
+          "label": "Gross margin stabilizes at 50%+ (low 50s)",
+          "detail": "Currently 50.4%, management targeting low 50s as Alani Nu integration completes. Sustained 50%+ validates pricing power and integration success.",
+          "variable": "M",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 8,
+          "price_impact_direction": "up",
+          "eval_hint": "Check gross margin from quarterly earnings. Met if ≥50% for 2 consecutive quarters."
+        },
+        {
+          "id": "revenue_growth_20",
+          "label": "Revenue growth sustains 20%+ YoY (organic)",
+          "detail": "Organic growth (excluding Alani Nu acquisition) must stay 20%+ to justify growth premium P/E. If growth slows to 10-15%, P/E compresses to Monster-like 25-28x.",
+          "variable": "R",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 10,
+          "price_impact_direction": "up",
+          "eval_hint": "Check organic revenue growth (ex-acquisition) from earnings commentary. Met if ≥20% YoY organic."
+        },
+        {
+          "id": "international_100m",
+          "label": "International revenue exceeds $150M annualized",
+          "detail": "International approaching $100M run rate. Breaking $150M proves the brand travels globally. Australia, UK, France leading. Each new geography = incremental TAM.",
+          "variable": "R",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 7,
+          "price_impact_direction": "up",
+          "eval_hint": "Check international segment revenue from quarterly earnings, annualize. Met if ≥$150M annualized."
+        },
+        {
+          "id": "pepsi_alignment",
+          "label": "Pepsi distribution metrics improving (ACV, distribution points)",
+          "detail": "As Pepsi's energy category captain, Celsius should see expanding ACV (all-commodity volume) and new distribution points. This is the moat — Monster has Coke, Celsius has Pepsi.",
+          "variable": "R",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 6,
+          "price_impact_direction": "up",
+          "eval_hint": "Check ACV or distribution point metrics from earnings calls. Met if ACV or distribution growing QoQ."
+        },
+        {
+          "id": "operating_margin_15",
+          "label": "Operating margin reaches 15%+",
+          "detail": "Net profit margin was only 3% in 2025 (acquisition costs). As integration completes, operating margin should normalize to 15%+ by H2 2026. This is the profitability unlock.",
+          "variable": "M",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 8,
+          "price_impact_direction": "up",
+          "eval_hint": "Check GAAP operating margin from quarterly earnings. Met if ≥15%."
+        },
+        {
+          "id": "alani_integration",
+          "label": "Alani Nu integration complete with margin accretion",
+          "detail": "Alani Nu acquisition created short-term margin pressure. Successful integration means combined portfolio margin ≥ pre-acquisition levels. Two billion-dollar brands under one roof.",
+          "variable": "M",
+          "weight": "monitoring",
+          "status": "not_yet",
+          "price_impact_pct": 5,
+          "price_impact_direction": "up",
+          "eval_hint": "Look for management commentary on Alani Nu integration completion, margin impact. Met if integration complete and combined gross margin ≥50%."
+        }
+      ]
+    },
+    {
+      "ticker": "SNDK",
+      "name": "SanDisk Corporation",
+      "sector": "Semiconductors / NAND Flash",
+      "thesis": "NAND flash super-cycle beneficiary — spun off from Western Digital Feb 2025. AI-driven storage demand structural through 2028+. Q3 FY2026 guided $4.4-4.8B revenue at 65-67% gross margin. Forward P/E only 9.76×. $1500 = $25B revenue × 45% op margin × 88% after-tax ÷ 157M shares × 24 P/E = $1,513.",
+      "kill_condition": "NAND ASP declines for 2 consecutive quarters OR gross margin drops below 45% OR AI storage capex cuts by 2+ hyperscalers",
+      "tags": [
+        "AI Infrastructure",
+        "NAND Flash",
+        "Storage",
+        "Data Center",
+        "Supply Constrained"
+      ],
+      "target": {
+        "price": 1500,
+        "timeline_years": 2,
+        "valuation_method": "pe",
+        "target_multiple": 24,
+        "notes": "P/E 24x — premium to current 9.76× forward PE, justified by structural AI demand + supply discipline + margin expansion. Revenue $25B (FY2027E from Q3 run-rate growth), Op margin 45% (gross 65% - 20% opex), Tax 12% (semi tax credits), Shares 157M diluted.",
+        "model_defaults": {
+          "revenue_b": 25,
+          "op_margin": 0.45,
+          "tax_rate": 0.12,
+          "shares_m": 157,
+          "pe_multiple": 24
+        },
+        "scenarios": {
+          "bull": {
+            "probability": 0.25,
+            "price": 2200,
+            "trigger": "NAND shortage extends through 2028, revenue $30B+, gross margin 70%+, op margin 50%+, P/E re-rates to 30× as market recognizes structural moat"
+          },
+          "base": {
+            "probability": 0.50,
+            "price": 1500,
+            "trigger": "Revenue $25B (FY2027), op margin 45%, 24× P/E, sustained AI storage demand"
+          },
+          "bear": {
+            "probability": 0.25,
+            "price": 700,
+            "trigger": "NAND cycle peaks mid-2027, ASP declines, revenue $18B, margin compresses to 30%, P/E 14×"
+          }
+        }
+      },
+      "criteria": [
+        {
+          "id": "gross_margin_65",
+          "label": "Gross margin sustains 65%+ (structural, not cyclical)",
+          "detail": "Q3 FY2026 guided 65-67% gross margin, up from 51.1% in Q2. If 65%+ holds for 2+ quarters, validates structural NAND pricing power vs cyclical spike. Key for $1500 thesis.",
+          "variable": "M",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 15,
+          "price_impact_direction": "up",
+          "eval_hint": "Check non-GAAP gross margin from quarterly earnings. Met if ≥65% for 2 consecutive quarters."
+        },
+        {
+          "id": "revenue_growth_qoq",
+          "label": "Sequential revenue growth sustains 20%+ QoQ",
+          "detail": "Q1→Q2 was 31% sequential growth. Q3 guided ~50% sequential growth ($4.6B vs $3.03B). Sustaining 20%+ QoQ means $25B annualized run rate achievable by mid-FY2027.",
+          "variable": "R",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 12,
+          "price_impact_direction": "up",
+          "eval_hint": "Calculate QoQ revenue growth from last 2 quarters. Met if ≥20% sequential."
+        },
+        {
+          "id": "datacenter_revenue",
+          "label": "Data center revenue exceeds 25% of total",
+          "detail": "Data center segment was $440M in Q2 (up 64% QoQ). AI/data center becoming dominant growth driver. Higher data center mix = higher margins + more durable demand.",
+          "variable": "R,P",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 10,
+          "price_impact_direction": "up",
+          "eval_hint": "Check data center segment revenue as % of total from earnings breakdown. Met if ≥25%."
+        },
+        {
+          "id": "nand_supply_discipline",
+          "label": "Industry NAND supply remains constrained (no major capacity additions)",
+          "detail": "Current NAND shortage is structural — supply discipline across Samsung, SK Hynix, Micron, SanDisk. Any major capacity expansion announcement would break the thesis.",
+          "variable": "P",
+          "weight": "critical",
+          "status": "not_yet",
+          "price_impact_pct": 20,
+          "price_impact_direction": "down_if_failed",
+          "eval_hint": "Check for NAND capacity expansion announcements from Samsung, SK Hynix, Micron. Failed if any major new fab announced."
+        },
+        {
+          "id": "fcf_margin_25",
+          "label": "Free cash flow margin sustains 25%+ (capital discipline)",
+          "detail": "Q2 adjusted FCF margin was 27.9%. Sustained 25%+ FCF proves the company can generate cash without massive capex reinvestment, unlike historical NAND cycles.",
+          "variable": "M",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 8,
+          "price_impact_direction": "up",
+          "eval_hint": "Check adjusted free cash flow / revenue from quarterly earnings. Met if ≥25%."
+        },
+        {
+          "id": "pe_expansion",
+          "label": "Forward P/E expands from 9.76× toward 15-20×",
+          "detail": "Currently trading at 9.76× forward PE — well below semiconductor median. As market recognizes structural (not cyclical) nature of NAND demand, P/E should re-rate toward 15-20×. $1500 needs 24×.",
+          "variable": "P",
+          "weight": "important",
+          "status": "not_yet",
+          "price_impact_pct": 12,
+          "price_impact_direction": "up",
+          "eval_hint": "Check forward PE from financial data. Met if forward PE ≥15×."
+        }
+      ]
+    }
+  ]
+}

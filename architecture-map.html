@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Radar — Full Stack Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0e17;
+    color: #e2e8f0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  /* ── Canvas ── */
+  #canvas {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    cursor: grab;
+  }
+  #canvas.dragging { cursor: grabbing; }
+
+  #viewport {
+    position: absolute;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  /* ── Nodes ── */
+  .node {
+    position: absolute;
+    border-radius: 14px;
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: box-shadow 0.2s, transform 0.15s;
+    user-select: none;
+    min-width: 140px;
+    text-align: center;
+    z-index: 2;
+  }
+  .node:hover { transform: scale(1.04); z-index: 10; }
+
+  .node .label {
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+  .node .sub {
+    font-size: 10.5px;
+    opacity: 0.7;
+    margin-top: 3px;
+    line-height: 1.3;
+    white-space: pre-line;
+  }
+
+  /* ── Node types ── */
+  .node.core {
+    background: linear-gradient(135deg, #1e3a5f, #0f2744);
+    border: 2px solid #3b82f6;
+    box-shadow: 0 0 20px rgba(59,130,246,0.25);
+  }
+  .node.core:hover { box-shadow: 0 0 35px rgba(59,130,246,0.45); }
+
+  .node.scout {
+    background: linear-gradient(135deg, #1a3a2a, #0f2a1a);
+    border: 2px solid #22c55e;
+    box-shadow: 0 0 15px rgba(34,197,94,0.2);
+  }
+  .node.scout:hover { box-shadow: 0 0 30px rgba(34,197,94,0.4); }
+
+  .node.analysis {
+    background: linear-gradient(135deg, #3b1f4a, #241035);
+    border: 2px solid #a855f7;
+    box-shadow: 0 0 15px rgba(168,85,247,0.2);
+  }
+  .node.analysis:hover { box-shadow: 0 0 30px rgba(168,85,247,0.4); }
+
+  .node.model {
+    background: linear-gradient(135deg, #4a2d1a, #352010);
+    border: 2px solid #f59e0b;
+    box-shadow: 0 0 15px rgba(245,158,11,0.2);
+  }
+  .node.model:hover { box-shadow: 0 0 30px rgba(245,158,11,0.4); }
+
+  .node.frontend {
+    background: linear-gradient(135deg, #1a2a4a, #101a35);
+    border: 2px solid #06b6d4;
+    box-shadow: 0 0 15px rgba(6,182,212,0.2);
+  }
+  .node.frontend:hover { box-shadow: 0 0 30px rgba(6,182,212,0.4); }
+
+  .node.db {
+    background: linear-gradient(135deg, #3a1a2a, #25101a);
+    border: 2px solid #f43f5e;
+    box-shadow: 0 0 15px rgba(244,63,94,0.2);
+  }
+  .node.db:hover { box-shadow: 0 0 30px rgba(244,63,94,0.4); }
+
+  .node.api {
+    background: linear-gradient(135deg, #2a2a1a, #1a1a10);
+    border: 2px solid #eab308;
+    box-shadow: 0 0 15px rgba(234,179,8,0.15);
+  }
+  .node.api:hover { box-shadow: 0 0 30px rgba(234,179,8,0.35); }
+
+  .node.ext {
+    background: linear-gradient(135deg, #1a2020, #101515);
+    border: 2px dashed #64748b;
+    box-shadow: 0 0 10px rgba(100,116,139,0.15);
+  }
+
+  /* ── Section labels ── */
+  .section-label {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.3;
+    z-index: 0;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  /* ── SVG arrows ── */
+  svg.arrows {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    overflow: visible;
+  }
+  svg.arrows line, svg.arrows path {
+    stroke-width: 1.8;
+    fill: none;
+  }
+  .arrow-scout { stroke: #22c55e; opacity: 0.5; }
+  .arrow-data  { stroke: #3b82f6; opacity: 0.5; }
+  .arrow-analysis { stroke: #a855f7; opacity: 0.5; }
+  .arrow-model { stroke: #f59e0b; opacity: 0.5; }
+  .arrow-frontend { stroke: #06b6d4; opacity: 0.5; }
+  .arrow-db    { stroke: #f43f5e; opacity: 0.5; }
+  .arrow-api   { stroke: #eab308; opacity: 0.4; }
+
+  /* ── Legend ── */
+  #legend {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(10,14,23,0.92);
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 14px 18px;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+  }
+  #legend h3 {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 10px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    font-size: 11.5px;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* ── Controls ── */
+  #controls {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+  #controls button {
+    background: rgba(10,14,23,0.9);
+    border: 1px solid #334155;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    backdrop-filter: blur(10px);
+  }
+  #controls button:hover { border-color: #3b82f6; }
+
+  /* ── Title ── */
+  #title {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+  }
+  #title h1 {
+    font-size: 20px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #3b82f6, #06b6d4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  #title p {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 3px;
+  }
+
+  /* ── Tooltip ── */
+  #tooltip {
+    position: fixed;
+    background: rgba(15,23,42,0.96);
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 14px 18px;
+    max-width: 320px;
+    font-size: 12px;
+    line-height: 1.5;
+    z-index: 200;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    backdrop-filter: blur(12px);
+  }
+  #tooltip.visible { opacity: 1; }
+  #tooltip h4 {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  #tooltip .tt-file {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 10px;
+    color: #64748b;
+    margin-bottom: 6px;
+  }
+  #tooltip .tt-body { color: #cbd5e1; }
+  #tooltip .tt-tables {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #1e293b;
+    font-size: 10.5px;
+    color: #94a3b8;
+  }
+  #tooltip .tt-tables span { color: #f43f5e; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div id="title">
+  <h1>Stock Radar Architecture</h1>
+  <p>Scroll to zoom — Drag to pan — Hover for details</p>
+</div>
+
+<div id="controls">
+  <button onclick="resetView()">Reset View</button>
+  <button onclick="zoomIn()">Zoom +</button>
+  <button onclick="zoomOut()">Zoom &minus;</button>
+</div>
+
+<div id="legend">
+  <h3>Legend</h3>
+  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div> Core Infrastructure</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div> Scout (Data Collection)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div> Analysis & Scoring</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div> Target Engine & Modeling</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#06b6d4"></div> Frontend (Next.js)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f43f5e"></div> Supabase Database</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#eab308"></div> API Routes</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#64748b"></div> External Services</div>
+</div>
+
+<div id="tooltip">
+  <h4 id="tt-title"></h4>
+  <div class="tt-file" id="tt-file"></div>
+  <div class="tt-body" id="tt-body"></div>
+  <div class="tt-tables" id="tt-tables"></div>
+</div>
+
+<div id="canvas">
+  <div id="viewport">
+    <svg class="arrows" id="arrows" width="4000" height="2000" viewBox="0 0 4000 2000" style="position:absolute;top:0;left:0;width:4000px;height:2000px;"></svg>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  NODE DATA
+// ═══════════════════════════════════════════════════════
+const nodes = [
+  // ── EXTERNAL SERVICES (left column) ──
+  { id: "yahoo", x: 40, y: 220, type: "ext", label: "Yahoo Finance", sub: "yfinance", tooltip: { file: "Free API", body: "Price, financials, historical data, company info. Primary source for quant data. Rate-limited but free.", tables: "" } },
+  { id: "edgar", x: 40, y: 340, type: "ext", label: "SEC EDGAR", sub: "Form 4 + 8-K", tooltip: { file: "Free API", body: "Insider trading (Form 4) and material events (8-K filings). Parsed for insider buys/sells and corporate catalysts.", tables: "" } },
+  { id: "perplexity", x: 40, y: 460, type: "ext", label: "Perplexity AI", sub: "sonar endpoint", tooltip: { file: "PERPLEXITY_API_KEY", body: "Web-grounded LLM search. Used for news scanning, catalyst research, moat analysis, fundamentals deep-dives, and model generation research.", tables: "" } },
+  { id: "claude", x: 40, y: 580, type: "ext", label: "Claude API", sub: "claude-opus-4-6", tooltip: { file: "ANTHROPIC_API_KEY", body: "Reasoning engine for: event classification, moat scoring, kill condition evaluation, model generation (valuation method + scenarios + criteria).", tables: "" } },
+  { id: "gemini", x: 40, y: 700, type: "ext", label: "Gemini API", sub: "YouTube analysis", tooltip: { file: "GEMINI_API_KEY (optional)", body: "Processes YouTube channel transcripts to extract sentiment, leadership changes, and product announcements.", tables: "" } },
+  { id: "alphav", x: 40, y: 820, type: "ext", label: "Alpha Vantage", sub: "fallback data", tooltip: { file: "ALPHA_VANTAGE_API_KEY (optional)", body: "Backup source for stock data when Yahoo Finance is rate-limited or unavailable.", tables: "" } },
+
+  // ── CORE INFRASTRUCTURE (center-top) ──
+  { id: "pipeline", x: 620, y: 60, type: "core", label: "Pipeline Runner", sub: "run_pipeline.py\nOrchestrates all scouts", tooltip: { file: "scripts/run_pipeline.py (367 lines)", body: "Master orchestrator. Modes: full pipeline (all scouts + analyst), --free (free scouts only), --ticker (single stock). Generates run_id, manages lock files, reports progress.", tables: "Writes: pipeline_runs" } },
+  { id: "config", x: 900, y: 60, type: "core", label: "Config", sub: "watchlist.json\nanalyst_prompt.md", tooltip: { file: "config/watchlist.json (776 lines)", body: "6 stocks with full thesis, kill conditions, criteria, model defaults, scenarios. Also: analyst_prompt.md (Claude system prompt), youtube_channels.json.", tables: "Seeded → stocks table" } },
+  { id: "utils", x: 1130, y: 60, type: "core", label: "Utilities", sub: "supabase_helper.py\nutils.py", tooltip: { file: "scripts/supabase_helper.py (243 lines) + utils.py (152 lines)", body: "Supabase ORM wrapper (all DB I/O), env loading, run ID management, signal save helpers. Graceful JSON fallback if Supabase unavailable.", tables: "All tables" } },
+
+  // ── SCOUTS (row 2) ──
+  { id: "s_quant", x: 300, y: 240, type: "scout", label: "Quant Scout", sub: "scout_quant.py\nyfinance → scores", tooltip: { file: "scripts/scout_quant.py (315 lines)", body: "Fetches price, P/E, P/S, margins, growth, beta, short %. Computes quant score. Screener thresholds: PEG < 1.5, growth > 10%. FREE.", tables: "Writes: signals (scout='quant')" } },
+  { id: "s_insider", x: 510, y: 240, type: "scout", label: "Insider Scout", sub: "scout_insider.py\nSEC Form 4", tooltip: { file: "scripts/scout_insider.py", body: "Parses SEC EDGAR Form 4 filings. Detects insider buys (bullish) and sales/departures (bearish). Weighted by exec seniority + share count. FREE.", tables: "Writes: signals (scout='insider')" } },
+  { id: "s_social", x: 720, y: 240, type: "scout", label: "Social Scout", sub: "scout_social.py\nReddit/Twitter", tooltip: { file: "scripts/scout_social.py", body: "Aggregates crowd sentiment from Reddit and Twitter. Detects unusual mention spikes and sentiment shifts. FREE.", tables: "Writes: signals (scout='social')" } },
+  { id: "s_news", x: 930, y: 240, type: "scout", label: "News Scout", sub: "scout_news.py\nPerplexity sonar", tooltip: { file: "scripts/scout_news.py (365 lines)", body: "Web-grounded news scanning via Perplexity. Extracts structured events: earnings changes, guidance revisions, analyst upgrades/downgrades, sector trends. PAID.", tables: "Writes: signals (scout='news')" } },
+  { id: "s_catalyst", x: 300, y: 380, type: "scout", label: "Catalyst Scout", sub: "scout_catalyst.py\nEDGAR + Perplexity + Claude", tooltip: { file: "scripts/scout_catalyst.py (885 lines)", body: "Multi-source catalyst detection: SEC EDGAR 8-K filings + Perplexity web search + Claude enrichment. Detects major contracts, partnerships, capacity expansion, product launches. Tags with thesis_bucket. PAID.", tables: "Writes: signals (scout='catalyst')" } },
+  { id: "s_moat", x: 510, y: 380, type: "scout", label: "Moat Scout", sub: "scout_moat.py\nPerplexity + Claude", tooltip: { file: "scripts/scout_moat.py (653 lines)", body: "Competitive moat analysis: IP wins, market share gains, pricing power, switching costs, regulatory barriers. Claude classifies moat type and durability. PAID.", tables: "Writes: signals (scout='moat')" } },
+  { id: "s_fund", x: 720, y: 380, type: "scout", label: "Fundamentals Scout", sub: "scout_fundamentals.py\nPerplexity + Claude", tooltip: { file: "scripts/scout_fundamentals.py (425 lines)", body: "Deep business model research: TAM growth, management quality, unit economics, margin sustainability. Forward driver extraction (guided_rev_growth, guided_op_margin). PAID.", tables: "Writes: signals (scout='fundamentals')" } },
+  { id: "s_youtube", x: 930, y: 380, type: "scout", label: "YouTube Scout", sub: "scout_youtube.py\nGemini", tooltip: { file: "scripts/scout_youtube.py (361 lines)", body: "Processes YouTube channel transcripts (from youtube_channels.json). Extracts sentiment, leadership commentary, product announcements. OPTIONAL.", tables: "Writes: signals (scout='youtube')" } },
+  { id: "s_discovery", x: 1160, y: 310, type: "scout", label: "Discovery Scout", sub: "scout_discovery.py\n3-stage screener", tooltip: { file: "scripts/scout_discovery.py", body: "Stage 1: Free screener funnel (Yahoo + Finviz). Stage 2: Data enrichment + quant scoring. Stage 3: AI validation (Perplexity + Claude) for top candidates. Populates discovery_candidates.", tables: "Writes: discovery_candidates" } },
+
+  // ── ANALYSIS & SCORING (row 3) ──
+  { id: "analyst", x: 540, y: 560, type: "analysis", label: "Analyst", sub: "analyst.py\nComposite scoring", tooltip: { file: "scripts/analyst.py (1399 lines)", body: "Core aggregator. Loads all scout signals per ticker, calculates:\n• Convergence (bullish vs bearish count)\n• Composite score (weighted: quant 25%, convergence 20%, fundamentals 20%, insider 10%, news 15%, momentum 10%)\n• Criteria evaluation\n• Kill condition check\n• Event impact reasoning", tables: "Reads: latest_signals | Writes: analysis" } },
+  { id: "event_reason", x: 310, y: 560, type: "analysis", label: "Event Reasoner", sub: "event_reasoner.py\nImpact % calc", tooltip: { file: "scripts/event_reasoner.py (408 lines)", body: "Reasoning engine for catalyst/moat events. Takes event array + stock context. Returns impact % adjustments (+20% for major win, -30% for margin compression). Deduction chain reasoning.", tables: "" } },
+  { id: "event_tmpl", x: 310, y: 680, type: "analysis", label: "Event Templates", sub: "event_templates.py\n40+ event types", tooltip: { file: "scripts/event_templates.py (324 lines)", body: "Taxonomy of 40+ event types: customer_win_major, capacity_expansion, product_launch, ip_moat_win, market_share_gain, pricing_power, competitive_threat, regulatory_approval, etc. Each has impact direction + typical % range.", tables: "" } },
+  { id: "feedback", x: 770, y: 560, type: "analysis", label: "Feedback Loop", sub: "feedback_loop.py\nAdaptive weights", tooltip: { file: "scripts/feedback_loop.py (499 lines)", body: "Historical outcome tracking. For each past signal, checks if price moved in predicted direction within 7/30/60/90 day windows. Computes per-scout accuracy → adjusts analyst weights dynamically. Fallback: static weights if < 20 signals.", tables: "Reads: signals, price history | Writes: feedback_accuracy" } },
+  { id: "killeval", x: 770, y: 680, type: "analysis", label: "Kill Condition Eval", sub: "kill_condition_eval.py\nClaude check", tooltip: { file: "scripts/kill_condition_eval.py", body: "Takes stock's plain-English kill condition + current signals. Claude evaluates: is the thesis-break scenario approaching, triggered, or safe? Returns severity + explanation.", tables: "" } },
+
+  // ── TARGET ENGINE & MODELING (row 4) ──
+  { id: "target_eng", x: 470, y: 850, type: "model", label: "Target Engine", sub: "target_engine.py\nGS-parity DCF", tooltip: { file: "scripts/target_engine.py (1661 lines)", body: "Goldman Sachs-style DCF engine. 5-year forecast with declining growth + ramping margins. Terminal value: 50% EV/EBITDA + 50% EV/(FCF-SBC). Discounts at scenario WACC (Down 15%, Base 12%, Up 10%). Revenue-multiple fallback for pre-revenue. 11 math bugs fixed in Apr 2026 audit.", tables: "" } },
+  { id: "finance_data", x: 270, y: 850, type: "model", label: "Finance Data", sub: "finance_data.py\nyfinance actuals", tooltip: { file: "scripts/finance_data.py (466 lines)", body: "Financial data fetcher for target engine. Sources: yfinance (TTM revenue, EBITDA, FCF, shares out). Hard-fail if fetch fails — earnings are source of truth, no fallback to estimates.", tables: "" } },
+  { id: "fwd_drivers", x: 270, y: 970, type: "model", label: "Forward Drivers", sub: "forward_drivers.py\nSignal → driver blend", tooltip: { file: "scripts/forward_drivers.py (646 lines)", body: "Auto-loads forward drivers from Supabase scout signals. Blends guidance, moat score, TAM growth into historical base. Produces projection_score (0-1) for confidence weighting.", tables: "Reads: latest_signals (fundamentals)" } },
+  { id: "target_blend", x: 470, y: 970, type: "model", label: "Target Blend", sub: "target_blend.py\nEvent adjustment", tooltip: { file: "scripts/target_blend.py (269 lines)", body: "Blends base target (engine output) with event-driven adjustments. Weight varies by projection_score: higher confidence = more weight to base target, lower = more weight to event data.", tables: "" } },
+  { id: "gen_model", x: 690, y: 850, type: "model", label: "Model Generator", sub: "generate_model.py\nPerplexity + Claude", tooltip: { file: "scripts/generate_model.py (579 lines)", body: "Full model config generator. Stage 1: Load yfinance quant facts. Stage 2: Perplexity research (guidance, catalysts, industry). Stage 3: Claude generates valuation method, model_defaults, scenarios (bull/base/bear), 8-12 criteria with price impact %.", tables: "Writes: stocks (model_defaults, scenarios, criteria, research_cache)" } },
+  { id: "model_export", x: 690, y: 970, type: "model", label: "Excel Export", sub: "model_export.py\n.xlsx workbook", tooltip: { file: "scripts/model_export.py (1036 lines)", body: "Generates detailed Excel workbook: model config, target scenarios, criteria evaluation, research cache, forecast tables. Downloaded via /api/model/[ticker]/excel.", tables: "" } },
+  { id: "target_api", x: 900, y: 850, type: "model", label: "Target API", sub: "target_api.py\nJSON bridge", tooltip: { file: "scripts/target_api.py", body: "Bridge between target_engine.py and Next.js frontend. Takes ticker + driver overrides (horizon, revenue growth, margins, multiples). Returns JSON: forecast_annual, scenarios, drivers, brief view.", tables: "" } },
+  { id: "verify", x: 900, y: 970, type: "model", label: "Verify Model", sub: "verify_model.py\nSanity checks", tooltip: { file: "scripts/verify_model.py (420 lines)", body: "Validation harness: checks engine ↔ Excel ↔ JSON parity across all watchlist tickers. Verifies scenario probabilities sum to 1.0, math consistency, margin invariants. Run after any engine change.", tables: "" } },
+
+  // ── SUPABASE (center) ──
+  { id: "db_stocks", x: 1300, y: 180, type: "db", label: "stocks", sub: "Watchlist + model configs", tooltip: { file: "Supabase table", body: "Primary watchlist. Columns: ticker (PK), name, sector, thesis, kill_condition, tags, active, target_price, model_defaults (JSON), scenarios (JSON), criteria (JSON), research_cache (JSON).", tables: "" } },
+  { id: "db_signals", x: 1300, y: 320, type: "db", label: "signals", sub: "Append-only scout log", tooltip: { file: "Supabase table", body: "Raw scout outputs. Columns: id, ticker, scout, ai, signal (bullish/bearish/neutral), summary, data (JSON), scores (JSON), run_id, created_at. Append-only — every scout run creates new rows.", tables: "" } },
+  { id: "db_analysis", x: 1300, y: 460, type: "db", label: "analysis", sub: "Composite scores", tooltip: { file: "Supabase table", body: "Analyst composites. Columns: ticker, run_id, composite_score, convergence, overall_signal, price_data, criteria_eval, event_impacts, kill_condition_eval, created_at.", tables: "" } },
+  { id: "db_views", x: 1300, y: 600, type: "db", label: "Views", sub: "latest_signals\nlatest_analysis", tooltip: { file: "Supabase materialized views", body: "latest_signals: latest signal per ticker per scout (deduped). latest_analysis: latest analysis per ticker. Used by frontend for fast reads instead of scanning full history tables.", tables: "" } },
+  { id: "db_discovery", x: 1300, y: 740, type: "db", label: "discovery_candidates", sub: "Screener results", tooltip: { file: "Supabase table", body: "Discovery scan results. Stages: candidate → shortlist → validated → promoted. Columns: ticker, quant_score, data (JSON), ai_confidence, thesis, target_range, hq_city/state/country.", tables: "" } },
+  { id: "db_pipeline", x: 1300, y: 870, type: "db", label: "pipeline_runs", sub: "Audit trail", tooltip: { file: "Supabase table", body: "Execution metadata. Columns: run_id (PK), started_at, completed_at, success, free_only, scouts_active[], stock_count, scout_details (JSON), error, duration_s.", tables: "" } },
+
+  // ── API ROUTES (right-center) ──
+  { id: "api_pipeline", x: 1570, y: 180, type: "api", label: "/api/pipeline", sub: "GET status | POST run", tooltip: { file: "app/api/pipeline/route.ts", body: "GET: returns {running, progress, lastRun}. POST: starts run_pipeline.py via exec(). Lock file concurrency control + progress polling.", tables: "Calls: run_pipeline.py → signals, analysis, pipeline_runs" } },
+  { id: "api_model", x: 1570, y: 310, type: "api", label: "/api/model/[ticker]", sub: "GET target engine output", tooltip: { file: "app/api/model/[ticker]/route.ts", body: "Runs target_api.py with query-param driver overrides (horizon, rev_growth, margins, multiples). Returns full JSON: forecast_annual, scenarios, drivers, brief view.", tables: "Calls: target_api.py → target_engine.py" } },
+  { id: "api_excel", x: 1770, y: 310, type: "api", label: "/api/.../excel", sub: "GET .xlsx download", tooltip: { file: "app/api/model/[ticker]/excel/route.ts", body: "Generates and downloads Excel workbook via model_export.py. Full model: config, scenarios, criteria, forecasts.", tables: "Calls: model_export.py" } },
+  { id: "api_rebuild", x: 1570, y: 430, type: "api", label: "/api/rebuild", sub: "POST re-analyze", tooltip: { file: "app/api/rebuild/route.ts", body: "Re-runs analyst.py for one or all stocks. Used when user tweaks criteria or after manual data updates.", tables: "Calls: rebuild_analysis.py → analysis" } },
+  { id: "api_discovery", x: 1570, y: 550, type: "api", label: "/api/discovery", sub: "GET/POST/PUT", tooltip: { file: "app/api/discovery/route.ts", body: "GET: returns latest candidates. POST: triggers scout_discovery.py scan. PUT: promotes candidate to watchlist (inserts into stocks table).", tables: "Reads: discovery_candidates | Writes: stocks" } },
+  { id: "api_scouts", x: 1570, y: 670, type: "api", label: "/api/scout/*", sub: "catalyst | moat", tooltip: { file: "app/api/scout/catalyst/[ticker] + moat/[ticker]", body: "On-demand single-ticker scout runs. GET with ?days=90|180 lookback window. Runs Python scout script, returns latest signal.", tables: "Calls: scout_catalyst.py, scout_moat.py" } },
+  { id: "api_search", x: 1770, y: 180, type: "api", label: "/api/search", sub: "Yahoo autocomplete", tooltip: { file: "app/api/search/route.ts", body: "Proxy to Yahoo Finance autocomplete API. Avoids CORS issues in browser. Returns matching tickers for search input.", tables: "Pure HTTP proxy" } },
+  { id: "api_stocks", x: 1770, y: 430, type: "api", label: "/api/stocks/*", sub: "add | delete", tooltip: { file: "app/api/stocks/add + delete", body: "POST /add: inserts to stocks table + triggers mini-pipeline. DELETE /delete: soft-delete (active=false). Add route queues if pipeline busy.", tables: "Writes: stocks" } },
+  { id: "api_feedback", x: 1770, y: 550, type: "api", label: "/api/feedback", sub: "GET accuracy data", tooltip: { file: "app/api/feedback/route.ts", body: "Returns feedback loop data: per-scout accuracy rates, adaptive weights, historical signal outcomes.", tables: "Reads: feedback_accuracy" } },
+
+  // ── FRONTEND PAGES (far right) ──
+  { id: "pg_dash", x: 2020, y: 180, type: "frontend", label: "Dashboard", sub: "dashboard.tsx\nWatchlist overview", tooltip: { file: "app/dashboard.tsx + page.tsx", body: "Main view: stock cards with composite score, convergence meter, scout signal badges, price/change, sector tags. Run Pipeline + Rebuild buttons. Add stock modal. Real-time progress polling.", tables: "Reads: stocks, latest_analysis, latest_signals" } },
+  { id: "pg_model", x: 2020, y: 370, type: "frontend", label: "Model Page", sub: "model.tsx\nInteractive valuation", tooltip: { file: "app/model/model.tsx", body: "Stock selector + interactive model. Driver sliders (revenue growth, margins, multiples, WACC). Scenario cards (bull/base/bear). Criteria grid with progress bars. Event impacts panel with transparency section. Run Pipeline + Rebuild buttons.", tables: "Reads: stocks (model_defaults, scenarios, criteria) + /api/model/[ticker]" } },
+  { id: "pg_detailed", x: 2020, y: 510, type: "frontend", label: "Detailed Model", sub: "DetailedModel.tsx\nFull DCF breakdown", tooltip: { file: "app/model/[ticker]/detailed/DetailedModel.tsx", body: "Full detailed view per stock: 5-year forecast table, deduction chain, scenario comparison, criteria evaluation with notes, event impacts, kill condition status. Excel download link. Horizon selector (12/24/36 months).", tables: "Reads: /api/model/[ticker]" } },
+  { id: "pg_discovery", x: 2020, y: 650, type: "frontend", label: "Discovery", sub: "discovery.tsx\n+ Globe", tooltip: { file: "app/discovery/discovery.tsx + DiscoveryGlobe.tsx", body: "Stock discovery interface: candidate list with stage filters (candidate/shortlist/validated). 3D globe visualization (Three.js) showing HQ locations. Add-to-watchlist button promotes candidates. Scan trigger.", tables: "Reads: discovery_candidates, /api/locations" } },
+];
+
+// ═══════════════════════════════════════════════════════
+//  CONNECTIONS (arrows)
+// ═══════════════════════════════════════════════════════
+const connections = [
+  // External → Scouts
+  { from: "yahoo", to: "s_quant", cls: "arrow-scout", label: "price + financials" },
+  { from: "edgar", to: "s_insider", cls: "arrow-scout", label: "Form 4" },
+  { from: "edgar", to: "s_catalyst", cls: "arrow-scout", label: "8-K filings" },
+  { from: "perplexity", to: "s_news", cls: "arrow-scout", label: "sonar search" },
+  { from: "perplexity", to: "s_catalyst", cls: "arrow-scout" },
+  { from: "perplexity", to: "s_moat", cls: "arrow-scout" },
+  { from: "perplexity", to: "s_fund", cls: "arrow-scout" },
+  { from: "perplexity", to: "gen_model", cls: "arrow-model", label: "research" },
+  { from: "claude", to: "s_catalyst", cls: "arrow-scout", label: "enrichment" },
+  { from: "claude", to: "s_moat", cls: "arrow-scout" },
+  { from: "claude", to: "gen_model", cls: "arrow-model", label: "generate model" },
+  { from: "claude", to: "killeval", cls: "arrow-analysis" },
+  { from: "gemini", to: "s_youtube", cls: "arrow-scout", label: "transcripts" },
+  { from: "alphav", to: "s_quant", cls: "arrow-scout", label: "fallback" },
+
+  // Pipeline → Scouts
+  { from: "pipeline", to: "s_quant", cls: "arrow-data" },
+  { from: "pipeline", to: "s_insider", cls: "arrow-data" },
+  { from: "pipeline", to: "s_social", cls: "arrow-data" },
+  { from: "pipeline", to: "s_news", cls: "arrow-data" },
+  { from: "pipeline", to: "s_catalyst", cls: "arrow-data" },
+  { from: "pipeline", to: "s_moat", cls: "arrow-data" },
+  { from: "pipeline", to: "s_fund", cls: "arrow-data" },
+  { from: "pipeline", to: "s_youtube", cls: "arrow-data" },
+
+  // Scouts → DB signals
+  { from: "s_quant", to: "db_signals", cls: "arrow-db" },
+  { from: "s_insider", to: "db_signals", cls: "arrow-db" },
+  { from: "s_social", to: "db_signals", cls: "arrow-db" },
+  { from: "s_news", to: "db_signals", cls: "arrow-db" },
+  { from: "s_catalyst", to: "db_signals", cls: "arrow-db" },
+  { from: "s_moat", to: "db_signals", cls: "arrow-db" },
+  { from: "s_fund", to: "db_signals", cls: "arrow-db" },
+  { from: "s_youtube", to: "db_signals", cls: "arrow-db" },
+  { from: "s_discovery", to: "db_discovery", cls: "arrow-db" },
+
+  // DB signals → views
+  { from: "db_signals", to: "db_views", cls: "arrow-db" },
+  { from: "db_analysis", to: "db_views", cls: "arrow-db" },
+
+  // Analyst reads signals
+  { from: "db_views", to: "analyst", cls: "arrow-analysis", label: "latest_signals" },
+
+  // Analyst sub-modules
+  { from: "event_reason", to: "analyst", cls: "arrow-analysis" },
+  { from: "event_tmpl", to: "event_reason", cls: "arrow-analysis" },
+  { from: "feedback", to: "analyst", cls: "arrow-analysis", label: "adaptive weights" },
+  { from: "killeval", to: "analyst", cls: "arrow-analysis" },
+
+  // Analyst → DB analysis
+  { from: "analyst", to: "db_analysis", cls: "arrow-db" },
+
+  // Pipeline → Analyst → Model Generator
+  { from: "pipeline", to: "analyst", cls: "arrow-data", label: "after scouts" },
+  { from: "pipeline", to: "gen_model", cls: "arrow-data" },
+  { from: "pipeline", to: "db_pipeline", cls: "arrow-db" },
+
+  // Model Generator → DB stocks
+  { from: "gen_model", to: "db_stocks", cls: "arrow-db", label: "model_defaults, scenarios" },
+
+  // Target Engine chain
+  { from: "finance_data", to: "target_eng", cls: "arrow-model", label: "TTM actuals" },
+  { from: "fwd_drivers", to: "target_eng", cls: "arrow-model", label: "forward blend" },
+  { from: "target_eng", to: "target_blend", cls: "arrow-model" },
+  { from: "target_eng", to: "target_api", cls: "arrow-model" },
+  { from: "target_eng", to: "model_export", cls: "arrow-model" },
+  { from: "target_api", to: "api_model", cls: "arrow-api" },
+  { from: "model_export", to: "api_excel", cls: "arrow-api" },
+  { from: "yahoo", to: "finance_data", cls: "arrow-scout", label: "yfinance" },
+
+  // API routes → frontend
+  { from: "api_pipeline", to: "pg_dash", cls: "arrow-frontend" },
+  { from: "api_model", to: "pg_model", cls: "arrow-frontend" },
+  { from: "api_model", to: "pg_detailed", cls: "arrow-frontend" },
+  { from: "api_excel", to: "pg_detailed", cls: "arrow-frontend" },
+  { from: "api_rebuild", to: "pg_model", cls: "arrow-frontend" },
+  { from: "api_rebuild", to: "pg_dash", cls: "arrow-frontend" },
+  { from: "api_discovery", to: "pg_discovery", cls: "arrow-frontend" },
+  { from: "api_search", to: "pg_dash", cls: "arrow-frontend" },
+  { from: "api_stocks", to: "pg_dash", cls: "arrow-frontend" },
+
+  // DB → API reads
+  { from: "db_stocks", to: "api_stocks", cls: "arrow-api" },
+  { from: "db_views", to: "pg_dash", cls: "arrow-frontend", label: "SSR data" },
+  { from: "db_views", to: "pg_model", cls: "arrow-frontend", label: "SSR data" },
+  { from: "db_discovery", to: "api_discovery", cls: "arrow-api" },
+
+  // Verify
+  { from: "target_eng", to: "verify", cls: "arrow-model", label: "sanity check" },
+];
+
+// ═══════════════════════════════════════════════════════
+//  SECTION LABELS
+// ═══════════════════════════════════════════════════════
+const sections = [
+  { text: "External Services", x: 20, y: 170 },
+  { text: "Core Infrastructure", x: 750, y: 30 },
+  { text: "Data Collection — 8 Scouts", x: 500, y: 195 },
+  { text: "Analysis & Scoring", x: 450, y: 520 },
+  { text: "Target Engine & Modeling", x: 420, y: 810 },
+  { text: "Supabase", x: 1330, y: 140 },
+  { text: "API Routes (Next.js)", x: 1600, y: 140 },
+  { text: "Frontend Pages", x: 2020, y: 140 },
+];
+
+// ═══════════════════════════════════════════════════════
+//  RENDERING
+// ═══════════════════════════════════════════════════════
+const viewport = document.getElementById("viewport");
+const canvas = document.getElementById("canvas");
+const svgEl = document.getElementById("arrows");
+const tooltip = document.getElementById("tooltip");
+const ttTitle = document.getElementById("tt-title");
+const ttFile = document.getElementById("tt-file");
+const ttBody = document.getElementById("tt-body");
+const ttTables = document.getElementById("tt-tables");
+
+// Create nodes
+const nodeEls = {};
+nodes.forEach(n => {
+  const div = document.createElement("div");
+  div.className = `node ${n.type}`;
+  div.style.left = n.x + "px";
+  div.style.top = n.y + "px";
+  div.innerHTML = `<div class="label">${n.label}</div><div class="sub">${n.sub}</div>`;
+  div.dataset.id = n.id;
+  viewport.appendChild(div);
+  nodeEls[n.id] = div;
+
+  // Tooltip
+  div.addEventListener("mouseenter", (e) => {
+    ttTitle.textContent = n.label;
+    ttFile.textContent = n.tooltip.file;
+    ttBody.textContent = n.tooltip.body;
+    ttTables.innerHTML = n.tooltip.tables ? `<span>DB:</span> ${n.tooltip.tables}` : "";
+    tooltip.classList.add("visible");
+  });
+  div.addEventListener("mousemove", (e) => {
+    const tx = Math.min(e.clientX + 16, window.innerWidth - 340);
+    const ty = Math.min(e.clientY + 16, window.innerHeight - 200);
+    tooltip.style.left = tx + "px";
+    tooltip.style.top = ty + "px";
+  });
+  div.addEventListener("mouseleave", () => {
+    tooltip.classList.remove("visible");
+  });
+});
+
+// Section labels
+sections.forEach(s => {
+  const lbl = document.createElement("div");
+  lbl.className = "section-label";
+  lbl.style.left = s.x + "px";
+  lbl.style.top = s.y + "px";
+  lbl.textContent = s.text;
+  viewport.appendChild(lbl);
+});
+
+// Draw arrows after layout
+// Cache measured sizes so arrows can redraw fast
+const nodeSizes = {};
+function measureNodes() {
+  Object.entries(nodeEls).forEach(([id, el]) => {
+    nodeSizes[id] = { w: el.offsetWidth, h: el.offsetHeight };
+  });
+}
+
+function getNodeCenter(id) {
+  const el = nodeEls[id];
+  if (!el) return { x: 0, y: 0 };
+  const sz = nodeSizes[id] || { w: 140, h: 50 };
+  const x = parseFloat(el.style.left) + sz.w / 2;
+  const y = parseFloat(el.style.top) + sz.h / 2;
+  return { x, y };
+}
+
+// Find the point on a rectangle's edge closest to an external target point
+function edgePoint(cx, cy, w, h, tx, ty) {
+  const dx = tx - cx, dy = ty - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+  const hw = w / 2 + 4, hh = h / 2 + 4; // 4px gap from border
+  const sx = hw / Math.abs(dx), sy = hh / Math.abs(dy);
+  const s = Math.min(sx, sy);
+  return { x: cx + dx * s, y: cy + dy * s };
+}
+
+function drawArrows() {
+  svgEl.innerHTML = "";
+
+  // Arrowhead markers
+  const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+  const colors = {
+    "arrow-scout": "#22c55e",
+    "arrow-data": "#3b82f6",
+    "arrow-analysis": "#a855f7",
+    "arrow-model": "#f59e0b",
+    "arrow-frontend": "#06b6d4",
+    "arrow-db": "#f43f5e",
+    "arrow-api": "#eab308",
+  };
+  Object.entries(colors).forEach(([cls, color]) => {
+    const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+    marker.setAttribute("id", `head-${cls}`);
+    marker.setAttribute("markerWidth", "8");
+    marker.setAttribute("markerHeight", "6");
+    marker.setAttribute("refX", "8");
+    marker.setAttribute("refY", "3");
+    marker.setAttribute("orient", "auto");
+    const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    poly.setAttribute("points", "0 0, 8 3, 0 6");
+    poly.setAttribute("fill", color);
+    poly.setAttribute("opacity", "0.6");
+    marker.appendChild(poly);
+    defs.appendChild(marker);
+  });
+  svgEl.appendChild(defs);
+
+  connections.forEach(c => {
+    const fc = getNodeCenter(c.from);
+    const tc = getNodeCenter(c.to);
+    const fsz = nodeSizes[c.from] || { w: 140, h: 50 };
+    const tsz = nodeSizes[c.to] || { w: 140, h: 50 };
+    const p1 = edgePoint(fc.x, fc.y, fsz.w, fsz.h, tc.x, tc.y);
+    const p2 = edgePoint(tc.x, tc.y, tsz.w, tsz.h, fc.x, fc.y);
+
+    // Slight curve for parallel arrows
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const curveAmt = Math.min(30, dist * 0.15);
+    // Perpendicular offset
+    const nx = -dy / (dist || 1) * curveAmt;
+    const ny = dx / (dist || 1) * curveAmt;
+    const mx = (p1.x + p2.x) / 2 + nx;
+    const my = (p1.y + p2.y) / 2 + ny;
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", `M ${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`);
+    path.setAttribute("class", c.cls);
+    path.setAttribute("marker-end", `url(#head-${c.cls})`);
+    svgEl.appendChild(path);
+  });
+}
+
+// Must wait for full layout before measuring nodes and drawing arrows
+window.addEventListener("load", () => {
+  measureNodes();
+  drawArrows();
+});
+// Also try after a short delay as backup
+setTimeout(() => { measureNodes(); drawArrows(); }, 200);
+
+// ═══════════════════════════════════════════════════════
+//  PAN & ZOOM
+// ═══════════════════════════════════════════════════════
+let scale = 0.72;
+let panX = -80;
+let panY = 0;
+let isDragging = false;
+let dragStartX, dragStartY;
+
+function applyTransform() {
+  viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+}
+applyTransform();
+
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 0.92 : 1.08;
+  const newScale = Math.max(0.2, Math.min(2.5, scale * delta));
+  // Zoom toward cursor
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  panX = cx - (cx - panX) * (newScale / scale);
+  panY = cy - (cy - panY) * (newScale / scale);
+  scale = newScale;
+  applyTransform();
+}, { passive: false });
+
+canvas.addEventListener("mousedown", (e) => {
+  if (e.target.closest(".node")) return;
+  isDragging = true;
+  dragStartX = e.clientX - panX;
+  dragStartY = e.clientY - panY;
+  canvas.classList.add("dragging");
+});
+
+window.addEventListener("mousemove", (e) => {
+  if (!isDragging) return;
+  panX = e.clientX - dragStartX;
+  panY = e.clientY - dragStartY;
+  applyTransform();
+});
+
+window.addEventListener("mouseup", () => {
+  isDragging = false;
+  canvas.classList.remove("dragging");
+});
+
+function resetView() { scale = 0.72; panX = -80; panY = 0; applyTransform(); }
+function zoomIn() { scale = Math.min(2.5, scale * 1.2); applyTransform(); }
+function zoomOut() { scale = Math.max(0.2, scale / 1.2); applyTransform(); }
+</script>
+</body>
+</html>

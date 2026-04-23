@@ -1,0 +1,21 @@
+# Python dependencies for stock-radar scripts
+# Install with: pip install -r requirements.txt
+
+# Excel export (model_export.py)
+openpyxl>=3.1.0
+
+# Financial data
+yfinance>=0.2.40
+pandas>=2.0
+
+# Environment + secrets
+python-dotenv>=1.0.0
+
+# Supabase client (scouts + analyst persistence)
+supabase>=2.0.0
+
+# LLM (analyst + event reasoner)
+google-genai>=0.3.0
+
+# YouTube scout
+youtube-transcript-api>=0.6.0

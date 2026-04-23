@@ -1,0 +1,15 @@
+{
+  "watchlist": [
+    { "ticker": "LITE", "name": "Lumentum Holdings", "sector": "Photonics / AI Infra" },
+    { "ticker": "PLTR", "name": "Palantir Technologies", "sector": "AI Software / Defense" },
+    { "ticker": "RKLB", "name": "Rocket Lab USA", "sector": "Space / Aerospace" },
+    { "ticker": "ACHR", "name": "Archer Aviation", "sector": "eVTOL / Urban Air Mobility" },
+    { "ticker": "CELH", "name": "Celsius Holdings", "sector": "Consumer / Beverages" }
+  ],
+  "screen_filters": {
+    "min_market_cap_millions": 500,
+    "max_market_cap_millions": 30000,
+    "min_revenue_growth_pct": 20,
+    "min_avg_volume": 500000
+  }
+}
