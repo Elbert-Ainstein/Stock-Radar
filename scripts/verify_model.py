@@ -30,15 +30,12 @@ from target_engine import build_target
 from model_export import export_model
 
 
-REPO = Path("/sessions/fervent-charming-johnson/mnt/Agent System for finding Stocks/stock-radar")
+REPO = Path(__file__).resolve().parent.parent  # stock-radar/
 OUT_DIR = REPO / "out"
-RECALC = REPO / "scripts" / "recalc.py"  # skill-provided, but may live elsewhere
-# Fall back to the xlsx skill's recalc script if the repo-local copy is absent.
-_SKILL_RECALC = Path("/sessions/fervent-charming-johnson/mnt/.claude/skills/xlsx/scripts/recalc.py")
-if not RECALC.exists() and _SKILL_RECALC.exists():
-    RECALC = _SKILL_RECALC
+RECALC = REPO / "scripts" / "recalc.py"
+# No skill recalc fallback needed — use repo-local only
 
-DEFAULT_TICKERS = ["APP", "LITE", "AAPL", "NVDA", "MRVL", "AMD", "TER", "MU", "SNDK", "RKLB", "ACHR"]
+DEFAULT_TICKERS = ["MRVL", "SNDK", "MU", "LITE", "APP", "AEHR", "TER", "NVDA", "AMD"]
 
 # Tolerances
 REL_TOL_USD = 1e-3      # 0.1% for dollar amounts

@@ -44,23 +44,63 @@ def _get_batch_tickers() -> list[str]:
     return _FALLBACK_WATCHLIST
 
 
-def _load_stock_archetype(ticker: str) -> dict | None:
-    """Load archetype from Supabase stocks table (set by generate_model.py)."""
+def _load_stock_from_db(ticker: str) -> dict:
+    """Load archetype, model_defaults, valuation_method, and scenarios from Supabase.
+
+    Returns a dict with keys: archetype, model_defaults, valuation_method, scenarios.
+    All values may be None if DB is unreachable.
+    """
+    result = {"archetype": None, "model_defaults": None, "valuation_method": None, "scenarios": None}
     try:
         from supabase_helper import get_client
         sb = get_client()
         resp = (
             sb.table("stocks")
-            .select("archetype")
+            .select("archetype, model_defaults, valuation_method, scenarios")
             .eq("ticker", ticker.upper())
             .maybe_single()
             .execute()
         )
-        if resp.data and resp.data.get("archetype"):
-            return resp.data["archetype"]
-    except Exception:
-        pass
-    return None
+        if resp.data:
+            result["archetype"] = resp.data.get("archetype")
+            result["model_defaults"] = resp.data.get("model_defaults")
+            result["valuation_method"] = resp.data.get("valuation_method")
+            result["scenarios"] = resp.data.get("scenarios")
+    except Exception as e:
+        print(f"  [target_api] DB load failed for {ticker}: {e}", file=__import__("sys").stderr)
+    return result
+
+
+def _analyst_to_driver_overrides(model_defaults: dict, valuation_method: str | None) -> dict[str, float]:
+    """Convert analyst model_defaults into engine-compatible driver overrides.
+
+    The analyst's model_defaults contain forward-looking assumptions (target revenue,
+    target margin, target multiple) that should take priority over raw TTM data when
+    the engine's forward_drivers are unavailable.
+    """
+    overrides: dict[str, float] = {}
+    if not model_defaults:
+        return overrides
+
+    vm = model_defaults.get("valuation_method") or valuation_method or "pe"
+    rev_b = model_defaults.get("revenue_b", 0)
+    op_margin = model_defaults.get("op_margin", 0)
+    tax_rate = model_defaults.get("tax_rate")
+    pe = model_defaults.get("pe_multiple")
+    ps = model_defaults.get("ps_multiple")
+
+    if op_margin and op_margin > 0:
+        overrides["ebitda_margin_target"] = min(op_margin + 0.05, 0.95)
+
+    if tax_rate and tax_rate > 0:
+        overrides["tax_rate"] = tax_rate
+
+    if vm == "pe" and pe and pe > 0:
+        overrides["ev_ebitda_multiple"] = max(8, pe * 0.6)
+    elif vm == "ps" and ps and ps > 0:
+        overrides["ev_ebitda_multiple"] = max(8, ps * 0.8)
+
+    return overrides
 
 
 def payload_for(
@@ -79,19 +119,37 @@ def payload_for(
             "hint": "This ticker has insufficient earnings history — no model can be built.",
         }
 
+    # Load analyst data from Supabase (archetype, model_defaults, scenarios)
+    db_data = _load_stock_from_db(ticker)
+
     # Resolve archetype: explicit param > Supabase > None
     archetype_data: dict | None = None
     if archetype:
         archetype_data = {"primary": archetype, "secondary": None, "justification": "CLI override"}
-    else:
-        archetype_data = _load_stock_archetype(ticker)
+    elif db_data["archetype"]:
+        archetype_data = db_data["archetype"]
 
     arch_primary = (archetype_data or {}).get("primary") if isinstance(archetype_data, dict) else None
 
+    # Build driver overrides: analyst defaults (low priority) + user overrides (high priority)
+    merged_overrides = {}
+    if db_data["model_defaults"]:
+        analyst_ovr = _analyst_to_driver_overrides(db_data["model_defaults"], db_data["valuation_method"])
+        if analyst_ovr:
+            print(f"  [target_api] Using analyst fallback drivers for {ticker}: {analyst_ovr}", file=__import__("sys").stderr)
+            merged_overrides.update(analyst_ovr)
+    # User overrides take priority
+    if overrides:
+        merged_overrides.update(overrides)
+
     try:
-        t = build_target(fin, overrides or {}, horizon_months=horizon_months, archetype=arch_primary)
+        t = build_target(fin, merged_overrides or {}, horizon_months=horizon_months, archetype=arch_primary)
     except Exception as e:
         return {"ticker": ticker, "error": f"target engine failed: {e}"}
+
+    # Attach analyst scenario prices so dashboard can show them as fallback
+    if db_data["scenarios"]:
+        analyst_scenarios = db_data["scenarios"]
 
     # Enrich with slider metadata so the frontend can render sliders without
     # hardcoding ranges. Use cyclical-specific sliders when in cyclical mode.
@@ -160,6 +218,8 @@ def payload_for(
             "net_debt": fin.net_debt,
         },
         "warnings": fin.warnings + t.warnings,
+        "analyst_scenarios": db_data.get("scenarios"),
+        "analyst_model_defaults": db_data.get("model_defaults"),
     }
 
 

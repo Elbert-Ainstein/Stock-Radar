@@ -10,6 +10,7 @@ import StockDetail from "./StockDetail";
 import TickerSearch from "./TickerSearch";
 import ScoutPanel from "./ScoutPanel";
 import SummaryCards from "./SummaryCards";
+import HealthPanel from "./HealthPanel";
 
 // ─── Main Dashboard ───
 
@@ -46,6 +47,9 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
   // Feedback loop / scout accuracy
   const [scoutAccuracy, setScoutAccuracy] = useState<any[]>([]);
   const [feedbackLoaded, setFeedbackLoaded] = useState(false);
+
+  // Health panel
+  const [showHealthPanel, setShowHealthPanel] = useState(false);
 
   // ─── Poll pipeline status ───
   const startPolling = useCallback(() => {
@@ -307,6 +311,7 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
               <span className="text-amber-500 font-medium">Watchlist</span>
               <a href="/discovery" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Discovery</a>
               <a href="/model" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Models</a>
+              <a href="/ask" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Ask AI</a>
             </nav>
           </div>
           <div className="flex items-center gap-6 text-xs text-[var(--muted)]">
@@ -390,6 +395,17 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
                 <path d="M2.5 3.75L5 6.25L7.5 3.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
+            <button
+              onClick={() => setShowHealthPanel(!showHealthPanel)}
+              className="flex items-center gap-1.5 hover:text-[var(--text)] transition-colors"
+              title="System health: data providers, tests, pipeline status"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M7 1.5v3M7 9.5v3M1.5 7h3M9.5 7h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.2"/>
+              </svg>
+              Health
+            </button>
           </div>
         </div>
       </header>
@@ -424,6 +440,11 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
           feedbackLoaded={feedbackLoaded}
           formatTime={formatTime}
         />
+      )}
+
+      {/* Health panel */}
+      {showHealthPanel && (
+        <HealthPanel onClose={() => setShowHealthPanel(false)} />
       )}
 
       <main className="max-w-[1400px] mx-auto px-6 py-6">

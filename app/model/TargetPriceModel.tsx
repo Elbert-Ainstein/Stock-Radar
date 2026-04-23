@@ -189,7 +189,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
   const [bullProb] = useState(stockScenarios?.bull?.probability ?? 0.25);
 
   // Engine payload hook
-  const { enginePayload, engineLoading, engineError } = useEnginePayload(
+  const { enginePayload, engineLoading, engineError, usedAnalystFallback } = useEnginePayload(
     selectedTicker,
     priceHorizonMonths,
     baseValMethodInfo,
@@ -562,6 +562,12 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
             {engineError && !enginePayload && (
               <span className="text-[10px] text-amber-500">
                 Engine unavailable \u2014 showing pipeline-derived defaults
+              </span>
+            )}
+            {usedAnalystFallback && (
+              <span className="text-[10px] text-amber-500 flex items-center gap-1">
+                <span>\u26A0</span>
+                Using analyst targets \u2014 engine produced unreliable values
               </span>
             )}
             {/* Detailed-view link */}

@@ -18,6 +18,7 @@ export function useEnginePayload(
   const [enginePayload, setEnginePayload] = useState<EnginePayload | null>(null);
   const [engineLoading, setEngineLoading] = useState(false);
   const [engineError, setEngineError] = useState<string | null>(null);
+  const [usedAnalystFallback, setUsedAnalystFallback] = useState(false);
   const appliedEngineRef = useRef<string | null>(null);
 
   // Fetch engine payload on ticker or horizon change
@@ -26,6 +27,7 @@ export function useEnginePayload(
     setEnginePayload(null);
     setEngineError(null);
     setEngineLoading(true);
+    setUsedAnalystFallback(false);
     let cancelled = false;
     fetch(`/api/model/${selectedTicker}?horizon=${priceHorizonMonths}`)
       .then(r => r.json())
@@ -54,6 +56,42 @@ export function useEnginePayload(
     const eng = enginePayload.target;
     const base = eng.scenarios?.base;
     if (!base) return;
+
+    const currentPrice = eng.current_price ?? 0;
+    const engineBase = eng.base ?? 0;
+    const analystBase = (enginePayload as any).analyst_scenarios?.base?.price ?? 0;
+    const analystDefaults = (enginePayload as any).analyst_model_defaults;
+
+    // Detect if engine price is garbage: < 10% of current price AND analyst has a
+    // much better answer. This catches cyclical-at-trough, negative-EBITDA EV/EBITDA,
+    // and other cases where the engine's auto-routing produces nonsense.
+    const engineIsGarbage = currentPrice > 0 && engineBase > 0 &&
+      engineBase < currentPrice * 0.1 &&
+      analystBase > engineBase * 3;
+
+    if (engineIsGarbage && analystDefaults) {
+      // Use analyst model_defaults to populate sliders instead
+      console.log(
+        `[useEnginePayload] ${enginePayload.ticker}: engine base $${engineBase.toFixed(0)} is garbage ` +
+        `(< 10% of current $${currentPrice.toFixed(0)}). Using analyst defaults: base $${analystBase}`
+      );
+      const ad = analystDefaults;
+      const vm = ad.valuation_method || valMethodInfo.method;
+
+      if (ad.revenue_b && ad.revenue_b > 0) setRevenue(Math.round(ad.revenue_b * 10) / 10);
+      if (ad.shares_m && ad.shares_m > 0) setSharesM(Math.round(ad.shares_m));
+
+      if (vm === "ps") {
+        if (ad.ps_multiple && ad.ps_multiple > 0) setMultiple(Math.round(ad.ps_multiple));
+      } else {
+        if (ad.op_margin && ad.op_margin > 0) setOpMargin(Math.round(ad.op_margin * 1000) / 1000);
+        if (ad.pe_multiple && ad.pe_multiple > 0) setMultiple(Math.round(ad.pe_multiple));
+      }
+
+      setUsedAnalystFallback(true);
+      appliedEngineRef.current = enginePayload.ticker;
+      return;
+    }
 
     const isCyclical = eng.valuation_method === "cyclical_normalized";
     const y3 = eng.forecast_annual?.[2];
@@ -98,5 +136,5 @@ export function useEnginePayload(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enginePayload]);
 
-  return { enginePayload, engineLoading, engineError };
+  return { enginePayload, engineLoading, engineError, usedAnalystFallback };
 }

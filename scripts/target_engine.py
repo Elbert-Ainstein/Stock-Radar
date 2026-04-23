@@ -165,6 +165,62 @@ def _discount_years_for_horizon(horizon_months: int) -> int:
             f"horizon_months={h} unsupported; must be one of {SUPPORTED_HORIZONS_MONTHS}"
         )
     return VALUATION_YEAR - (h // 12)
+
+
+def _annual_label_from_q(q_label: str) -> str:
+    """Convert a quarterly label like '1Q25' to a 4-digit base year like '2025'.
+
+    The quarterly period format from finance_data is '{Q}Q{YY}' (e.g. '3Q24').
+    We extract the 2-digit year suffix and expand to 4 digits. The base year
+    is the year the latest quarter falls in — _forecast_annual then builds
+    FY{base+1}E through FY{base+5}E from there.
+
+    Falls back to current year if the label can't be parsed.
+    """
+    import re
+    from datetime import datetime
+
+    if not q_label:
+        return str(datetime.now().year)
+
+    # Try pattern like "1Q25", "3Q24"
+    m = re.search(r"(\d)Q(\d{2})$", q_label)
+    if m:
+        yy = int(m.group(2))
+        year = 2000 + yy if yy < 80 else 1900 + yy
+        return str(year)
+
+    # Try pattern with 4-digit year like "Q1 2025" or "1Q2025"
+    m = re.search(r"(\d{4})", q_label)
+    if m:
+        return m.group(1)
+
+    # Fallback
+    return str(datetime.now().year)
+
+
+def _advance_quarter_label(q_label: str, n_quarters: int) -> str:
+    """Advance a quarterly label like '3Q25' by n_quarters.
+
+    Examples:
+        _advance_quarter_label('3Q25', 1) -> '4Q25'
+        _advance_quarter_label('4Q25', 1) -> '1Q26'
+        _advance_quarter_label('3Q25', 5) -> '4Q26'
+    """
+    import re
+    m = re.search(r"(\d)Q(\d{2})$", q_label or "")
+    if not m:
+        # If we can't parse, return generic labels
+        return f"Q+{n_quarters}"
+    q = int(m.group(1))  # 1-4
+    yy = int(m.group(2))
+    # Advance
+    total_q = (q - 1) + n_quarters  # 0-indexed
+    new_q = (total_q % 4) + 1       # 1-4
+    new_yy = yy + (total_q // 4)
+    return f"{new_q}Q{new_yy:02d}"
+
+
 # Years to ramp margins from current TTM → target. GS implies ~Y2-Y3 reach.
 MARGIN_RAMP_YEARS = 3
 # Forecast horizon
@@ -260,6 +316,20 @@ def compute_smart_defaults(
             out["sbc_pct_rev"] = min(0.50, (raw_sbc_pct + projected_sbc_pct) / 2)
         else:
             out["sbc_pct_rev"] = max(0.0, min(0.30, raw_sbc_pct))
+
+        # ---- SBC-proportional dilution ----
+        # Don't use a flat 1% for all companies. A 30% SBC/rev company
+        # dilutes far more than a 2% SBC/rev company. Approximate: ~40%
+        # of SBC translates to net share issuance (rest offset by buybacks,
+        # vesting schedules, forfeitures).
+        derived_dilution = out["sbc_pct_rev"] * 0.4
+        out["share_change_pct"] = max(0.005, min(0.08, derived_dilution))
+    else:
+        # SBC not available in TTM cash flow — using default 5%.
+        # This means share_change_pct also stays at default 1%.
+        # Flag so pipeline logs can track which tickers lack SBC data.
+        print(f"  [engine] WARNING: No TTM SBC data found — using default "
+              f"sbc_pct_rev={out['sbc_pct_rev']:.1%}, share_change_pct={out['share_change_pct']:.1%}")
 
     # ---- Revenue growth Y1 ----
     # Combine all available backward-looking signals with weights proportional
@@ -1888,15 +1958,16 @@ def build_target(
         elif isinstance(routing_result, float):
             ps_blend_weight = routing_result
             use_rev_multiple = False  # primary is EV/EBITDA, but we'll blend
-        elif routing_result is False and ttm_ebitda <= 0 and _has_cyclical_history(fin):
-            # Cyclical-at-trough auto-promotion: the routing guard rejected P/S
-            # mode because this company has a cyclical history, but use_cyclical
-            # is False (archetype wasn't explicitly "cyclical"). Auto-promote to
-            # cyclical mode so we use normalized mid-cycle margins instead of
-            # producing garbage from negative EBITDA × EV/EBITDA multiple.
+        elif routing_result is False and ttm_ebitda <= 0 and _has_cyclical_history(fin) and (
+            archetype is None or archetype.lower() == "cyclical"
+        ):
+            # Cyclical-at-trough auto-promotion: only when archetype is explicitly
+            # "cyclical" or unknown. Don't auto-promote transformational/garp/compounder
+            # stocks — they have negative EBITDA for structural reasons (investment phase),
+            # not cyclical reasons, and should use P/S or analyst fallback instead.
             print(
                 f"  [routing] {fin.ticker}: auto-promoting to cyclical mode — "
-                f"TTM EBITDA ≤ 0 with historically profitable business",
+                f"TTM EBITDA ≤ 0 with historically profitable business (archetype={archetype})",
                 file=sys.stderr,
             )
             use_cyclical = True
@@ -2310,38 +2381,29 @@ def build_target(
         src = forward.get("source_summary")
         if parts:
             src_part = f" [{src}]" if src else ""
-            warnings.append(
-                f"Forward drivers applied{src_part}: " + ", ".join(parts) +
-                ". Historicals blended with guidance; targets reflect forward story."
-            )
+            warnings.append(f"Forward drivers: {', '.join(parts)}{src_part}")
 
-    # Compute human-readable horizon labels.
-    from datetime import datetime, timezone
-    today = datetime.now(timezone.utc)
-    target_year = today.year + (today.month - 1 + horizon_months) // 12
-    target_month_idx = (today.month - 1 + horizon_months) % 12
-    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    price_target_date = f"{month_names[target_month_idx]} {target_year}"
-    exit_fy = _annual_label_shift(base_year_label, VALUATION_YEAR) if base_year_label else ""
+    # Horizon metadata
+    from datetime import datetime, timedelta
+    target_date = datetime.now() + timedelta(days=horizon_months * 30)
+    target_date_str = target_date.strftime("%b %Y")
+    exit_fy = base_s.forecast_annual[VALUATION_YEAR - 1].period if base_s.forecast_annual else ""
 
     return TargetResult(
         ticker=fin.ticker,
         current_price=price_0,
         base=base_px,
-        low=low,
-        high=high,
-        upside_base_pct=(base_px - price_0) / price_0 if price_0 else 0,
-        upside_low_pct=(low - price_0) / price_0 if price_0 else 0,
-        upside_high_pct=(high - price_0) / price_0 if price_0 else 0,
+        low=scenarios["downside"].price,
+        high=scenarios["upside"].price,
+        upside_base_pct=(base_px / price_0 - 1) if price_0 > 0 else 0.0,
+        upside_low_pct=(scenarios["downside"].price / price_0 - 1) if price_0 > 0 else 0.0,
+        upside_high_pct=(scenarios["upside"].price / price_0 - 1) if price_0 > 0 else 0.0,
         drivers=base_drivers,
         scenarios=scenarios,
         steps=steps,
         forecast_annual=base_s.forecast_annual,
         forecast_quarterly=fc_q,
-        terminal_year=(
-            f"Exit: Y{VALUATION_YEAR} fundamentals · Price target: {horizon_months}mo fwd ({price_target_date})"
-        ),
+        terminal_year=exit_fy,
         shares_diluted=fin.shares_diluted or 0.0,
         net_debt=fin.net_debt or 0.0,
         ttm_revenue=ttm_rev,
@@ -2349,138 +2411,7 @@ def build_target(
         ttm_fcf_sbc=ttm_fcf_sbc,
         warnings=warnings,
         price_horizon_months=horizon_months,
-        price_target_date=price_target_date,
+        price_target_date=target_date_str,
         exit_fiscal_year=exit_fy,
-        valuation_method=(
-            "cyclical_normalized" if use_cyclical
-            else "revenue_multiple" if use_rev_multiple
-            else f"blend_ps_{ps_blend_weight:.0%}" if ps_blend_weight > 0
-            else "ev_ebitda"
-        ),
+        valuation_method="cyclical" if use_cyclical else ("revenue_multiple" if use_rev_multiple else "ev_ebitda"),
     )
-
-
-# ---------------------------------------------------------------------------
-# Period-label helpers
-# ---------------------------------------------------------------------------
-def _advance_quarter_label(label: str, n_quarters: int) -> str:
-    if not label or len(label) < 4:
-        return f"Q+{n_quarters}"
-    try:
-        q = int(label[0])
-        yr = int(label[-2:])
-        for _ in range(n_quarters):
-            q += 1
-            if q > 4:
-                q = 1
-                yr += 1
-        return f"{q}Q{yr:02d}"
-    except Exception:
-        return f"Q+{n_quarters}"
-
-
-def _annual_label_from_q(qlabel: str) -> str:
-    if not qlabel or len(qlabel) < 4:
-        return ""
-    try:
-        yr = 2000 + int(qlabel[-2:])
-        return f"FY{yr}"
-    except Exception:
-        return ""
-
-
-def _annual_label_shift(fy: str, n: int) -> str:
-    if not fy.startswith("FY"):
-        return fy + f"+{n}"
-    try:
-        yr = int(fy[2:])
-        return f"FY{yr + n}"
-    except Exception:
-        return fy + f"+{n}"
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    import sys, json
-    from finance_data import fetch_financials, EarningsFetchError
-
-    tk = (sys.argv[1] if len(sys.argv) > 1 else "APP").upper()
-    try:
-        fin = fetch_financials(tk)
-    except EarningsFetchError as e:
-        print(f"[FAIL] {e}")
-        sys.exit(1)
-
-    drivers_override: dict[str, float] = {}
-    arch_override = None
-    for arg in sys.argv[2:]:
-        if arg.startswith("--archetype="):
-            arch_override = arg.split("=", 1)[1]
-        elif "=" in arg:
-            k, v = arg.split("=", 1)
-            try:
-                drivers_override[k] = float(v)
-            except ValueError:
-                pass
-
-    res = build_target(fin, drivers_override, archetype=arch_override)
-    print(f"\n=== {res.ticker} target ===")
-    print(f"Current:  ${res.current_price:,.2f}")
-    print(f"  Low:    ${res.low:,.2f}  ({res.upside_low_pct:+.1%})")
-    print(f"  Base:   ${res.base:,.2f}  ({res.upside_base_pct:+.1%})")
-    print(f"  High:   ${res.high:,.2f}  ({res.upside_high_pct:+.1%})")
-    print(f"\nTTM:  rev=${res.ttm_revenue/1e9:.2f}B  ebitda=${res.ttm_ebitda/1e9:.2f}B  fcf-sbc=${res.ttm_fcf_sbc/1e9:.2f}B")
-    print(f"\nBase drivers (after smart defaults):")
-    for k in DEFAULT_SLIDER_KEYS:
-        v = res.drivers.get(k, 0)
-        meta = DRIVER_META.get(k, {})
-        if meta.get("format") == "pct":
-            print(f"  {meta.get('label', k):<35s}: {v*100:.1f}%")
-        elif meta.get("format") == "mult":
-            print(f"  {meta.get('label', k):<35s}: {v:.1f}x")
-        else:
-            print(f"  {meta.get('label', k):<35s}: {v:.3f}")
-
-    print(f"\nScenarios:")
-    for name in ("downside", "base", "upside"):
-        s = res.scenarios[name]
-        print(
-            f"  {name:<10s} px=${s.price:,.2f}  "
-            f"g1={s.rev_growth_y1:.1%}  gT={s.rev_growth_terminal:.1%}  "
-            f"EB-mgn={s.ebitda_margin_target:.1%}  "
-            f"EV/EBITDA={s.ev_ebitda_multiple:.1f}x  "
-            f"EV/(FCF-SBC)={s.ev_fcf_sbc_multiple:.1f}x  "
-            f"WACC={s.discount_rate:.1%}  "
-            f"Y3 EBITDA=${s.terminal_ebitda/1e9:.2f}B  "
-            f"Y3 FCF-SBC=${s.terminal_fcf_sbc/1e9:.2f}B"
-        )
-
-    print(f"\nBase-case 5-year forecast:")
-    print(f"  {'year':<8s} {'revenue':>10s} {'g%':>6s} {'ebitda':>10s} {'ebmgn':>6s} {'fcf-sbc':>10s} {'fcfmgn':>6s}")
-    for p in res.forecast_annual:
-        print(
-            f"  {p.period:<8s} ${p.revenue/1e9:>8.2f}B "
-            f"{p.rev_growth*100:>5.1f}% ${p.ebitda/1e9:>8.2f}B "
-            f"{p.ebitda_margin*100:>5.1f}% ${p.fcf_sbc/1e9:>8.2f}B "
-            f"{p.fcf_sbc_margin*100:>5.1f}%"
-        )
-
-    print(f"\nDeduction chain (base):")
-    for s in res.steps:
-        if s.unit == "$":
-            print(f"  {s.label:<30s} = {s.formula:<50s} → ${s.value:,.2f}")
-        elif s.unit == "%":
-            print(f"  {s.label:<30s} = {s.formula:<50s} → {s.value:.1f}%")
-        elif s.unit == "$B":
-            print(f"  {s.label:<30s} = {s.formula:<50s} → ${s.value:,.2f}B")
-        elif s.unit == "M":
-            print(f"  {s.label:<30s} = {s.formula:<50s} → {s.value:.1f}M")
-        else:
-            print(f"  {s.label:<30s} = {s.formula:<50s} → {s.value:,.2f}{s.unit}")
-
-    if res.warnings:
-        print(f"\nWarnings:")
-        for w in res.warnings:
-            print(f"  - {w}")
