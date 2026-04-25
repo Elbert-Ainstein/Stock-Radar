@@ -393,8 +393,10 @@ def run():
                 skipped = available - {name for name, _ in scout_specs}
                 if skipped:
                     print(f"\n  [smart] Skipping scouts not needed by any stock: {', '.join(sorted(skipped))}")
-                # Also include filings if needed and not already present
-                needed_but_missing = needed_scouts - available
+                # Also include scouts needed by smart routing but not in the base list.
+                # YouTube is excluded unless --full (too slow, 0 results for most stocks).
+                full_only_scouts = set() if force_full else {"youtube"}
+                needed_but_missing = needed_scouts - available - full_only_scouts
                 for s in needed_but_missing:
                     if s in SCOUT_MODULE_MAP and not free_only:
                         scout_specs.append((s, SCOUT_MODULE_MAP[s]))
