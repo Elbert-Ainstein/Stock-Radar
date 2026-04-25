@@ -110,6 +110,14 @@ class PipelineMetrics:
         with self._lock:
             self._data_sources.append(ds)
 
+    # ── Public accessors ───────────────────────────────────────────
+
+    @property
+    def scout_metrics(self) -> list:
+        """Read-only snapshot of recorded scout metrics."""
+        with self._lock:
+            return list(self._scouts)
+
     # ── Summary ──────────────────────────────────────────────────────
 
     def summarize(self) -> dict:
