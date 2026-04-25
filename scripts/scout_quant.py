@@ -13,6 +13,7 @@ import os
 import json
 import time as _time
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import yfinance as yf
 import pandas as pd
 from utils import get_watchlist, get_screen_filters, save_signals, timestamp, load_env
@@ -285,21 +286,42 @@ def main():
     print("=" * 50)
 
     watchlist = get_watchlist()
+
+    # Skip stocks with recent signals — cadence from registries.SCOUT_CADENCE_HOURS
+    from utils import get_fresh_tickers
+    fresh = get_fresh_tickers("quant")
+    watchlist = [s for s in watchlist if s["ticker"] not in fresh]
     tickers = [s["ticker"] for s in watchlist]
+    if fresh:
+        from registries import SCOUT_CADENCE_HOURS
+        hrs = SCOUT_CADENCE_HOURS.get("quant", 12)
+        print(f"  Skipping {len(fresh)} stocks with recent signals (<{hrs}h old)")
 
     print(f"\nScanning {len(tickers)} watchlist stocks: {', '.join(tickers)}")
     print("-" * 50)
 
+    if not tickers:
+        print("  All stocks have recent quant data — nothing to do")
+        return
+
     signals = []
-    for ticker in tickers:
-        print(f"\n  Analyzing {ticker}...")
-        result = analyze_stock(ticker)
+
+    # Parallel stock analysis — yfinance calls are I/O bound (HTTP),
+    # so 6 workers cuts wall-clock time dramatically for 50 stocks.
+    def _analyze(t):
+        result = analyze_stock(t)
         if result:
-            signals.append(result)
             score = result["scores"]["composite"]
             sig = result["signal"]
-            print(f"  [{ticker}] Score: {score}/10 | Signal: {sig}")
-            print(f"  [{ticker}] {result['summary']}")
+            print(f"  [{t}] Score: {score}/10 | Signal: {sig}")
+        return result
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {pool.submit(_analyze, t): t for t in tickers}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                signals.append(result)
 
     # Sort by composite score descending
     signals.sort(key=lambda x: x["scores"]["composite"], reverse=True)

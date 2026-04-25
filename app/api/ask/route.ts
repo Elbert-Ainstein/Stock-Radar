@@ -394,7 +394,7 @@ export async function POST(req: Request) {
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-opus-4-20250514",
         max_tokens: 4096,
         system: systemPrompt,
         tools: TOOLS,
@@ -445,7 +445,7 @@ export async function POST(req: Request) {
     // If we hit max iterations, return what we have
     return NextResponse.json({
       answer: "I ran into my action limit for this question. Here's what I was able to do so far — please ask a follow-up to continue.",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-20250514",
       tokens_used: totalTokens,
       actions: actionsLog,
     });
@@ -563,6 +563,15 @@ ${signalSummaries || "  (no signals)"}`;
 - Be direct and opinionated — the user wants conviction-ranked insights, not hedged disclaimers.
 - For macro what-if scenarios, walk through the transmission mechanism: macro change → sector impact → company-level driver → use what_if_scenario tool to compute exact target price change.
 - Use $ values and percentages, not vague qualitative language.
+
+## GUIDING THE USER TO DASHBOARD FEATURES
+When your answer relates to specific stocks, proactively direct the user to the relevant dashboard pages:
+- For valuation questions: "Check out the **Brief Model** page for [TICKER] — you can adjust the sliders (revenue growth, margins, multiples) and see the target price update in real time."
+- For signal/thesis questions: "The **Dashboard** shows all scout signals for [TICKER] in one view — look at the signal panel for the latest bullish/bearish consensus."
+- For event impacts: "Open the **Model page** for [TICKER] and scroll to the **Event Impacts** panel — it shows exactly how each catalyst or risk shifts the target price."
+- For discovery/new stocks: "Check the **Discovery** page — it scans the universe for 10x candidates and ranks them through a 3-stage funnel."
+- For kill conditions: "The kill condition status is shown on the Dashboard card for [TICKER] — green means safe, amber means warning, red means the thesis may be broken."
+- Always reference specific pages by name (Dashboard, Brief Model, Model, Discovery) so the user knows where to look.
 
 ## PORTFOLIO SNAPSHOT (${ctx.stocks.length} stocks)
 ${pipelineInfo}

@@ -15,9 +15,13 @@ from target_engine import (
     DRIVER_META,
     SCENARIO_OFFSETS,
     TERMINAL_GROWTH_CAP,
+    ROIIC_FADE_YEARS,
     FORECAST_YEARS,
     MARGIN_RAMP_YEARS,
     _forecast_annual,
+    _gordon_roiic_terminal_ev,
+    _compute_bottom_up_wacc,
+    SECTOR_UNLEVERED_BETAS,
 )
 from finance_data import FinancialData
 
@@ -356,3 +360,268 @@ class TestNoExecInAPIRoutes:
             f"Found exec()/eval() in API routes:\n" +
             "\n".join(violations)
         )
+
+
+# ---------------------------------------------------------------------------
+# Test 10: MODEL_OUTPUT_SCHEMA validates correctly
+# ---------------------------------------------------------------------------
+
+class TestModelOutputSchema:
+    """Verify the Structured Outputs JSON schema accepts valid model output
+    and rejects invalid output (using jsonschema if available, else basic checks)."""
+
+    VALID_MODEL = {
+        "thesis": "Test thesis for a growth stock.",
+        "sector": "Semiconductors",
+        "kill_condition": "Revenue growth below 10% for 2 quarters.",
+        "archetype": {
+            "primary": "garp",
+            "secondary": None,
+            "justification": "Moderate growth at reasonable valuation.",
+            "lifecycle_stage": "mature_growth",
+            "moat_width": "narrow",
+        },
+        "valuation_method": "pe",
+        "valuation_justification": "Profitable with stable earnings.",
+        "model_defaults": {
+            "revenue_b": 5.2,
+            "op_margin": 0.35,
+            "tax_rate": 0.15,
+            "shares_m": 150,
+            "pe_multiple": 30,
+            "ps_multiple": None,
+            "valuation_method": "pe",
+        },
+        "scenarios": {
+            "bull": {"probability": 0.22, "price": 180.0, "trigger": "AI upside."},
+            "base": {"probability": 0.55, "price": 130.0, "trigger": "Steady growth."},
+            "bear": {"probability": 0.23, "price": 75.0, "trigger": "Cycle downturn."},
+        },
+        "criteria": [
+            {
+                "id": "ai_datacenter_demand",
+                "label": "AI Datacenter Demand",
+                "detail": "Strong hyperscaler capex sustains orders.",
+                "variable": "R",
+                "weight": "critical",
+                "status": "not_yet",
+                "eval_hint": "Revenue >= $6B by FY2027",
+                "price_impact_pct": 15,
+                "price_impact_direction": "up",
+            },
+        ],
+        "target_notes": "Base case driven by $5.2B revenue growing 20% with 35% margins at 30x PE.",
+        "divergence_note": None,
+    }
+
+    def test_schema_has_all_required_keys(self):
+        """MODEL_OUTPUT_SCHEMA.required covers all expected top-level fields."""
+        from generate_model import MODEL_OUTPUT_SCHEMA
+        expected = {
+            "thesis", "sector", "kill_condition", "archetype",
+            "valuation_method", "valuation_justification",
+            "model_defaults", "scenarios", "criteria", "target_notes",
+            "divergence_note",
+        }
+        assert set(MODEL_OUTPUT_SCHEMA["required"]) == expected
+
+    def test_schema_disallows_additional_properties(self):
+        """Top-level and nested objects all set additionalProperties=False."""
+        from generate_model import MODEL_OUTPUT_SCHEMA
+        assert MODEL_OUTPUT_SCHEMA.get("additionalProperties") is False
+        for key in ("archetype", "model_defaults", "scenarios"):
+            nested = MODEL_OUTPUT_SCHEMA["properties"][key]
+            assert nested.get("additionalProperties") is False, f"{key} missing additionalProperties:false"
+
+    def test_valid_model_matches_schema_keys(self):
+        """A valid model dict has exactly the keys the schema requires."""
+        from generate_model import MODEL_OUTPUT_SCHEMA
+        required = set(MODEL_OUTPUT_SCHEMA["required"])
+        assert set(self.VALID_MODEL.keys()) == required
+
+    def test_jsonschema_validates_if_available(self):
+        """If jsonschema is installed, run full validation."""
+        from generate_model import MODEL_OUTPUT_SCHEMA
+        try:
+            import jsonschema
+        except ImportError:
+            pytest.skip("jsonschema not installed")
+        jsonschema.validate(instance=self.VALID_MODEL, schema=MODEL_OUTPUT_SCHEMA)
+
+    def test_archetype_enum_values(self):
+        """Archetype primary must be one of the five archetypes."""
+        from generate_model import MODEL_OUTPUT_SCHEMA
+        arch_props = MODEL_OUTPUT_SCHEMA["properties"]["archetype"]["properties"]
+        expected_archetypes = {"garp", "cyclical", "transformational", "compounder", "special_situation"}
+        assert set(arch_props["primary"]["enum"]) == expected_archetypes
+
+    def test_criteria_variable_enum(self):
+        """Criteria variable must be R, M, P, S, or E."""
+        from generate_model import MODEL_OUTPUT_SCHEMA
+        item_props = MODEL_OUTPUT_SCHEMA["properties"]["criteria"]["items"]["properties"]
+        assert set(item_props["variable"]["enum"]) == {"R", "M", "P", "S", "E"}
+
+
+# ---------------------------------------------------------------------------
+# Gordon + ROIIC fade terminal value tests
+# ---------------------------------------------------------------------------
+class TestGordonROIICFade:
+    """Test the _gordon_roiic_terminal_ev() function."""
+
+    def test_returns_none_for_negative_fcf(self):
+        """Negative FCF-SBC should make Gordon infeasible."""
+        result = _gordon_roiic_terminal_ev(-100e6, wacc=0.12, g_terminal=0.15)
+        assert result is None
+
+    def test_returns_none_when_wacc_lte_g(self):
+        """When WACC ≤ g_perpetuity, Gordon fails (infinite TV)."""
+        # g_terminal=0.02 → g_perpetuity=0.02, WACC=0.025 → WACC-g=0.005 → too close
+        result = _gordon_roiic_terminal_ev(100e6, wacc=0.025, g_terminal=0.02)
+        assert result is None
+
+    def test_positive_ev_for_valid_inputs(self):
+        """Valid inputs should produce a positive terminal EV."""
+        ev = _gordon_roiic_terminal_ev(500e6, wacc=0.12, g_terminal=0.15)
+        assert ev is not None
+        assert ev > 0
+
+    def test_higher_growth_yields_higher_ev(self):
+        """Higher g_terminal should produce higher terminal EV (more fade-period FCF)."""
+        ev_low = _gordon_roiic_terminal_ev(500e6, wacc=0.12, g_terminal=0.08)
+        ev_high = _gordon_roiic_terminal_ev(500e6, wacc=0.12, g_terminal=0.25)
+        assert ev_high > ev_low
+
+    def test_fade_years_constant_exists(self):
+        """ROIIC_FADE_YEARS should be positive and reasonable."""
+        assert ROIIC_FADE_YEARS >= 3
+        assert ROIIC_FADE_YEARS <= 15
+
+    def test_ev_exceeds_naive_gordon(self):
+        """Gordon+ROIIC should exceed naive Gordon (which ignores the fade period FCFs)."""
+        fcf = 500e6
+        wacc = 0.12
+        g_term = 0.20
+        g_perp = min(g_term, TERMINAL_GROWTH_CAP)  # 0.025
+        # Naive Gordon at Y3: FCF × (1+g) / (WACC-g)
+        naive = fcf * (1 + g_perp) / (wacc - g_perp)
+        roiic = _gordon_roiic_terminal_ev(fcf, wacc=wacc, g_terminal=g_term)
+        assert roiic is not None
+        assert roiic > naive, "ROIIC fade captures above-WACC growth during fade period"
+
+
+# ---------------------------------------------------------------------------
+# Bottom-up WACC tests
+# ---------------------------------------------------------------------------
+class TestBottomUpWACC:
+    """Test the _compute_bottom_up_wacc() function."""
+
+    def test_zero_debt_gives_pure_equity_wacc(self):
+        """With no debt, WACC = cost of equity."""
+        wacc = _compute_bottom_up_wacc("semiconductors", total_debt=0, market_cap=10e9)
+        # Should be Rf + beta_L × ERP = 0.043 + 1.40 × 0.055 ≈ 0.12
+        assert 0.10 <= wacc <= 0.14
+
+    def test_higher_beta_sector_gets_higher_wacc(self):
+        """A riskier sector (higher beta) should have a higher WACC."""
+        wacc_safe = _compute_bottom_up_wacc("consumer_tech", total_debt=0, market_cap=20e9)
+        wacc_risky = _compute_bottom_up_wacc("quantum_computing", total_debt=0, market_cap=20e9)
+        assert wacc_risky > wacc_safe
+
+    def test_wacc_clamped_to_range(self):
+        """WACC must be in [0.06, 0.22]."""
+        # Very low-risk
+        wacc_low = _compute_bottom_up_wacc("consumer_tech", total_debt=0, market_cap=100e9)
+        assert wacc_low >= 0.06
+        # Very high leverage
+        wacc_high = _compute_bottom_up_wacc("quantum_computing", total_debt=50e9, market_cap=1e9)
+        assert wacc_high <= 0.22
+
+    def test_unknown_sector_uses_default_beta(self):
+        """Unknown sector should fall back to default unlevered beta."""
+        wacc = _compute_bottom_up_wacc("underwater_basket_weaving", total_debt=0, market_cap=10e9)
+        assert 0.06 <= wacc <= 0.22
+
+    def test_all_sectors_have_positive_betas(self):
+        """Every sector beta should be positive."""
+        for sector, beta in SECTOR_UNLEVERED_BETAS.items():
+            assert beta > 0, f"Sector {sector} has non-positive beta"
+
+
+# ---------------------------------------------------------------------------
+# Property-based tests (Hypothesis)
+# ---------------------------------------------------------------------------
+try:
+    from hypothesis import given, strategies as st, settings, assume
+    HAS_HYPOTHESIS = True
+except ImportError:
+    HAS_HYPOTHESIS = False
+
+if HAS_HYPOTHESIS:
+    # Strategy for valid driver dicts
+    _driver_strategy = st.fixed_dictionaries({
+        "rev_growth_y1": st.floats(min_value=-0.20, max_value=1.0),
+        "rev_growth_terminal": st.floats(min_value=-0.10, max_value=0.50),
+        "ebitda_margin_target": st.floats(min_value=-0.10, max_value=0.90),
+        "fcf_sbc_margin_target": st.floats(min_value=-0.20, max_value=0.85),
+        "ev_ebitda_multiple": st.floats(min_value=3.0, max_value=80.0),
+        "ev_fcf_sbc_multiple": st.floats(min_value=3.0, max_value=80.0),
+        "discount_rate": st.floats(min_value=0.05, max_value=0.25),
+        "tax_rate": st.floats(min_value=0.0, max_value=0.40),
+        "da_pct_rev": st.floats(min_value=0.0, max_value=0.25),
+        "sbc_pct_rev": st.floats(min_value=0.0, max_value=0.40),
+        "share_change_pct": st.floats(min_value=-0.05, max_value=0.10),
+    })
+
+    class TestPropertyBased:
+        """Property-based tests using Hypothesis for target_engine."""
+
+        @given(drivers=_driver_strategy)
+        @settings(max_examples=50, deadline=2000)
+        def test_forecast_always_produces_correct_length(self, drivers):
+            """Forecast should always have exactly FORECAST_YEARS periods."""
+            fin = _make_stub_fin()
+            annual = _forecast_annual(fin, drivers, "FY2025")
+            assert len(annual) == FORECAST_YEARS
+
+        @given(drivers=_driver_strategy)
+        @settings(max_examples=50, deadline=2000)
+        def test_forecast_revenue_never_negative(self, drivers):
+            """Revenue should never go negative (even with extreme contraction)."""
+            assume(drivers["rev_growth_y1"] >= -0.50)
+            fin = _make_stub_fin()
+            annual = _forecast_annual(fin, drivers, "FY2025")
+            for period in annual:
+                assert period.revenue >= 0, f"Negative revenue in {period.period}"
+
+        @given(drivers=_driver_strategy)
+        @settings(max_examples=50, deadline=2000)
+        def test_fcf_margin_never_exceeds_ebitda_margin(self, drivers):
+            """FCF-SBC margin invariant: must always be ≤ EBITDA margin."""
+            fin = _make_stub_fin()
+            annual = _forecast_annual(fin, drivers, "FY2025")
+            for period in annual:
+                assert period.fcf_sbc_margin <= period.ebitda_margin + 0.001, \
+                    f"FCF-SBC margin ({period.fcf_sbc_margin:.3f}) > EBITDA margin ({period.ebitda_margin:.3f}) in {period.period}"
+
+        @given(
+            fcf=st.floats(min_value=1e6, max_value=1e12),
+            wacc=st.floats(min_value=0.06, max_value=0.22),
+            g_term=st.floats(min_value=0.03, max_value=0.50),
+        )
+        @settings(max_examples=50, deadline=2000)
+        def test_gordon_roiic_monotonic_in_fcf(self, fcf, wacc, g_term):
+            """Higher FCF should always produce higher terminal EV."""
+            ev1 = _gordon_roiic_terminal_ev(fcf, wacc, g_term)
+            ev2 = _gordon_roiic_terminal_ev(fcf * 2, wacc, g_term)
+            if ev1 is not None and ev2 is not None:
+                assert ev2 > ev1
+
+        @given(
+            debt=st.floats(min_value=0, max_value=50e9),
+            mcap=st.floats(min_value=1e8, max_value=500e9),
+        )
+        @settings(max_examples=50, deadline=2000)
+        def test_wacc_always_in_bounds(self, debt, mcap):
+            """WACC must always be within [0.06, 0.22] regardless of inputs."""
+            wacc = _compute_bottom_up_wacc("semiconductors", debt, mcap)
+            assert 0.06 <= wacc <= 0.22

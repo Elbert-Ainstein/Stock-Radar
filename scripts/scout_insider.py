@@ -8,6 +8,7 @@ Usage:
 """
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from utils import get_watchlist, save_signals, timestamp
 
@@ -193,19 +194,30 @@ def main():
     print("=" * 50)
 
     watchlist = get_watchlist()
+
+    # Skip stocks with recent signals
+    from utils import get_fresh_tickers
+    fresh = get_fresh_tickers("insider")
+    watchlist = [s for s in watchlist if s["ticker"] not in fresh]
     tickers = [s["ticker"] for s in watchlist]
+    if fresh:
+        from registries import SCOUT_CADENCE_HOURS
+        hrs = SCOUT_CADENCE_HOURS.get("insider", 20)
+        print(f"  Skipping {len(fresh)} stocks with recent signals (<{hrs}h old)")
 
     print(f"\nScanning {len(tickers)} stocks for insider activity: {', '.join(tickers)}")
     print("-" * 50)
 
-    signals = []
-    for ticker in tickers:
-        print(f"\n  Looking up {ticker}...")
-        cik = get_cik(ticker)
+    if not tickers:
+        print("  All stocks have recent insider data — nothing to do")
+        return
 
+    def _process_ticker(ticker):
+        """Process a single ticker for insider activity (called in parallel)."""
+        cik = get_cik(ticker)
         if not cik:
             print(f"  [{ticker}] Could not find CIK, skipping")
-            signals.append({
+            return {
                 "ticker": ticker,
                 "scout": "Insider",
                 "ai": "Script",
@@ -213,20 +225,30 @@ def main():
                 "summary": "Could not find SEC CIK for this ticker.",
                 "timestamp": timestamp(),
                 "data": {"transactions": [], "transaction_count": 0},
-            })
-            continue
+            }
 
         print(f"  [{ticker}] CIK: {cik}")
-        time.sleep(0.2)  # Be nice to SEC servers
+        time.sleep(0.15)  # Be nice to SEC servers
 
         transactions = get_insider_transactions(cik, ticker)
         print(f"  [{ticker}] Found {len(transactions)} Form 4 filings")
 
         result = analyze_insider_activity(ticker, transactions)
-        signals.append(result)
         print(f"  [{ticker}] Signal: {result['signal']} — {result['summary'][:70]}")
+        return result
 
-        time.sleep(0.2)
+    # Parallel processing — SEC EDGAR is I/O bound.
+    # 4 workers keeps us polite to SEC servers while still speeding things up.
+    signals = []
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(_process_ticker, t): t for t in tickers}
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                signals.append(result)
+            except Exception as e:
+                ticker = futures[future]
+                print(f"  [{ticker}] Error: {e}")
 
     save_signals("insider", signals)
 

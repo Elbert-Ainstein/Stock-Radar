@@ -97,6 +97,91 @@ def _to_float(x: Any) -> float | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Ticker integrity rules — re-IPOs, delistings, data cutoffs
+# ---------------------------------------------------------------------------
+# Some tickers have known data contamination issues.  For example, SNDK
+# re-IPO'd on Feb 24 2025 — any financial data dated before that belongs
+# to the OLD SanDisk (acquired by WDC in 2016) and is misleading.
+#
+# TICKER_DATA_CUTOFFS maps ticker → earliest valid date (inclusive).
+# Quarters whose period end-date falls before the cutoff are silently
+# dropped after fetch, and a warning is attached to FinancialData.warnings.
+
+TICKER_DATA_CUTOFFS: dict[str, datetime] = {
+    # SNDK re-IPO'd 2025-02-24 — pre-2025 data is the old SanDisk Corp
+    "SNDK": datetime(2025, 2, 1, tzinfo=timezone.utc),
+}
+
+# Tickers that are known delisted, merged, or otherwise no longer tradable.
+# fetch_financials will raise EarningsFetchError immediately for these
+# instead of wasting an API call and potentially ingesting stale data.
+DELISTED_TICKERS: dict[str, str] = {
+    # "EXAMPLE": "Acquired by XYZ on 2025-01-01 — use XYZ instead",
+}
+
+
+def _apply_data_cutoff(ticker: str, periods: list[dict], freq: str) -> tuple[list[dict], list[str]]:
+    """Remove periods that fall before the ticker's data cutoff date.
+
+    Returns (filtered_periods, warnings).
+    """
+    cutoff = TICKER_DATA_CUTOFFS.get(ticker.upper())
+    if not cutoff or not periods:
+        return periods, []
+
+    warnings: list[str] = []
+    filtered: list[dict] = []
+    dropped = 0
+
+    for p in periods:
+        period_str = p.get("period", "")
+        period_date = p.get("_date")  # Some providers set a raw date
+
+        # Try to extract a date from the period label (e.g. "1Q25" → 2025-03)
+        if period_date and hasattr(period_date, "year"):
+            pdt = datetime(period_date.year, period_date.month, 1, tzinfo=timezone.utc)
+        elif period_str:
+            pdt = _parse_period_to_date(period_str)
+        else:
+            pdt = None
+
+        if pdt and pdt < cutoff:
+            dropped += 1
+            continue
+        filtered.append(p)
+
+    if dropped:
+        warnings.append(
+            f"DATA_CUTOFF: Dropped {dropped} {freq} period(s) for {ticker} "
+            f"before {cutoff.strftime('%Y-%m-%d')} (re-IPO/entity change)"
+        )
+
+    return filtered, warnings
+
+
+def _parse_period_to_date(label: str) -> datetime | None:
+    """Parse period labels like '1Q25', '2024', '2025-03' to a datetime."""
+    import re
+    # Quarterly: "1Q25" or "3Q2024"
+    m = re.match(r"(\d)Q(\d{2,4})", label)
+    if m:
+        q, y = int(m.group(1)), int(m.group(2))
+        if y < 100:
+            y += 2000
+        month = q * 3  # end of quarter month
+        return datetime(y, month, 1, tzinfo=timezone.utc)
+    # Annual: "2024" or "2025"
+    m = re.match(r"^(20\d{2})$", label)
+    if m:
+        return datetime(int(m.group(1)), 12, 1, tzinfo=timezone.utc)
+    # ISO-ish: "2025-03"
+    m = re.match(r"(\d{4})-(\d{2})", label)
+    if m:
+        return datetime(int(m.group(1)), int(m.group(2)), 1, tzinfo=timezone.utc)
+    return None
+
+
 def _period_label(ts, freq: str) -> str:
     """Convert timestamp to '1Q25'/'2024' style label."""
     if hasattr(ts, "year"):
@@ -702,8 +787,13 @@ class EODHDProvider(DataProvider):
         if not ticker:
             raise EarningsFetchError("empty ticker")
 
-        # EODHD uses "TICKER.US" format for US equities
-        eodhd_ticker = f"{ticker}.US"
+        # EODHD uses "TICKER.EXCHANGE" format.
+        # If the ticker already contains an exchange suffix (.HK, .T, .TW, .L, etc.),
+        # use it as-is. Otherwise, default to .US for US equities.
+        if "." in ticker:
+            eodhd_ticker = ticker  # Already has exchange suffix (e.g. 6082.HK, 7203.T)
+        else:
+            eodhd_ticker = f"{ticker}.US"
         url = f"{self.BASE_URL}/{eodhd_ticker}?api_token={self._api_key}&fmt=json"
 
         try:
@@ -767,17 +857,41 @@ class EODHDProvider(DataProvider):
                 except (ValueError, TypeError):
                     pass
         else:
-            # Fallback chain: 50DayMA is a rough approximation — NOT a live
-            # price.  WallStreetTargetPrice is an analyst consensus target and
-            # must NEVER be used as the current price (it would bias the model).
-            last_price = highlights.get("50DayMA")
-            if last_price and float(last_price) > 0:
-                info["price"] = float(last_price)
-                print(
-                    f"  [finance_data] WARNING: {ticker} using 50DayMA "
-                    f"(${last_price}) as price — Alpha Vantage live quote failed",
-                    file=sys.stderr,
-                )
+            # Fallback chain for live price:
+            # 1. For non-US tickers (.HK, .T, .TW, etc.), try yfinance quick quote
+            if "." in ticker:
+                try:
+                    import yfinance as _yf
+                    _ytk = _yf.Ticker(ticker)
+                    _yinfo = _ytk.info or {}
+                    _yprice = _yinfo.get("currentPrice") or _yinfo.get("regularMarketPrice")
+                    if _yprice and float(_yprice) > 0:
+                        # Convert to USD if needed for consistency
+                        _currency = _yinfo.get("currency", "USD")
+                        info["price"] = float(_yprice)
+                        info["currency"] = _currency
+                        print(
+                            f"  [finance_data] {ticker}: live price ${_yprice:.2f} "
+                            f"({_currency}) via yfinance fallback",
+                            file=sys.stderr,
+                        )
+                except Exception as _yfe:
+                    print(
+                        f"  [finance_data] WARNING: {ticker} yfinance price fallback failed: {_yfe}",
+                        file=sys.stderr,
+                    )
+
+            # 2. 50DayMA is a rough approximation — NOT a live price.
+            #    WallStreetTargetPrice is analyst consensus and must NEVER be used.
+            if info["price"] is None or info["price"] == 0:
+                last_price = highlights.get("50DayMA")
+                if last_price and float(last_price) > 0:
+                    info["price"] = float(last_price)
+                    print(
+                        f"  [finance_data] WARNING: {ticker} using 50DayMA "
+                        f"(${last_price}) as price — all live quote sources failed",
+                        file=sys.stderr,
+                    )
 
         return _validate_and_build(
             ticker=ticker,
@@ -1030,6 +1144,10 @@ def fetch_financials(ticker: str, min_quarters: int = 4) -> FinancialData:
     This is the public API that all downstream consumers call. The provider
     is selected via get_provider() — see its docstring for precedence rules.
 
+    If the primary provider (EODHD) fails and yfinance is available as a
+    fallback, it retries with yfinance automatically. This ensures the
+    pipeline doesn't halt due to transient EODHD API issues.
+
     Parameters
     ----------
     ticker : str
@@ -1040,11 +1158,54 @@ def fetch_financials(ticker: str, min_quarters: int = 4) -> FinancialData:
     Raises
     ------
     EarningsFetchError
-        If the provider returns nothing, or if any required line item is missing
-        across all periods in both quarterly AND annual views.
+        If ALL providers fail. The last error is raised.
     """
+    # ── Check for known delisted tickers ──
+    upper = ticker.upper()
+    if upper in DELISTED_TICKERS:
+        raise EarningsFetchError(
+            f"{ticker} is delisted/inactive: {DELISTED_TICKERS[upper]}"
+        )
+
     provider = get_provider()
-    return provider.fetch(ticker, min_quarters=min_quarters)
+    try:
+        result = provider.fetch(ticker, min_quarters=min_quarters)
+    except EarningsFetchError as primary_err:
+        # If the primary provider is not yfinance, try yfinance as fallback
+        if provider.name != "yfinance":
+            print(
+                f"  [finance_data] {provider.name} failed for {ticker}: {primary_err}",
+                file=sys.stderr,
+            )
+            print(
+                f"  [finance_data] Falling back to yfinance for {ticker}...",
+                file=sys.stderr,
+            )
+            try:
+                fallback = YFinanceProvider()
+                result = fallback.fetch(ticker, min_quarters=min_quarters)
+                result.warnings.append(
+                    f"FALLBACK: Used yfinance instead of {provider.name} "
+                    f"(primary error: {primary_err})"
+                )
+            except EarningsFetchError:
+                raise primary_err  # fallback also failed — raise the original
+        else:
+            raise
+
+    # ── Apply data cutoffs for re-IPO'd / entity-change tickers ──
+    if upper in TICKER_DATA_CUTOFFS:
+        for attr, freq in [
+            ("quarterly_income", "quarterly"), ("quarterly_cashflow", "quarterly"),
+            ("quarterly_balance", "quarterly"), ("annual_income", "annual"),
+            ("annual_cashflow", "annual"), ("annual_balance", "annual"),
+        ]:
+            periods = getattr(result, attr, [])
+            filtered, cutoff_warnings = _apply_data_cutoff(upper, periods, freq)
+            setattr(result, attr, filtered)
+            result.warnings.extend(cutoff_warnings)
+
+    return result
 
 
 # ---------------------------------------------------------------------------

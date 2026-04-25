@@ -10,6 +10,7 @@ import os
 import json
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from utils import load_env, get_watchlist, save_signals, timestamp
 
@@ -330,24 +331,45 @@ def main():
         return []
 
     watchlist = get_watchlist()
+
+    # Skip stocks with recent signals
+    from utils import get_fresh_tickers
+    fresh = get_fresh_tickers("news")
+    before = len(watchlist)
+    watchlist = [s for s in watchlist if s["ticker"] not in fresh]
+    if fresh:
+        from registries import SCOUT_CADENCE_HOURS
+        hrs = SCOUT_CADENCE_HOURS.get("news", 18)
+        print(f"  Skipping {before - len(watchlist)} stocks with recent signals (<{hrs}h old)")
+
     print(f"\nScanning news for {len(watchlist)} stocks")
     print("-" * 50)
 
-    signals = []
-    for stock in watchlist:
+    if not watchlist:
+        print("  All stocks have recent news — nothing to do")
+        return []
+
+    def _scan_stock(stock):
+        """Scan news for a single stock (called in parallel)."""
         ticker = stock["ticker"]
         name = stock["name"]
-        print(f"\n  Searching news for {ticker} ({name})...")
-
         raw = search_stock_news(ticker, name)
         result = parse_search_results(ticker, raw)
-        signals.append(result)
+        print(f"  [{ticker}] Signal: {result['signal']} — {result['summary'][:60]}")
+        time.sleep(0.5)  # Stagger Perplexity API calls slightly
+        return result
 
-        sig = result["signal"]
-        print(f"  [{ticker}] Signal: {sig}")
-        print(f"  [{ticker}] {result['summary'][:80]}")
-
-        time.sleep(1)  # Rate limiting
+    # Parallel news scanning — 3 workers to stay within Perplexity rate limits
+    signals = []
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {pool.submit(_scan_stock, s): s["ticker"] for s in watchlist}
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                signals.append(result)
+            except Exception as e:
+                ticker = futures[future]
+                print(f"  [{ticker}] Error: {e}")
 
     save_signals("news", signals)
 

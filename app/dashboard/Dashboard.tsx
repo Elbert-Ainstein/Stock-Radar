@@ -113,15 +113,11 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
     }
   }, [showScoutPanel, feedbackLoaded]);
 
-  // Auto-run pipeline on first load if no data exists
+  // Track whether any stocks have signal data
   const hasData = stocks.length > 0 && stocks.some(s => s.signals.length > 0);
-  useEffect(() => {
-    if (!hasData && stocks.length > 0 && !pipelineRunning) {
-      console.log("[Stock Radar] No signal data found — auto-running free pipeline...");
-      runPipeline(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // NOTE: Auto-run removed. Previously this would auto-trigger a free pipeline
+  // when no signal data existed, but after a DB wipe with 50 stocks this caused
+  // a surprise 10-15 minute pipeline run. Users should manually click "Run Pipeline".
 
   const runPipeline = async (freeOnly = false) => {
     if (pipelineRunning) return; // Guard: prevent double-trigger
@@ -154,6 +150,22 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
       setPipelineError("Could not reach the server. Is it running?");
       setPipelineProgress(null);
       setPipelineRunning(false);
+    }
+  };
+
+  const stopPipeline = async () => {
+    try {
+      const res = await fetch("/api/pipeline", { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok) {
+        setPipelineRunning(false);
+        setPipelineProgress(null);
+        setPipelineError(null);
+      } else {
+        setPipelineError(data.message || "Failed to stop pipeline");
+      }
+    } catch {
+      setPipelineError("Could not reach the server.");
     }
   };
 
@@ -312,6 +324,7 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
               <a href="/discovery" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Discovery</a>
               <a href="/model" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Models</a>
               <a href="/ask" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Ask AI</a>
+              <a href="/logs" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Logs</a>
             </nav>
           </div>
           <div className="flex items-center gap-6 text-xs text-[var(--muted)]">
@@ -328,24 +341,26 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
             </button>
             {/* Pipeline controls */}
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => runPipeline(false)}
-                disabled={pipelineRunning}
-                className={cn(
-                  "px-3 py-1.5 rounded-md border text-[11px] font-medium transition-all",
-                  pipelineRunning
-                    ? "border-[var(--accent-muted)]/30 text-[var(--muted)] cursor-not-allowed opacity-50"
-                    : "border-[var(--border)] text-[var(--secondary)] hover:text-[var(--text)] hover:border-[var(--border-hover)] hover:bg-[var(--hover)]"
-                )}
-                title={pipelineRunning ? "Pipeline is already running" : "Run all scouts including AI-powered ones (requires API keys)"}
-              >
-                {pipelineRunning ? (
+              {pipelineRunning ? (
+                <button
+                  onClick={stopPipeline}
+                  className="px-3 py-1.5 rounded-md border border-red-500/40 text-[11px] font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/60 transition-all"
+                  title="Force-stop the running pipeline"
+                >
                   <span className="flex items-center gap-1.5">
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v2M6 9v2M1 6h2M9 6h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="animate-spin origin-center" style={{ transformBox: "fill-box" }}/></svg>
-                    Running...
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="2.5" y="2.5" width="7" height="7" rx="1" fill="currentColor"/></svg>
+                    Stop Pipeline
                   </span>
-                ) : "Run Pipeline"}
-              </button>
+                </button>
+              ) : (
+                <button
+                  onClick={() => runPipeline(false)}
+                  className="px-3 py-1.5 rounded-md border border-[var(--border)] text-[11px] font-medium text-[var(--secondary)] hover:text-[var(--text)] hover:border-[var(--border-hover)] hover:bg-[var(--hover)] transition-all"
+                  title="Run all scouts including AI-powered ones (requires API keys)"
+                >
+                  Run Pipeline
+                </button>
+              )}
               <button
                 onClick={() => runPipeline(true)}
                 disabled={pipelineRunning}

@@ -152,7 +152,7 @@ export default function CriteriaChecklist({
                             onClick={e => e.stopPropagation()}
                           >
                             {n.title}
-                            {n.source && <span className="text-[var(--muted)] ml-1">\u2014 {n.source}</span>}
+                            {n.source && <span className="text-[var(--muted)] ml-1">— {n.source}</span>}
                             {n.date && <span className="text-[var(--muted)] ml-1">{n.date}</span>}
                           </a>
                         ))}

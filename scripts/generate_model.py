@@ -25,6 +25,7 @@ import requests
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils import load_env, get_watchlist, timestamp
+from registries import ALL_ARCHETYPES, LLM_VALUATION_METHODS, ALL_LIFECYCLE_STAGES, ALL_MOAT_WIDTHS
 
 # Force unbuffered output so status lines appear immediately
 print = functools.partial(print, flush=True)
@@ -36,6 +37,117 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 ANALYST_PROMPT_PATH = CONFIG_DIR / "analyst_prompt.md"
+
+
+# ── Structured Outputs JSON Schema ──────────────────────────────────────────
+# Anthropic Structured Outputs (GA) guarantees the response conforms to this
+# schema, eliminating the need for multi-layer JSON repair.  The schema mirrors
+# the MODEL_GEN_PROMPT template exactly.  See:
+# https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs
+
+_SCENARIO_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "probability": {"type": "number"},
+        "price": {"type": "number"},
+        "trigger": {"type": "string"},
+    },
+    "required": ["probability", "price", "trigger"],
+    "additionalProperties": False,
+}
+
+MODEL_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "thesis": {"type": "string"},
+        "sector": {"type": "string"},
+        "kill_condition": {"type": "string"},
+        "archetype": {
+            "type": "object",
+            "properties": {
+                "primary": {
+                    "type": "string",
+                    "enum": ALL_ARCHETYPES,
+                },
+                "secondary": {
+                    "anyOf": [
+                        {"type": "string", "enum": ALL_ARCHETYPES},
+                        {"type": "null"},
+                    ],
+                },
+                "justification": {"type": "string"},
+                "lifecycle_stage": {
+                    "type": "string",
+                    "enum": ALL_LIFECYCLE_STAGES,
+                },
+                "moat_width": {
+                    "type": "string",
+                    "enum": ALL_MOAT_WIDTHS,
+                },
+            },
+            "required": ["primary", "secondary", "justification",
+                         "lifecycle_stage", "moat_width"],
+            "additionalProperties": False,
+        },
+        "valuation_method": {"type": "string", "enum": LLM_VALUATION_METHODS},
+        "valuation_justification": {"type": "string"},
+        "model_defaults": {
+            "type": "object",
+            "properties": {
+                "revenue_b": {"type": "number"},
+                "op_margin": {"type": "number"},
+                "tax_rate": {"type": "number"},
+                "shares_m": {"type": "number"},
+                "pe_multiple": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "ps_multiple": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "valuation_method": {"type": "string", "enum": LLM_VALUATION_METHODS},
+            },
+            "required": ["revenue_b", "op_margin", "tax_rate", "shares_m",
+                         "pe_multiple", "ps_multiple", "valuation_method"],
+            "additionalProperties": False,
+        },
+        "scenarios": {
+            "type": "object",
+            "properties": {
+                "bull": _SCENARIO_SCHEMA,
+                "base": _SCENARIO_SCHEMA,
+                "bear": _SCENARIO_SCHEMA,
+            },
+            "required": ["bull", "base", "bear"],
+            "additionalProperties": False,
+        },
+        "criteria": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "label": {"type": "string"},
+                    "detail": {"type": "string"},
+                    "variable": {"type": "string", "enum": ["R", "M", "P", "S", "E"]},
+                    "weight": {"type": "string", "enum": ["critical", "important", "monitoring"]},
+                    "status": {"type": "string", "enum": ["not_yet", "met", "failed"]},
+                    "eval_hint": {"type": "string"},
+                    "price_impact_pct": {"type": "number"},
+                    "price_impact_direction": {"type": "string", "enum": ["up", "down_if_failed"]},
+                },
+                "required": ["id", "label", "detail", "variable", "weight",
+                             "status", "eval_hint", "price_impact_pct",
+                             "price_impact_direction"],
+                "additionalProperties": False,
+            },
+        },
+        "target_notes": {"type": "string"},
+        "divergence_note": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+    "required": [
+        "thesis", "sector", "kill_condition", "archetype",
+        "valuation_method", "valuation_justification",
+        "model_defaults", "scenarios", "criteria", "target_notes",
+        "divergence_note",
+    ],
+    "additionalProperties": False,
+}
 
 
 def load_analyst_guideline() -> str:
@@ -155,16 +267,23 @@ def research_financials(ticker: str, name: str, sector: str) -> str:
         return ""
 
     # Focus Perplexity on what quant scout CAN'T provide
+    # Dynamically compute fiscal years so queries stay relevant
+    from datetime import datetime as _dt
+    _now = _dt.now()
+    fy_current = _now.year
+    fy_next = fy_current + 1
+    fy_after = fy_current + 2
+
     queries = [
-        f"{ticker} {name} FY2025 FY2026 FY2027 revenue guidance analyst consensus estimates forward outlook",
+        f"{ticker} {name} FY{fy_current} FY{fy_next} FY{fy_after} revenue guidance analyst consensus estimates forward outlook",
         f"{ticker} {name} management guidance targets long-term margin goals TAM market share competitive moat",
         f"{ticker} {name} bull case bear case risks catalysts price target analyst ratings recent upgrades downgrades",
         # Industry cycle — critical for cyclical stocks
-        f"{sector} industry supply demand cycle outlook 2026 2027 pricing trends capacity expansion risks competitors",
+        f"{sector} industry supply demand cycle outlook {fy_current} {fy_next} pricing trends capacity expansion risks competitors",
     ]
 
     research_parts = []
-    query_labels = ["guidance/moat", "bull-bear/catalysts", "industry cycle"]
+    query_labels = ["guidance/consensus", "moat/TAM", "bull-bear/catalysts", "industry cycle"]
     for i, q in enumerate(queries):
         label = query_labels[i] if i < len(query_labels) else f"query {i+1}"
         try:
@@ -335,6 +454,20 @@ Choose based on the financial data and research above. A company can have second
 characteristics (e.g., LITE = GARP primary + Cyclical secondary), but the PRIMARY
 archetype determines the analytical framework. Include secondary if relevant.
 
+ALSO classify the company's position on two additional dimensions:
+
+LIFECYCLE STAGE (Damodaran corporate lifecycle):
+  "startup" — pre-revenue or minimal revenue, burning cash, product-market fit unproven
+  "high_growth" — revenue growing >25%, negative or slim profits, reinvesting heavily
+  "mature_growth" — revenue growing 10-25%, positive and expanding margins
+  "mature_stable" — revenue growing <10%, stable margins, returning cash to shareholders
+  "decline" — revenue shrinking, business in structural decline
+
+MOAT WIDTH (Morningstar-style competitive advantage assessment):
+  "none" — no sustainable competitive advantage; commodity business
+  "narrow" — competitive advantage exists but is not durable (5-10 years)
+  "wide" — durable competitive advantage with 10+ year runway (brand, network, IP, switching costs)
+
 METHODOLOGY:
 Your outputs feed into a 5-year DCF engine that computes:
   EV = Terminal EBITDA × EV/EBITDA (blended with FCF-SBC leg)
@@ -355,7 +488,9 @@ Return ONLY valid JSON — no markdown fences, no commentary.
   "archetype": {{
     "primary": "garp" | "cyclical" | "transformational" | "compounder" | "special_situation",
     "secondary": null or one of the above (if the stock has meaningful hybrid characteristics),
-    "justification": "1-2 sentences explaining why this archetype was chosen and what it means for the analysis"
+    "justification": "1-2 sentences explaining why this archetype was chosen and what it means for the analysis",
+    "lifecycle_stage": "startup" | "high_growth" | "mature_growth" | "mature_stable" | "decline",
+    "moat_width": "none" | "narrow" | "wide"
   }},
 
   "valuation_method": "pe" or "ps",
@@ -564,7 +699,7 @@ def generate_model_with_claude(
 
     try:
         label = "Retrying" if retry else "Generating"
-        print(f"  [{ticker}] {label} model via Claude...")
+        print(f"  [{ticker}] {label} model via Claude (structured output)...")
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
             headers={
@@ -577,6 +712,13 @@ def generate_model_with_claude(
                 "max_tokens": 32000,
                 "temperature": 0,
                 "messages": [{"role": "user", "content": prompt}],
+                # Structured Outputs — guarantees schema-conformant JSON
+                "output_config": {
+                    "format": {
+                        "type": "json_schema",
+                        "schema": MODEL_OUTPUT_SCHEMA,
+                    },
+                },
             },
             timeout=180,
         )
@@ -592,72 +734,59 @@ def generate_model_with_claude(
         if stop_reason == "max_tokens":
             print(f"  [{ticker}] WARNING: response truncated (hit max_tokens)")
 
-        # Parse JSON — robust extraction handles preambles/postambles
-        clean = content.strip()
-        # First try: strip markdown fences
-        clean = re.sub(r'^```(?:json)?\s*', '', clean)
-        clean = re.sub(r'\s*```$', '', clean)
+        # ── Primary parse — structured output should always be valid JSON ──
         try:
-            return _attach_meta(json.loads(clean))
+            result = json.loads(content)
+            if result.get("model_defaults") and result.get("scenarios"):
+                repair_method = "structured_output"
+                return _attach_meta(result)
+            else:
+                print(f"  [{ticker}] Structured output parsed but missing required fields")
         except json.JSONDecodeError:
-            pass
+            print(f"  [{ticker}] UNEXPECTED: structured output was not valid JSON")
 
-        # Fallback 1: brace extraction
+        # ── Legacy fallback — should rarely fire with structured outputs ──
+        # Kept as a safety net; if this fires, it's a defect to investigate.
         repair_attempts += 1
+        print(f"  [{ticker}] Falling back to legacy JSON repair (this is a defect — please investigate)")
+
+        # Brace extraction + trailing comma fix
         first_brace = content.find('{')
         last_brace = content.rfind('}')
         if first_brace != -1 and last_brace > first_brace:
             extracted = content[first_brace:last_brace + 1]
+            repaired = re.sub(r',\s*([}\]])', r'\1', extracted)
             try:
-                repair_method = "brace_extraction"
-                return _attach_meta(json.loads(extracted))
+                repair_method = "legacy_brace_extraction"
+                return _attach_meta(json.loads(repaired))
             except json.JSONDecodeError:
                 pass
 
-            # Fallback 2: repair common JSON issues
-            repair_attempts += 1
-            try:
-                repaired = extracted
-                # Remove trailing commas before } or ]
-                repaired = re.sub(r',\s*([}\]])', r'\1', repaired)
-                # Fix unescaped newlines inside string values
-                repaired = re.sub(r'(?<=": ")(.*?)(?="[,\s}])', lambda m: m.group(0).replace('\n', ' '), repaired)
-                repair_method = "trailing_comma_fix"
-                return _attach_meta(json.loads(repaired))
-            except (json.JSONDecodeError, Exception):
-                pass
-
-        # Fallback 3: truncation repair — close open braces/brackets
+        # Truncation repair as last resort
         if stop_reason == "max_tokens":
             repair_attempts += 1
-            print(f"  [{ticker}] Attempting truncated JSON repair...")
             repaired = repair_truncated_json(content)
             if repaired:
                 try:
                     result = json.loads(repaired)
-                    # Validate it has the minimum required fields
                     if result.get("model_defaults") and result.get("scenarios"):
-                        print(f"  [{ticker}] Truncation repair succeeded (some fields may be partial)")
-                        repair_method = "truncation_repair"
+                        repair_method = "legacy_truncation_repair"
                         return _attach_meta(result)
-                    else:
-                        print(f"  [{ticker}] Repaired JSON missing required fields")
-                except json.JSONDecodeError as e3:
-                    print(f"  [{ticker}] Truncation repair failed: {e3}")
+                except json.JSONDecodeError:
+                    pass
 
-        # Fallback 4: retry with compact prompt if first attempt truncated
+        # Retry with compact prompt if truncated
         if stop_reason == "max_tokens" and not retry:
             print(f"  [{ticker}] Retrying with compact prompt...")
             return generate_model_with_claude(
                 ticker, name, sector, thesis, kill_condition,
                 target_price, timeline,
-                research[:3000],  # Halve research text
+                research[:3000],
                 quant_data,
                 retry=True,
             )
 
         print(f"  [{ticker}] All JSON parse attempts failed")
-        # Dump first/last 200 chars for debugging
         print(f"  Start: {content[:200]}")
         print(f"  End: ...{content[-200:]}")
         return None
@@ -671,8 +800,8 @@ def generate_model_with_claude(
         return None
 
 
-def update_stock_in_supabase(ticker: str, model_config: dict, research_text: str = "", quant_data: dict | None = None) -> bool:
-    """Update the stock's model config in Supabase, including cached research."""
+def update_stock_in_supabase(ticker: str, model_config: dict, research_text: str = "", quant_data: dict | None = None, stock_name: str = "") -> bool:
+    """Upsert the stock's model config in Supabase, including cached research."""
     try:
         from supabase_helper import get_client
         from datetime import datetime, timezone
@@ -709,11 +838,16 @@ def update_stock_in_supabase(ticker: str, model_config: dict, research_text: str
                 "sources": ["Quant Scout (financials)", "Perplexity Sonar (guidance/catalysts)"],
             }
 
-        # Try update; if column doesn't exist, strip it and retry (loop for multiple missing)
+        # Ensure ticker + name + active are present for upsert (in case row doesn't exist yet)
+        update["ticker"] = ticker
+        update["name"] = stock_name or model_config.get("name") or ticker
+        update.setdefault("active", True)
+
+        # Try upsert; if column doesn't exist, strip it and retry (loop for multiple missing)
         stripped = []
         for attempt in range(5):  # max 5 missing columns before giving up
             try:
-                resp = sb.table("stocks").update(update).eq("ticker", ticker).execute()
+                resp = sb.table("stocks").upsert(update, on_conflict="ticker").execute()
                 if stripped:
                     print(f"  [{ticker}] Saved (stripped missing columns: {', '.join(stripped)})")
                 return bool(resp.data)
@@ -778,17 +912,45 @@ def process_stock(stock: dict, metrics=None) -> dict | None:
         return None
 
     # Stage 2: Generate model via Claude (with quant facts + Perplexity research)
+    # Self-consistency: sample N times if SELF_CONSISTENCY_N > 1
+    from self_consistency import sample_model_generation, DEFAULT_N as SC_N
     gen_start = time.monotonic()
-    model_config = generate_model_with_claude(
-        ticker, name, sector, thesis, kill_condition,
-        target_price, timeline, research, quant_data,
-    )
+
+    def _generate():
+        return generate_model_with_claude(
+            ticker, name, sector, thesis, kill_condition,
+            target_price, timeline, research, quant_data,
+        )
+
+    if SC_N > 1:
+        print(f"  Stage 2: Generating model via Claude (N={SC_N} self-consistency samples)...")
+        sc_result = sample_model_generation(_generate, n=SC_N)
+        model_config = sc_result.best_result
+        if sc_result.n_success > 1:
+            print(f"  {sc_result.summary()}")
+            # Attach consistency metadata to the model config
+            if model_config:
+                model_config["_consistency"] = {
+                    "n_samples": sc_result.n_samples,
+                    "n_success": sc_result.n_success,
+                    "mean_prices": sc_result.mean_prices,
+                    "stderr_prices": sc_result.stderr_prices,
+                    "high_variance": sc_result.high_variance,
+                    "archetype_votes": sc_result.archetype_votes,
+                }
+    else:
+        model_config = _generate()
+
     gen_duration = time.monotonic() - gen_start
 
     # Extract and strip generation metadata before any further processing
     gen_meta = {}
     if model_config and "_gen_meta" in model_config:
         gen_meta = model_config.pop("_gen_meta")
+    # Strip consistency metadata (observability only, not saved to DB)
+    if model_config and "_consistency" in model_config:
+        consistency_meta = model_config.pop("_consistency")
+        gen_meta["consistency"] = consistency_meta
 
     if not model_config:
         # Record failed generation in metrics
@@ -836,7 +998,7 @@ def process_stock(stock: dict, metrics=None) -> dict | None:
 
     # Stage 3: Save to Supabase (with cached research for auditability)
     print(f"  Stage 3: Saving to Supabase...")
-    if update_stock_in_supabase(ticker, model_config, research, quant_data):
+    if update_stock_in_supabase(ticker, model_config, research, quant_data, stock_name=name):
         print(f"  [{ticker}] Model saved successfully!")
     else:
         print(f"  [{ticker}] Supabase save failed — dumping to stdout")

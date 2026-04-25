@@ -42,8 +42,57 @@ REQUEST_TIMEOUT = 45
 
 # ─── Decay / cap constants (tune here) ───
 RECENCY_HALF_LIFE_DAYS = 62  # ≈ 90-day effective window, 62-day half-life
+
+# Hard-cap fallbacks (used when firm volatility data is unavailable)
 MAX_SINGLE_EVENT_PCT = 10.0  # no single event contributes more than ±10% to target
 MAX_TOTAL_EVENT_PCT = 15.0   # total event adjustment capped at ±15%
+
+# Volatility-scaled caps (k × σ_firm approach):
+# Instead of fixed ±10%/±15% caps for all stocks, scale by the firm's
+# annualized volatility. A low-vol stock (σ=25%) gets tighter caps than
+# a high-vol stock (σ=80%), reflecting that events move high-vol names more.
+SINGLE_EVENT_K = 0.4         # single event cap = k × σ_firm (annualized)
+TOTAL_EVENT_K = 0.6          # total adjustment cap = k × σ_firm
+DEFAULT_ANNUALIZED_VOL = 0.45  # fallback if vol can't be computed
+
+
+def _estimate_annualized_vol(ticker: str) -> float:
+    """Estimate annualized volatility from recent price history.
+
+    Uses 90 trading days of daily returns if available via yfinance.
+    Falls back to DEFAULT_ANNUALIZED_VOL on any error.
+    """
+    try:
+        import yfinance as yf
+        hist = yf.Ticker(ticker).history(period="6mo")
+        if hist is None or len(hist) < 20:
+            return DEFAULT_ANNUALIZED_VOL
+        returns = hist["Close"].pct_change().dropna()
+        if len(returns) < 20:
+            return DEFAULT_ANNUALIZED_VOL
+        daily_vol = float(returns.std())
+        ann_vol = daily_vol * (252 ** 0.5)
+        # Clamp to [0.15, 1.50] to avoid pathological values
+        return max(0.15, min(1.50, ann_vol))
+    except Exception:
+        return DEFAULT_ANNUALIZED_VOL
+
+
+def get_event_caps(ticker: str | None = None) -> tuple[float, float]:
+    """Return (max_single_event_pct, max_total_event_pct) for a ticker.
+
+    When ticker is provided, scales caps by the firm's annualized vol.
+    Falls back to hard-cap constants if vol estimation fails.
+    """
+    if not ticker:
+        return MAX_SINGLE_EVENT_PCT, MAX_TOTAL_EVENT_PCT
+    vol = _estimate_annualized_vol(ticker)
+    single_cap = round(vol * SINGLE_EVENT_K * 100, 1)  # convert to percentage
+    total_cap = round(vol * TOTAL_EVENT_K * 100, 1)
+    # Floor at minimum useful caps (2% single, 3% total)
+    single_cap = max(2.0, single_cap)
+    total_cap = max(3.0, total_cap)
+    return single_cap, total_cap
 
 # Per-event-type stack cap: when N events of the same type fire (e.g. 5
 # `market_share_gain` events all reflecting the same "AMD takes share"
@@ -344,9 +393,11 @@ def reason_events(events: list[dict], stock_context: dict) -> list[dict]:
         # Expected contribution = magnitude × probability × compounded_confidence × recency
         expected = result["magnitude_pct"] * result["probability"] * compounded_conf * recency
 
-        # Cap single event
+        # Cap single event (volatility-scaled if ticker available)
+        ticker = stock_context.get("ticker") or ""
+        single_cap, _ = get_event_caps(ticker) if ticker else (MAX_SINGLE_EVENT_PCT, MAX_TOTAL_EVENT_PCT)
         sign = 1 if expected >= 0 else -1
-        capped = sign * min(abs(expected), MAX_SINGLE_EVENT_PCT)
+        capped = sign * min(abs(expected), single_cap)
 
         reasoned.append({
             "event_id": _event_id(ticker, ev.get("summary", "")),
@@ -379,23 +430,41 @@ def reason_events(events: list[dict], stock_context: dict) -> list[dict]:
     # expected_contribution_pct is rebalanced to reflect correlated facets.
     _apply_type_stack_cap(reasoned)
 
+    # Apply calibration ratios from feedback loop (if available).
+    # These scale predictions toward historically-observed magnitudes.
+    try:
+        from calibration import get_event_calibration_ratios
+        cal_ratios = get_event_calibration_ratios()
+        if cal_ratios:
+            for ev in reasoned:
+                ratio = cal_ratios.get(ev.get("type", ""), 1.0)
+                if ratio != 1.0:
+                    ev["pre_calibration_pct"] = ev["expected_contribution_pct"]
+                    ev["expected_contribution_pct"] = round(ev["expected_contribution_pct"] * ratio, 2)
+                    ev["calibration_ratio"] = ratio
+    except ImportError:
+        pass  # calibration module not available
+
     reasoned.sort(key=lambda x: abs(x["expected_contribution_pct"]), reverse=True)
     return reasoned
 
 
-def sum_adjustments(reasoned_events: list[dict]) -> dict:
+def sum_adjustments(reasoned_events: list[dict], ticker: str | None = None) -> dict:
     """Combine reasoned events into a total target adjustment.
-    Applies total-saturation cap. Returns breakdown for audit.
+    Applies total-saturation cap (volatility-scaled when ticker provided).
+    Returns breakdown for audit.
     """
+    _, total_cap = get_event_caps(ticker)
     raw_sum = sum(e["expected_contribution_pct"] for e in reasoned_events)
-    capped = max(-MAX_TOTAL_EVENT_PCT, min(MAX_TOTAL_EVENT_PCT, raw_sum))
+    capped = max(-total_cap, min(total_cap, raw_sum))
     return {
         "event_adjustment_pct": round(capped, 2),
         "raw_sum_pct": round(raw_sum, 2),
-        "capped": abs(raw_sum) > MAX_TOTAL_EVENT_PCT,
+        "capped": abs(raw_sum) > total_cap,
         "event_count": len(reasoned_events),
         "up_count": sum(1 for e in reasoned_events if e["direction"] == "up"),
         "down_count": sum(1 for e in reasoned_events if e["direction"] == "down"),
+        "vol_scaled_caps": {"single": get_event_caps(ticker)[0], "total": total_cap},
     }
 
 

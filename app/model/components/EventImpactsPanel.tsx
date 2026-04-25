@@ -148,9 +148,9 @@ export default function EventImpactsPanel({
           <span className="text-[var(--muted)]">
             {summary.event_count} event{summary.event_count === 1 ? "" : "s"}
             {" \u00B7 "}
-            <span className="text-[var(--success)]">{summary.up_count}\u2191</span>
+            <span className="text-[var(--success)]">{summary.up_count}↑</span>
             {" / "}
-            <span className="text-[var(--danger)]">{summary.down_count}\u2193</span>
+            <span className="text-[var(--danger)]">{summary.down_count}↓</span>
           </span>
           <span className={cn("tabular-nums", adjColor)}>
             {adjPct >= 0 ? "+" : ""}
@@ -174,7 +174,7 @@ export default function EventImpactsPanel({
                 ${criteriaTarget.toLocaleString()}
               </div>
             </div>
-            <div className="text-[var(--faint)]">\u2192</div>
+            <div className="text-[var(--faint)]">→</div>
             <div>
               <div className="text-[var(--muted)] mb-0.5">With events (weighted)</div>
               <div className={cn("font-mono tabular-nums", adjColor)}>
@@ -204,11 +204,11 @@ export default function EventImpactsPanel({
               <span className="text-[var(--muted)]">
                 Event weight: <span className="font-mono tabular-nums text-[var(--text)]">{(blend.event_weight * 100).toFixed(0)}%</span>
               </span>
-              <span className="text-[var(--faint)]">\u00B7</span>
+              <span className="text-[var(--faint)]">·</span>
               <span className="text-[var(--muted)]">
                 Raw events: <span className="font-mono tabular-nums">{blend.event_pct_raw >= 0 ? "+" : ""}{blend.event_pct_raw.toFixed(1)}%</span>
               </span>
-              <span className="text-[var(--faint)]">\u00B7</span>
+              <span className="text-[var(--faint)]">·</span>
               <span className="text-[var(--muted)]">
                 After weighting: <span className="font-mono tabular-nums">{blend.event_pct_weighted >= 0 ? "+" : ""}{blend.event_pct_weighted.toFixed(1)}%</span>
               </span>
@@ -448,7 +448,7 @@ export default function EventImpactsPanel({
                           rel="noopener noreferrer"
                           className="text-[var(--accent)] hover:underline block truncate"
                         >
-                          {e.source || "link"} \u2014 {e.headline || e.url}
+                          {e.source || "link"} — {e.headline || e.url}
                         </a>
                       ))}
                     </div>

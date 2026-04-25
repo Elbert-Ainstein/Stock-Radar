@@ -32,11 +32,23 @@ CREATE TABLE IF NOT EXISTS stocks (
   criteria           JSONB DEFAULT '[]'::JSONB,
   -- Array of criterion objects
 
+  -- Archetype classification (populated by model generation)
+  archetype          JSONB DEFAULT '{}'::JSONB,
+  -- e.g. {"primary":"garp","secondary":null,"justification":"..."}
+
+  -- Research cache for auditability (populated by model generation)
+  research_cache     JSONB DEFAULT '{}'::JSONB,
+  -- e.g. {"generated_at":"...","perplexity_research":"...","quant_snapshot":{}}
+
   -- Metadata
   active             BOOLEAN DEFAULT TRUE,
   added_at           TIMESTAMPTZ DEFAULT NOW(),
   updated_at         TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Additive migration for existing installs (idempotent)
+ALTER TABLE stocks ADD COLUMN IF NOT EXISTS archetype JSONB DEFAULT '{}'::JSONB;
+ALTER TABLE stocks ADD COLUMN IF NOT EXISTS research_cache JSONB DEFAULT '{}'::JSONB;
 
 -- 2. SIGNALS (per-scout, per-stock, per-run — replaces *_signals.json)
 CREATE TABLE IF NOT EXISTS signals (
@@ -122,12 +134,36 @@ ALTER TABLE analysis ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pipeline_runs ENABLE ROW LEVEL SECURITY;
 
 -- Allow anon key full access (single-user app)
+-- Drop first to make re-runs idempotent
+DROP POLICY IF EXISTS "Allow all on stocks" ON stocks;
+DROP POLICY IF EXISTS "Allow all on signals" ON signals;
+DROP POLICY IF EXISTS "Allow all on analysis" ON analysis;
+DROP POLICY IF EXISTS "Allow all on pipeline_runs" ON pipeline_runs;
+
 CREATE POLICY "Allow all on stocks" ON stocks FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on signals" ON signals FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on analysis" ON analysis FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on pipeline_runs" ON pipeline_runs FOR ALL USING (true) WITH CHECK (true);
 
--- 8. Updated_at trigger for stocks
+-- 8. ARCHETYPE_HISTORY (tracks classification stability over time)
+CREATE TABLE IF NOT EXISTS archetype_history (
+  id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  ticker        TEXT NOT NULL,
+  archetype     TEXT NOT NULL,          -- primary archetype: garp, cyclical, etc.
+  secondary     TEXT,                   -- secondary archetype (nullable)
+  justification TEXT DEFAULT '',        -- why this classification was chosen
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_archetype_history_ticker ON archetype_history (ticker);
+CREATE INDEX IF NOT EXISTS idx_archetype_history_created ON archetype_history (created_at DESC);
+
+ALTER TABLE archetype_history ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all on archetype_history" ON archetype_history;
+CREATE POLICY "Allow all on archetype_history" ON archetype_history FOR ALL USING (true) WITH CHECK (true);
+
+
+-- 9. Updated_at trigger for stocks
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN

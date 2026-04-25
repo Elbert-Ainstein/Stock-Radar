@@ -30,6 +30,8 @@ analyst.evaluate_criteria). We only scale how much event flow adds on top.
 """
 from __future__ import annotations
 
+from adaptive_scoring import projection_score_revenue_growth, projection_score_forward_pe
+
 
 # ═══ Tuning knobs — change here, not inline in analyst ═══
 
@@ -92,31 +94,15 @@ def compute_projection_score(
     if rev_growth is not None and abs(rev_growth) >= 1.5:
         rev_growth = rev_growth / 100.0
     if rev_growth is not None:
-        if rev_growth >= 0.40:
-            contributors.append({"label": f"Revenue growth {rev_growth*100:.0f}% YoY (hypergrowth)", "delta": +0.30, "source": rev_source})
-        elif rev_growth >= 0.25:
-            contributors.append({"label": f"Revenue growth {rev_growth*100:.0f}% YoY (high)", "delta": +0.20, "source": rev_source})
-        elif rev_growth >= 0.15:
-            contributors.append({"label": f"Revenue growth {rev_growth*100:.0f}% YoY (above-peer)", "delta": +0.10, "source": rev_source})
-        elif rev_growth < 0.05:
-            contributors.append({"label": f"Revenue growth {rev_growth*100:.0f}% YoY (flat/declining)", "delta": -0.20, "source": rev_source})
-        elif rev_growth < 0.10:
-            contributors.append({"label": f"Revenue growth {rev_growth*100:.0f}% YoY (sub-peer)", "delta": -0.10, "source": rev_source})
-        # 10–15% band = no adjustment (mid-cycle normal)
+        delta, label = projection_score_revenue_growth(rev_growth)
+        contributors.append({"label": label, "delta": delta, "source": rev_source})
 
     # ── Signal 2: Forward PE (market's own projection-pricing) ──
     # Market paying >50x forward is telling us it's pricing future. <15 = pricing reality.
     fwd_pe = _as_float(quant_data.get("forward_pe"))
     if fwd_pe is not None and fwd_pe > 0:
-        if fwd_pe >= 50:
-            contributors.append({"label": f"Forward PE {fwd_pe:.1f}x (market pricing future)", "delta": +0.20, "source": "quant"})
-        elif fwd_pe >= 35:
-            contributors.append({"label": f"Forward PE {fwd_pe:.1f}x (growth premium)", "delta": +0.10, "source": "quant"})
-        elif fwd_pe < 15:
-            contributors.append({"label": f"Forward PE {fwd_pe:.1f}x (value multiple)", "delta": -0.20, "source": "quant"})
-        elif fwd_pe < 20:
-            contributors.append({"label": f"Forward PE {fwd_pe:.1f}x (muted growth premium)", "delta": -0.10, "source": "quant"})
-        # 20–35x band = no adjustment (normal growth-at-reasonable-price)
+        delta, label = projection_score_forward_pe(fwd_pe)
+        contributors.append({"label": label, "delta": delta, "source": "quant"})
 
     # ── Signal 3: User-set tags in stocks table ──
     tags = stock_config.get("tags") or []

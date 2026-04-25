@@ -174,6 +174,16 @@ def main():
     print("=" * 50)
 
     watchlist = get_watchlist()
+
+    # Skip stocks with recent signals
+    from utils import get_fresh_tickers
+    fresh = get_fresh_tickers("social")
+    watchlist = [s for s in watchlist if s["ticker"] not in fresh]
+    if fresh:
+        from registries import SCOUT_CADENCE_HOURS
+        hrs = SCOUT_CADENCE_HOURS.get("social", 20)
+        print(f"  Skipping {len(fresh)} stocks with recent signals (<{hrs}h old)")
+
     tickers = [s["ticker"] for s in watchlist]
     print(f"\n  Scanning {len(tickers)} stocks across r/{', r/'.join(SUBREDDITS)} + StockTwits")
     print(f"  Running in parallel (max 4 workers)...")

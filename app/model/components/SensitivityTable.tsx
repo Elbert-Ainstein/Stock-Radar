@@ -61,7 +61,7 @@ export default function SensitivityTable({
       <table className="w-full text-sm font-mono border-collapse">
         <thead>
           <tr>
-            <th className="py-2.5 px-3 text-left text-[var(--muted)] text-xs font-normal">{rowLabel} \u2193 / {multipleLabel} \u2192</th>
+            <th className="py-2.5 px-3 text-left text-[var(--muted)] text-xs font-normal">{rowLabel} ↓ / {multipleLabel} →</th>
             {multiples.map((m, j) => (
               <th
                 key={m}
@@ -70,7 +70,7 @@ export default function SensitivityTable({
                   j === baseMIdx ? "text-[#60a5fa] font-bold bg-[#60a5fa]/5" : "text-[var(--secondary)] font-normal"
                 )}
               >
-                {m}\u00D7
+                {m}×
               </th>
             ))}
           </tr>

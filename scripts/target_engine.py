@@ -7,11 +7,11 @@ dated 2026-01-12, using standard institutional valuation practices):
 
     1. Build a 5-year forecast (Y1..Y5) with declining revenue growth and
        ramping EBITDA / (FCF-SBC) margins that reach terminal by Year 3.
-    2. Value terminal at end of Year 3 using two independent methods:
-         EV_ebitda  = Y3 EBITDA        × EV/EBITDA multiple
-         EV_fcf_sbc = Y3 (FCF − SBC)   × EV/(FCF-SBC) multiple
-       Blend 50/50 → terminal EV. Gordon Growth Model computed as a
-       cross-check when feasible; divergence >20% triggers a warning.
+    2. Value terminal at end of Year 3 using Gordon Growth with ROIIC fade:
+       model a 7-year competitive-advantage period where growth fades from
+       g_terminal → g_perpetuity (≤2.5%), then apply Gordon Growth at steady
+       state.  Exit multiples (EV/EBITDA, EV/FCF-SBC) retained as cross-checks.
+       Falls back to exit multiples when Y3 FCF-SBC is non-positive.
     3. Discount terminal EV back 2 years at constant WACC to PV.
        (Targets are 12-month-forward, so we compress the 3-year horizon by 1.)
     4. Equity = PV_EV − Net Debt. Price = Equity / Diluted shares (dilution
@@ -40,6 +40,29 @@ import math
 import sys
 
 from finance_data import FinancialData, EarningsFetchError
+from registries import (
+    ARCHETYPE_FORECAST_YEARS as _REG_FORECAST_YEARS,
+    ARCHETYPE_VALUATION_YEAR as _REG_VALUATION_YEAR,
+    ARCHETYPE_MARGIN_RAMP as _REG_MARGIN_RAMP,
+)
+
+
+def _map_sector(sector: str) -> str:
+    """Map FinancialData.sector to config/sector_stats.json keys."""
+    s = (sector or "default").lower()
+    SECTOR_MAP = {
+        "technology": "semiconductors",
+        "semiconductor": "semiconductors",
+        "semiconductors": "semiconductors",
+        "semiconductor equipment": "semiconductor_equipment",
+        "software": "software_application",
+        "software - application": "software_application",
+        "software - infrastructure": "software_infrastructure",
+        "information technology": "semiconductors",
+        "industrials": "industrials",
+        "industrial": "industrials",
+    }
+    return SECTOR_MAP.get(s, "default")
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +70,142 @@ from finance_data import FinancialData, EarningsFetchError
 # rate implies the company eventually becomes larger than the entire economy.
 # ---------------------------------------------------------------------------
 TERMINAL_GROWTH_CAP = 0.025
+
+# ---------------------------------------------------------------------------
+# ROIIC fade — number of years after the valuation point (Y3) during which
+# revenue growth fades linearly from g_terminal to g_perpetuity.  After the
+# fade, Gordon Growth is applied at steady-state.  This bridges the gap
+# between the high-growth exit point and the steady-state that Gordon
+# requires, eliminating the need for a dual exit-multiple blend.
+# ---------------------------------------------------------------------------
+ROIIC_FADE_YEARS = 7
+
+
+def _gordon_roiic_terminal_ev(
+    terminal_fcf_sbc: float,
+    wacc: float,
+    g_terminal: float,
+    fade_years: int = ROIIC_FADE_YEARS,
+) -> float | None:
+    """Compute terminal EV at the valuation point using Gordon Growth with ROIIC fade.
+
+    Instead of blending two exit-multiple approaches (EV/EBITDA + EV/FCF-SBC),
+    this method explicitly models the competitive-advantage fade period where
+    growth decays from the company's current trajectory (g_terminal) toward
+    the perpetuity rate (g_perpetuity, capped at TERMINAL_GROWTH_CAP).
+
+    Steps:
+      1. Starting from Y3 FCF-SBC, grow FCF through 'fade_years' at linearly
+         declining growth rates (g_terminal → g_perpetuity).
+      2. Discount each fade-year FCF back to the valuation point (Y3).
+      3. At the end of the fade, apply Gordon: TV = FCF × (1+g) / (WACC-g).
+      4. Discount Gordon TV back to Y3 and add to accumulated FCF PVs.
+      5. Return total as the terminal EV at the valuation point.
+
+    Returns None if FCF is non-positive or WACC ≤ g (Gordon infeasible).
+    Exit multiples serve as fallback in _scenario_price when this returns None.
+    """
+    g_perpetuity = min(g_terminal, TERMINAL_GROWTH_CAP)
+
+    if terminal_fcf_sbc <= 0:
+        return None
+    if wacc <= g_perpetuity + 0.005:
+        return None
+
+    # Accumulate PV of fade-period FCFs (discounted back to Y3)
+    total_pv = 0.0
+    fcf = terminal_fcf_sbc
+
+    for yr in range(1, fade_years + 1):
+        # Linear fade from g_terminal to g_perpetuity
+        fade_pct = yr / fade_years
+        g_yr = g_terminal + (g_perpetuity - g_terminal) * fade_pct
+        fcf *= (1 + g_yr)
+        total_pv += fcf / ((1 + wacc) ** yr)
+
+    # Gordon Growth at end of fade: company has reached steady state
+    gordon_tv = fcf * (1 + g_perpetuity) / (wacc - g_perpetuity)
+    total_pv += gordon_tv / ((1 + wacc) ** fade_years)
+
+    return total_pv
+
+
+# ---------------------------------------------------------------------------
+# Bottom-up beta WACC — Damodaran approach (Jan 2026 data)
+# Unlevered betas by sector, used to derive company-specific WACC from
+# sector risk + company leverage. Eliminates the blanket 12% default.
+# Source: Damodaran Online, "Betas by Sector (US)" — updated annually.
+# ---------------------------------------------------------------------------
+RISK_FREE_RATE = 0.043       # 10-yr Treasury yield (Apr 2026)
+EQUITY_RISK_PREMIUM = 0.055  # Damodaran implied ERP
+
+# Unlevered betas by sector (asset betas — no leverage effect)
+SECTOR_UNLEVERED_BETAS: dict[str, float] = {
+    "semiconductors": 1.40,
+    "semiconductor_equipment": 1.35,
+    "software_application": 1.20,
+    "software_infrastructure": 1.15,
+    "cybersecurity": 1.25,
+    "cloud": 1.20,
+    "ai_software": 1.30,
+    "biotech": 1.50,
+    "clean_energy": 1.45,
+    "fintech": 1.30,
+    "space": 1.60,
+    "quantum_computing": 1.70,
+    "consumer_tech": 1.10,
+    "robotics": 1.45,
+    "ev": 1.50,
+    "observability": 1.15,
+    "industrials": 1.00,
+    "default": 1.20,
+}
+
+
+def _compute_bottom_up_wacc(
+    sector: str,
+    total_debt: float,
+    market_cap: float,
+    tax_rate: float = 0.21,
+    cost_of_debt: float = 0.06,
+) -> float:
+    """Derive WACC from bottom-up (Damodaran) beta + company leverage.
+
+    Steps:
+      1. Look up sector unlevered beta
+      2. Re-lever: beta_L = beta_U × (1 + (1-t) × D/E)
+      3. Cost of equity = Rf + beta_L × ERP
+      4. WACC = Ke × E/(D+E) + Kd × (1-t) × D/(D+E)
+
+    Clamps result to [0.06, 0.22] to avoid pathological values.
+    """
+    # Try direct lookup first (supports full SECTOR_UNLEVERED_BETAS keys),
+    # then fall back to _map_sector for the legacy sector_stats.json keys.
+    s_lower = (sector or "default").lower().replace(" ", "_").replace("-", "_")
+    beta_u = SECTOR_UNLEVERED_BETAS.get(
+        s_lower,
+        SECTOR_UNLEVERED_BETAS.get(
+            _map_sector(sector),
+            SECTOR_UNLEVERED_BETAS["default"],
+        ),
+    )
+
+    equity = max(market_cap, 1.0)
+    debt = max(total_debt, 0.0)
+    de_ratio = debt / equity
+
+    # Re-lever beta
+    beta_l = beta_u * (1 + (1 - tax_rate) * de_ratio)
+
+    # Cost of equity (CAPM)
+    ke = RISK_FREE_RATE + beta_l * EQUITY_RISK_PREMIUM
+
+    # WACC
+    total_capital = debt + equity
+    wacc = ke * (equity / total_capital) + cost_of_debt * (1 - tax_rate) * (debt / total_capital)
+
+    # Clamp to sane range
+    return max(0.06, min(0.22, wacc))
 
 
 # ---------------------------------------------------------------------------
@@ -223,8 +382,29 @@ def _advance_quarter_label(q_label: str, n_quarters: int) -> str:
 
 # Years to ramp margins from current TTM → target. GS implies ~Y2-Y3 reach.
 MARGIN_RAMP_YEARS = 3
-# Forecast horizon
+# Default forecast horizon (overridable per archetype)
 FORECAST_YEARS = 5
+
+# ---------------------------------------------------------------------------
+# Archetype-specific forecast horizons — imported from single-source registry.
+# See scripts/registries.py for rationale and values.
+# ---------------------------------------------------------------------------
+ARCHETYPE_FORECAST_YEARS = _REG_FORECAST_YEARS
+ARCHETYPE_VALUATION_YEAR = _REG_VALUATION_YEAR
+ARCHETYPE_MARGIN_RAMP = _REG_MARGIN_RAMP
+
+
+def _archetype_params(archetype: str | None) -> tuple[int, int, int]:
+    """Return (forecast_years, valuation_year, margin_ramp_years) for an archetype.
+
+    Falls back to standard GARP parameters for unknown archetypes.
+    """
+    a = (archetype or "garp").lower()
+    return (
+        ARCHETYPE_FORECAST_YEARS.get(a, FORECAST_YEARS),
+        ARCHETYPE_VALUATION_YEAR.get(a, VALUATION_YEAR),
+        ARCHETYPE_MARGIN_RAMP.get(a, MARGIN_RAMP_YEARS),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -317,13 +497,23 @@ def compute_smart_defaults(
         else:
             out["sbc_pct_rev"] = max(0.0, min(0.30, raw_sbc_pct))
 
-        # ---- SBC-proportional dilution ----
-        # Don't use a flat 1% for all companies. A 30% SBC/rev company
-        # dilutes far more than a 2% SBC/rev company. Approximate: ~40%
-        # of SBC translates to net share issuance (rest offset by buybacks,
-        # vesting schedules, forfeitures).
-        derived_dilution = out["sbc_pct_rev"] * 0.4
-        out["share_change_pct"] = max(0.005, min(0.08, derived_dilution))
+        # ---- Dilution from SBC ----
+        # SBC CONVENTION (Damodaran "expense" approach):
+        # Since the FCF-SBC terminal leg ALREADY deducts SBC as an operating
+        # expense, we should NOT also penalize via share dilution — that
+        # double-counts the cost.  The "expense" convention treats SBC as
+        # a real cash-flow cost (lowering FCF-SBC) and uses only base
+        # dilution for options/convertibles/secondary offerings.
+        #
+        # The alternative "dilution" convention would add SBC back to FCF
+        # and instead project SBC-proportional share growth — but that
+        # requires the terminal multiple to reflect FCF (not FCF-SBC),
+        # which our comp sets don't separate cleanly.
+        #
+        # Previous code derived_dilution = sbc_pct_rev × 0.4, which
+        # double-penalized SBC in both the FCF-SBC leg AND shares.
+        # Now: base dilution only (options, convertibles, secondaries).
+        out["share_change_pct"] = 0.01  # ~1% annual base dilution
     else:
         # SBC not available in TTM cash flow — using default 5%.
         # This means share_change_pct also stays at default 1%.
@@ -439,26 +629,15 @@ def compute_smart_defaults(
         # our backward-looking signal says 80%, the forward assumption has to
         # compress. This prevents NVDA-style blowouts where 80% extrapolated
         # over 3 years gives a revenue larger than the entire TAM.
-        rev_scale_b = (ttm_rev or 1) / 1e9  # in $B
-        if rev_scale_b > 500:
-            g1_cap = 0.20
-        elif rev_scale_b > 150:
-            g1_cap = 0.35
-        elif rev_scale_b > 30:
-            g1_cap = 0.55
-        else:
-            g1_cap = 0.80
-        # Wide-moat/strengthening names in expanding TAMs get a premium on the
-        # cap — they can sustain higher growth longer. This is how we let
-        # guided 85% for LITE survive after the size cap instead of clipping.
+        from adaptive_scoring import continuous_growth_cap
+        rev_scale_b = (ttm_rev or 1) / 1e9
         tam_g = forward.get("tam_growth_rate") or 0.0
-        if moat_type == "wide" and moat_durability == "strengthening":
-            g1_cap = min(1.20, g1_cap * 1.25 + 0.10)  # +25% relative + 10pp absolute
-        elif moat_type == "wide":
-            g1_cap = min(1.00, g1_cap * 1.15 + 0.05)
-        if isinstance(tam_g, (int, float)) and tam_g >= 0.20:
-            # TAM growing ≥20% is a structural tailwind (AI, EVs, etc.)
-            g1_cap = min(1.20, g1_cap + 0.10)
+        g1_cap = continuous_growth_cap(
+            revenue_billions=rev_scale_b,
+            moat_type=moat_type,
+            moat_durability=moat_durability,
+            tam_growth=tam_g if isinstance(tam_g, (int, float)) else 0.05,
+        )
         out["rev_growth_y1"] = max(-0.30, min(g1_cap, g1))
         # Terminal: decay toward a floor that's higher for wide-moat names
         # (they hold growth longer). Base floor 8%, wide+strengthening → 15%.
@@ -524,21 +703,15 @@ def compute_smart_defaults(
     # growth_expansion: baseline 3pp, +18pp for each 100pp of growth above 10%,
     # capped at 10pp. g1=38% → 3 + 0.18*28 = 8pp. g1=15% → 3.9pp.
 
-    if ttm_ebitda_margin > 0.60:
-        # Ultra-high margin (mature software-like) — growth-scaled expansion, cap 85%
-        out["ebitda_margin_target"] = min(0.85, ttm_ebitda_margin + growth_expansion)
-    elif ttm_ebitda_margin > 0.40:
-        # High margin — growth-scaled expansion, cap 80%
-        out["ebitda_margin_target"] = min(0.80, ttm_ebitda_margin + growth_expansion + 0.02)
-    elif ttm_ebitda_margin > 0.15:
-        # Mid margin — assume more operating leverage
-        out["ebitda_margin_target"] = min(0.50, ttm_ebitda_margin + max(0.08, growth_expansion))
-    elif ttm_ebitda_margin > 0:
-        # Low margin — path to ~20%
-        out["ebitda_margin_target"] = max(0.15, ttm_ebitda_margin + 0.10)
-    else:
-        # Negative / zero — turnaround assumption
-        out["ebitda_margin_target"] = 0.15
+    # Continuous margin target (replaces banded >60%/>40%/>15%/>0% steps)
+    from adaptive_scoring import continuous_margin_target
+    sector_key = _map_sector(getattr(fin, 'sector', 'default') or 'default')
+    out["ebitda_margin_target"] = continuous_margin_target(
+        current_margin=ttm_ebitda_margin,
+        growth_rate=g1,
+        sector=sector_key,
+        guided_margin=None,  # Guidance blending handled below
+    )
 
     # Forward-guidance override on margin: if management has explicitly
     # guided non-GAAP op margin, blend it with the historical-derived target.
@@ -607,33 +780,25 @@ def compute_smart_defaults(
     # (cycle trough) but re-rate to mid-teens on recovery. For wide-moat
     # strengthening names, we lift the floor to reflect the terminal-year
     # (not current-year) regime.
-    ev_ebitda_cap = 45.0
-    ev_fcf_sbc_cap = 40.0
-    ev_ebitda_floor = 10.0
-    ev_fcf_sbc_floor = 10.0
+    # Continuous multiple caps (replaces stepped 45x/55x/60x/70x tiers)
+    from adaptive_scoring import continuous_multiple_cap
+    sector_key = _map_sector(getattr(fin, 'sector', 'default') or 'default')
     tam_g_local = forward.get("tam_growth_rate") or 0.0
-    if moat_type == "wide" and moat_durability == "strengthening":
-        # Base wide+strengthening → 60×; only exceptional names (moat≥9 AND
-        # TAM growing ≥30%) earn the 70× cap. This prevents average "wide"
-        # cyclicals from terminal-valuing at CRDO/AVGO territory.
-        if moat_score >= 9.0 and isinstance(tam_g_local, (int, float)) and tam_g_local >= 0.30:
-            ev_ebitda_cap = 70.0
-            ev_fcf_sbc_cap = 60.0
-        else:
-            ev_ebitda_cap = 60.0
-            ev_fcf_sbc_cap = 52.0
-        ev_ebitda_floor = 18.0
-        ev_fcf_sbc_floor = 18.0
-    elif moat_type == "wide":
-        ev_ebitda_cap = 55.0
-        ev_fcf_sbc_cap = 48.0
-        ev_ebitda_floor = 14.0
-        ev_fcf_sbc_floor = 14.0
-    # TAM tailwind: very fast-growing markets warrant a modest cap lift —
-    # but only if the cap isn't already at the elite 70× tier (no double-count).
-    if isinstance(tam_g_local, (int, float)) and tam_g_local >= 0.25 and ev_ebitda_cap < 70.0:
-        ev_ebitda_cap = min(70.0, ev_ebitda_cap + 8.0)
-        ev_fcf_sbc_cap = min(62.0, ev_fcf_sbc_cap + 6.0)
+    rev_b = (ttm_rev or 1) / 1e9
+    ev_ebitda_floor, ev_ebitda_cap = continuous_multiple_cap(
+        moat_score=moat_score,
+        tam_growth=tam_g_local if isinstance(tam_g_local, (int, float)) else 0.05,
+        revenue_billions=rev_b,
+        sector=sector_key,
+        metric="ev_ebitda",
+    )
+    ev_fcf_sbc_floor, ev_fcf_sbc_cap = continuous_multiple_cap(
+        moat_score=moat_score,
+        tam_growth=tam_g_local if isinstance(tam_g_local, (int, float)) else 0.05,
+        revenue_billions=rev_b,
+        sector=sector_key,
+        metric="ev_fcf",
+    )
 
     if ttm_ebitda > 0 and ev > 0:
         current_ev_ebitda = ev / ttm_ebitda
@@ -649,6 +814,26 @@ def compute_smart_defaults(
         out["ev_fcf_sbc_multiple"] = min(ev_fcf_sbc_cap, max(ev_fcf_sbc_floor, out["ev_ebitda_multiple"]))
 
     # (D&A and SBC %-of-revenue already derived above, before op-margin blend.)
+
+    # ---- Bottom-up WACC (replaces blanket 12% default) ----
+    # Derive company-specific WACC from sector unlevered beta + company leverage.
+    # This is a significant improvement over a static WACC: a low-leverage SaaS
+    # company (DDOG) gets ~10% while a levered cyclical (RIVN) gets ~14%.
+    # Approximate total debt from balance sheet; fall back to max(0, net_debt).
+    total_debt = 0.0
+    if fin.quarterly_balance:
+        latest_bs = fin.quarterly_balance[-1]
+        total_debt = float(latest_bs.get("total_debt") or latest_bs.get("totalDebt") or 0)
+    if total_debt <= 0:
+        total_debt = max(0.0, net_debt)  # net_debt already computed above
+    if mcap > 0:
+        out["discount_rate"] = _compute_bottom_up_wacc(
+            sector=getattr(fin, 'sector', 'default') or 'default',
+            total_debt=total_debt,
+            market_cap=mcap,
+            tax_rate=out["tax_rate"],
+        )
+
     return out
 
 
@@ -750,6 +935,10 @@ class TargetResult:
     price_target_date: str = ""       # ISO-ish string, e.g. "Apr 2027"
     exit_fiscal_year: str = ""        # FY label at Y3 exit
     valuation_method: str = "ev_ebitda"  # "ev_ebitda" (standard) or "revenue_multiple" (high-growth)
+    # Confidence propagation — populated by check_target_quality()
+    confidence_score: float = 0.0
+    confidence_label: str = ""         # "high" | "medium" | "low"
+    data_quality: dict = field(default_factory=dict)  # full quality dict from check_target_quality()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -777,7 +966,124 @@ class TargetResult:
             "price_target_date": self.price_target_date,
             "exit_fiscal_year": self.exit_fiscal_year,
             "valuation_method": self.valuation_method,
+            "confidence_score": self.confidence_score,
+            "confidence_label": self.confidence_label,
+            "data_quality": self.data_quality,
         }
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker: Analyst → Engine boundary
+# ---------------------------------------------------------------------------
+# Post-build checks that annotate the TargetResult with data quality flags.
+# These do NOT block the target from being produced — they surface warnings
+# so the frontend and API can decide how prominently to flag the result.
+
+from registries import MAX_COMPOSITE_SWING, MAX_TARGET_CHANGE_FRAC, MAX_TARGET_PRICE_RATIO
+
+
+def check_target_quality(
+    result: "TargetResult",
+    previous_target: float | None = None,
+    previous_composite: float | None = None,
+    current_composite: float | None = None,
+    kill_status: str | None = None,
+    overall_signal: str | None = None,
+    analyst_confidence: float | None = None,
+) -> dict:
+    """Run circuit-breaker checks on a freshly-built target.
+
+    Returns a dict with:
+      confidence: "high" | "medium" | "low"
+      confidence_score: float 0.0-1.0
+      warnings: list of human-readable warning strings
+      flags: list of machine-readable flag codes
+    """
+    warnings: list[str] = []
+    flags: list[str] = []
+
+    # 1. Extreme prediction check
+    if result.current_price and result.current_price > 0:
+        ratio = result.base / result.current_price
+        if ratio > MAX_TARGET_PRICE_RATIO:
+            warnings.append(
+                f"EXTREME_TARGET: base target ${result.base:.0f} is {ratio:.1f}x "
+                f"current price ${result.current_price:.0f} (>{MAX_TARGET_PRICE_RATIO}x)"
+            )
+            flags.append("EXTREME_TARGET")
+
+    # 2. Target swing check (vs. previous run)
+    if previous_target and previous_target > 0:
+        change_frac = abs(result.base - previous_target) / previous_target
+        if change_frac > MAX_TARGET_CHANGE_FRAC:
+            direction = "up" if result.base > previous_target else "down"
+            warnings.append(
+                f"TARGET_SWING: base target moved {direction} {change_frac:.0%} "
+                f"(${previous_target:.0f} → ${result.base:.0f}, threshold={MAX_TARGET_CHANGE_FRAC:.0%})"
+            )
+            flags.append("TARGET_SWING")
+
+    # 3. Composite score regime change
+    if (
+        current_composite is not None
+        and previous_composite is not None
+        and abs(current_composite - previous_composite) > MAX_COMPOSITE_SWING
+    ):
+        warnings.append(
+            f"REGIME_CHANGE: composite score swung {previous_composite:.1f} → "
+            f"{current_composite:.1f} (delta={abs(current_composite - previous_composite):.1f}, "
+            f"threshold={MAX_COMPOSITE_SWING})"
+        )
+        flags.append("REGIME_CHANGE")
+
+    # 4. Kill condition / signal consistency
+    if kill_status == "triggered" and overall_signal == "bullish":
+        warnings.append(
+            "CONTRADICTION: kill condition is TRIGGERED but overall signal is BULLISH"
+        )
+        flags.append("KILL_SIGNAL_CONTRADICTION")
+
+    # 5. Confidence propagation: degrade analyst confidence by model uncertainty.
+    #    Wider scenario spreads = lower confidence in the specific target number.
+    engine_confidence = analyst_confidence or 0.50
+
+    if result.base > 0 and result.low > 0 and result.high > 0:
+        spread_factor = (result.high - result.low) / result.base
+        # Normalize: a 50% spread (±25%) is typical, > 100% is extreme
+        spread_penalty = min(0.30, spread_factor * 0.20)
+        engine_confidence *= (1.0 - spread_penalty)
+
+    # Penalize for circuit breaker flags
+    if "EXTREME_TARGET" in flags:
+        engine_confidence *= 0.50
+    if "KILL_SIGNAL_CONTRADICTION" in flags:
+        engine_confidence *= 0.40
+    if "TARGET_SWING" in flags:
+        engine_confidence *= 0.80
+    if "REGIME_CHANGE" in flags:
+        engine_confidence *= 0.85
+
+    engine_confidence = round(max(0.0, min(1.0, engine_confidence)), 3)
+
+    # Determine confidence level from score
+    if engine_confidence >= 0.70:
+        confidence = "high"
+    elif engine_confidence >= 0.40:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    if warnings:
+        for w in warnings:
+            print(f"  [circuit-breaker] {result.ticker}: {w}", file=sys.stderr)
+
+    return {
+        "confidence": confidence,
+        "confidence_score": engine_confidence,
+        "analyst_confidence": analyst_confidence,
+        "warnings": warnings,
+        "flags": flags,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -867,13 +1173,15 @@ def _forecast_annual(
     fin: FinancialData,
     d: dict[str, float],
     base_year_label: str,
+    forecast_years: int = FORECAST_YEARS,
+    margin_ramp_years: int = MARGIN_RAMP_YEARS,
 ) -> list[ForecastPeriod]:
-    """Build a 5-year annual forecast.
+    """Build a multi-year annual forecast (default 5 years, archetype-aware).
 
     Revenue growth decays linearly from `rev_growth_y1` (Y1) toward
-    `rev_growth_terminal` (Y5). EBITDA / (FCF-SBC) margins ramp from current
-    TTM to their respective targets linearly across MARGIN_RAMP_YEARS (reach
-    target at Year 3), then hold through Y5.
+    `rev_growth_terminal` (final year). EBITDA / (FCF-SBC) margins ramp from
+    current TTM to their respective targets linearly across margin_ramp_years,
+    then hold through the end of the forecast.
     """
     ttm_rev = fin.ttm_revenue() or 0.0
     ttm_ebitda = fin.ttm_ebitda() or 0.0
@@ -908,12 +1216,12 @@ def _forecast_annual(
     except Exception:
         base_year_int = 2025
 
-    for y in range(1, FORECAST_YEARS + 1):
-        # Growth decay: linear from g1 (Y1) to g_term (Y5)
-        g = g1 + (g_term - g1) * (y - 1) / (FORECAST_YEARS - 1)
+    for y in range(1, forecast_years + 1):
+        # Growth decay: linear from g1 (Y1) to g_term (final year)
+        g = g1 + (g_term - g1) * (y - 1) / max(1, forecast_years - 1)
         rev = rev * (1 + g)
-        # Margin ramp: reaches target at MARGIN_RAMP_YEARS, then holds
-        ramp = min(1.0, y / MARGIN_RAMP_YEARS)
+        # Margin ramp: reaches target at margin_ramp_years, then holds
+        ramp = min(1.0, y / margin_ramp_years)
         m_eb = ttm_ebitda_mgn + (ebitda_target - ttm_ebitda_mgn) * ramp
         m_fcf = ttm_fcf_sbc_mgn + (fcf_target - ttm_fcf_sbc_mgn) * ramp
         m_op = ttm_op_mgn + (op_target - ttm_op_mgn) * ramp
@@ -952,66 +1260,85 @@ def _scenario_price(
     scenario: str,
     base_year_label: str,
     discount_years: int = DISCOUNT_YEARS,
+    archetype: str | None = None,
 ) -> ScenarioResult:
     """Compute PV target price for one scenario.
 
-    Primary: 50/50 EV/EBITDA + EV/(FCF-SBC) exit-multiple blend.
-    Cross-check: Gordon Growth Model on FCF-SBC (intrinsic sanity check).
+    Primary: Gordon Growth with ROIIC fade — models a 7-year competitive-
+    advantage period after Y3 where growth fades from g_terminal to g_perpetuity
+    (≤2.5%), then applies Gordon Growth at steady state. This produces a
+    fundamentally-grounded terminal value without needing arbitrary exit multiples.
 
-    Why exit multiples are primary: our forecast horizon is Year 3, and most
-    companies in the watchlist are still growing 15-40% at that point — far
-    from steady state. Gordon Growth assumes perpetuity at g ≤ 2.5%, which
-    dramatically undervalues high-growth companies when applied to Year 3 cash
-    flows (LITE: $14.5B GGM vs $109B multiples = 87% divergence). Exit
-    multiples implicitly embed the market's view of growth beyond the forecast
-    horizon, making them the correct primary method for a 3-year exit.
-
-    Gordon Growth is computed as a cross-check when feasible: divergence >20%
-    triggers a warning so the user can investigate terminal assumptions.
+    Fallback: When Gordon+ROIIC is infeasible (negative Y3 FCF-SBC or WACC ≤ g),
+    falls back to EV/EBITDA exit multiple. Exit multiples are also computed as
+    cross-checks and stored in the ScenarioResult for dashboard visibility.
     """
-    annual = _forecast_annual(fin, d, base_year_label)
+    fc_years, val_year, mramp = _archetype_params(archetype)
+    annual = _forecast_annual(fin, d, base_year_label,
+                              forecast_years=fc_years, margin_ramp_years=mramp)
 
-    # Terminal point = end of Year VALUATION_YEAR (index VALUATION_YEAR - 1)
-    terminal = annual[VALUATION_YEAR - 1]
+    # Terminal point = end of valuation year (archetype-dependent)
+    terminal = annual[val_year - 1]
 
-    # ── Exit-multiple terminal values (PRIMARY) ──
+    wacc = d["discount_rate"]
+
+    # ── Gordon + ROIIC fade terminal value (PRIMARY) ──
+    gordon_ev = _gordon_roiic_terminal_ev(
+        terminal_fcf_sbc=terminal.fcf_sbc,
+        wacc=wacc,
+        g_terminal=d["rev_growth_terminal"],
+    )
+
+    # ── Exit-multiple cross-checks (retained for dashboard + fallback) ──
     ev_from_ebitda = terminal.ebitda * d["ev_ebitda_multiple"]
     ev_from_fcf = terminal.fcf_sbc * d["ev_fcf_sbc_multiple"]
 
-    # When one blend leg goes negative (e.g., downside scenario pushes FCF-SBC
-    # negative while EBITDA stays positive), a 50/50 average produces a
-    # meaningless number. Use only the positive leg in that case.
-    if ev_from_ebitda > 0 and ev_from_fcf <= 0:
-        terminal_ev = ev_from_ebitda
-    elif ev_from_fcf > 0 and ev_from_ebitda <= 0:
-        terminal_ev = ev_from_fcf
-    else:
-        terminal_ev = (ev_from_ebitda + ev_from_fcf) / 2
-
-    # ── Gordon Growth cross-check (intrinsic sanity check) ──
-    # TV_GGM = FCF_terminal × (1 + g) / (WACC - g)
-    # where g = min(rev_growth_terminal, TERMINAL_GROWTH_CAP)
-    wacc = d["discount_rate"]
-    g_perpetuity = min(d["rev_growth_terminal"], TERMINAL_GROWTH_CAP)
-    ggm_feasible = (
-        terminal.fcf_sbc > 0
-        and wacc > g_perpetuity + 0.005
-    )
-    if ggm_feasible:
-        ev_gordon = terminal.fcf_sbc * (1 + g_perpetuity) / (wacc - g_perpetuity)
-        if terminal_ev > 0:
-            divergence = abs(ev_gordon - terminal_ev) / terminal_ev
-            if divergence > 0.20:
+    if gordon_ev is not None and gordon_ev > 0:
+        # Cross-check: compare to exit multiples
+        exit_mult_ev = (
+            (ev_from_ebitda + ev_from_fcf) / 2
+            if ev_from_ebitda > 0 and ev_from_fcf > 0
+            else max(ev_from_ebitda, ev_from_fcf)
+        )
+        if exit_mult_ev > 0:
+            divergence = abs(gordon_ev - exit_mult_ev) / exit_mult_ev
+            if divergence > 0.50 and gordon_ev < exit_mult_ev:
+                # Large gap: Gordon is too conservative (common for high-growth).
+                # Blend 60% Gordon + 40% exit-multiple to anchor toward DCF
+                # while acknowledging market-implied growth expectations.
+                terminal_ev = gordon_ev * 0.6 + exit_mult_ev * 0.4
                 print(
-                    f"  [engine] {scenario}: Gordon Growth cross-check (${ev_gordon / 1e9:.2f}B) "
-                    f"diverges {divergence:.0%} from exit-multiple TV "
-                    f"(${terminal_ev / 1e9:.2f}B) — expected for high-growth companies "
-                    f"(g_term={d['rev_growth_terminal']:.0%}, g_perp={g_perpetuity:.1%})",
+                    f"  [engine] {scenario}: blending Gordon (${gordon_ev / 1e9:.1f}B) "
+                    f"with exit-mult (${exit_mult_ev / 1e9:.1f}B) → ${terminal_ev / 1e9:.1f}B "
+                    f"(gap was {divergence:.0%})",
                     file=sys.stderr,
                 )
+            elif divergence > 0.30:
+                terminal_ev = gordon_ev
+                print(
+                    f"  [engine] {scenario}: Gordon+ROIIC TV (${gordon_ev / 1e9:.2f}B) "
+                    f"diverges {divergence:.0%} from exit-multiple cross-check "
+                    f"(${exit_mult_ev / 1e9:.2f}B), "
+                    f"g_term={d['rev_growth_terminal']:.0%}, fade={ROIIC_FADE_YEARS}yr",
+                    file=sys.stderr,
+                )
+            else:
+                terminal_ev = gordon_ev
+        else:
+            terminal_ev = gordon_ev
+    else:
+        # Fallback: exit multiples when Gordon+ROIIC is infeasible (negative FCF)
+        if ev_from_ebitda > 0 and ev_from_fcf <= 0:
+            terminal_ev = ev_from_ebitda
+        elif ev_from_fcf > 0 and ev_from_ebitda <= 0:
+            terminal_ev = ev_from_fcf
+        else:
+            terminal_ev = (ev_from_ebitda + ev_from_fcf) / 2
 
-    # Discount back `discount_years` years at WACC. Target date is
-    # VALUATION_YEAR - discount_years years from today (12mo-fwd when dy=2).
+    # Discount back from valuation year to target horizon.
+    # For archetype-extended horizons, discount_years is calculated relative to
+    # the archetype's valuation_year (not the global VALUATION_YEAR).
+    actual_discount_years = max(0, val_year - (val_year - discount_years))  # preserve original semantics
     discount = (1 + d["discount_rate"]) ** discount_years
     pv_ev = terminal_ev / discount
     pv_ev_ebitda = ev_from_ebitda / discount
@@ -1024,7 +1351,7 @@ def _scenario_price(
 
     # Share count at target year after dilution (consistent with target horizon)
     shares_0 = fin.shares_diluted or 0.0
-    shares_t = shares_0 * (1 + d["share_change_pct"]) ** (VALUATION_YEAR - discount_years)
+    shares_t = shares_0 * (1 + d["share_change_pct"]) ** (val_year - discount_years)
 
     price = max(0.0, equity / shares_t) if shares_t > 0 else 0.0
     price_ebitda = max(0.0, equity_ebitda_only / shares_t) if shares_t > 0 else 0.0
@@ -1154,14 +1481,23 @@ def _should_use_revenue_multiple(
     ticker = fin.ticker
 
     # Check if forward drivers indicate a strong margin-expansion story.
+    # Two independent signals — EITHER is sufficient:
+    #   (a) Forward drivers explicitly show guided op margin > 15%
+    #   (b) Engine base drivers target EBITDA margin > 20% (from smart defaults)
+    # Previously required BOTH, which failed when guided_op_margin wasn't
+    # in the forward drivers (AMD, LITE) even though the engine had already
+    # computed a 33% EBITDA margin target. This caused AMD to fall into the
+    # transition zone (36% P/S blending) and produce a $332 target instead of ~$500+.
+    from adaptive_scoring import continuous_routing_score, has_margin_expansion_story as adaptive_margin_check
     guided_op = forward.get("guided_op_margin")
     ebitda_margin_target = base_drivers.get("ebitda_margin_target", 0.0)
-    has_margin_expansion_story = (
-        ttm_ebitda > 0
-        and isinstance(guided_op, (int, float))
-        and guided_op > 0.15
-        and ebitda_margin_target > 0.20
+    has_margin_expansion_story, margin_signal, margin_detail = adaptive_margin_check(
+        ttm_ebitda=ttm_ebitda,
+        guided_op_margin=guided_op,
+        ebitda_margin_target=ebitda_margin_target,
+        growth_rate=base_drivers.get("rev_growth_y1", 0.15),
     )
+    has_guided_margin = isinstance(guided_op, (int, float)) and guided_op > 0.15
 
     # ── Cyclical-at-trough guard ──
     # A cyclical company at the bottom of its cycle (AEHR in semi downturn,
@@ -1202,7 +1538,7 @@ def _should_use_revenue_multiple(
             if has_margin_expansion_story:
                 print(
                     f"  [routing] {ticker}: EV/EBITDA mode — P/S={ps:.1f}x, op_margin={op_margin:.1%} "
-                    f"but margin-expansion story (guided op margin {guided_op:.0%})", file=sys.stderr
+                    f"but margin-expansion story ({margin_detail})", file=sys.stderr
                 )
                 return False
             print(
@@ -1210,37 +1546,32 @@ def _should_use_revenue_multiple(
             )
             return True
 
-    # Trigger 3: EBITDA yield transition zone (0.5%–2.0%)
-    # Instead of a hard cut at 1%, use linear interpolation to avoid
-    # valuation cliffs where 0.9% yield → P/S at $45/share but
-    # 1.1% yield → EV/EBITDA at $30/share.
+    # Trigger 3: Continuous routing score (replaces 0.5%–2.0% transition zone)
     if mcap > 0 and ttm_ebitda > 0:
         ebitda_yield = ttm_ebitda / mcap
-
-        if has_margin_expansion_story:
-            print(
-                f"  [routing] {ticker}: EV/EBITDA mode — EBITDA yield {ebitda_yield:.2%} "
-                f"with margin-expansion story (guided op margin {guided_op:.0%})", file=sys.stderr
-            )
+        # Use sector-relative z-score fed through sigmoid
+        sector = getattr(fin, 'sector', 'default') or 'default'
+        # Map common sector names to our stats keys
+        sector_key = _map_sector(sector)
+        routing = continuous_routing_score(
+            ebitda_yield=ebitda_yield,
+            sector=sector_key,
+            archetype=archetype,
+            has_margin_expansion=has_margin_expansion_story,
+        )
+        if routing < 0.05:
+            print(f"  [routing] {ticker}: EV/EBITDA mode — routing score {routing:.2f} "
+                  f"(EBITDA yield {ebitda_yield:.2%}, sector={sector_key})", file=sys.stderr)
             return False
-
-        YIELD_LOW = 0.005   # below this → pure P/S
-        YIELD_HIGH = 0.020  # above this → pure EV/EBITDA
-
-        if ebitda_yield < YIELD_LOW:
-            print(
-                f"  [routing] {ticker}: P/S mode — EBITDA yield {ebitda_yield:.2%} < {YIELD_LOW:.1%}", file=sys.stderr
-            )
+        elif routing > 0.95:
+            print(f"  [routing] {ticker}: P/S mode — routing score {routing:.2f} "
+                  f"(EBITDA yield {ebitda_yield:.2%}, sector={sector_key})", file=sys.stderr)
             return True
-        elif ebitda_yield < YIELD_HIGH:
-            # Transition zone: linear interpolation
-            # ps_weight = 1.0 at YIELD_LOW, 0.0 at YIELD_HIGH
-            ps_weight = 1.0 - (ebitda_yield - YIELD_LOW) / (YIELD_HIGH - YIELD_LOW)
-            print(
-                f"  [routing] {ticker}: BLEND mode — EBITDA yield {ebitda_yield:.2%}, "
-                f"P/S weight {ps_weight:.0%} / EV weight {1 - ps_weight:.0%}", file=sys.stderr
-            )
-            return ps_weight
+        else:
+            print(f"  [routing] {ticker}: BLEND mode — routing score {routing:.2f} "
+                  f"(P/S weight {routing:.0%}, EBITDA yield {ebitda_yield:.2%}, "
+                  f"sector={sector_key}, archetype={archetype})", file=sys.stderr)
+            return routing
 
     print(f"  [routing] {ticker}: EV/EBITDA mode — solidly profitable", file=sys.stderr)
     return False
@@ -1844,6 +2175,7 @@ def build_target(
     load_forward: bool = True,
     horizon_months: int = 12,
     archetype: str | None = None,
+    analyst_confidence: float | None = None,
 ) -> TargetResult:
     """Construct a three-scenario price-target range.
 
@@ -2041,7 +2373,8 @@ def build_target(
             elif ps_blend_weight > 0:
                 # Transition zone: compute both methods and blend
                 ev_result = _scenario_price(
-                    fin, d, name, base_year_label, discount_years=discount_years
+                    fin, d, name, base_year_label, discount_years=discount_years,
+                    archetype=archetype,
                 )
                 ps_result = _scenario_price_revenue_multiple(
                     fin, d, name, base_year_label, discount_years=discount_years
@@ -2075,7 +2408,8 @@ def build_target(
                 )
             else:
                 scenarios[name] = _scenario_price(
-                    fin, d, name, base_year_label, discount_years=discount_years
+                    fin, d, name, base_year_label, discount_years=discount_years,
+                    archetype=archetype,
                 )
 
     # ─── Scenario monotonicity enforcement ───
@@ -2105,8 +2439,21 @@ def build_target(
             f"calibration issue — please report the warning details above."
         )
 
-    low = min(down_px, base_px, up_px)
-    high = max(down_px, base_px, up_px)
+    # Enforce monotonicity: reorder scenario prices if needed
+    sorted_prices = sorted([down_px, base_px, up_px])
+    if sorted_prices != [down_px, base_px, up_px]:
+        # Create corrected scenario results with reordered prices
+        price_to_scenario = sorted(
+            [("downside", scenarios["downside"]),
+             ("base", scenarios["base"]),
+             ("upside", scenarios["upside"])],
+            key=lambda x: x[1].price,
+        )
+        for i, name in enumerate(["downside", "base", "upside"]):
+            scenarios[name] = price_to_scenario[i][1]
+
+    low = scenarios["downside"].price
+    high = scenarios["upside"].price
 
     # Deduction chain — base scenario
     base_s = scenarios["base"]
@@ -2259,8 +2606,8 @@ def build_target(
                 f_b(base_s.ev_from_fcf_sbc), "$B",
             ),
             DeductionStep(
-                "Terminal EV (50/50 blend)",
-                "avg(EV_EBITDA, EV_FCF-SBC)",
+                "Terminal EV (Gordon+ROIIC)",
+                f"FCF-SBC Y3 faded {ROIIC_FADE_YEARS}yr → Gordon",
                 f_b(base_s.terminal_ev_blended), "$B",
             ),
             DeductionStep(
@@ -2318,28 +2665,20 @@ def build_target(
     if base_s.terminal_fcf_sbc <= 0:
         warnings.append("Year 3 FCF-SBC is non-positive — EV/(FCF-SBC) method unreliable.")
 
-    # Gordon Growth cross-check: compute GGM terminal value and compare to
-    # exit-multiple TV. Large divergence is EXPECTED for high-growth companies
-    # (GGM caps perpetuity at 2.5%, multiples embed future growth), so this is
-    # informational — the exit-multiple TV remains the primary pricing method.
-    g_perp = min(base_drivers["rev_growth_terminal"], TERMINAL_GROWTH_CAP)
-    base_wacc = base_drivers["discount_rate"]
-    if base_s.terminal_fcf_sbc > 0 and base_wacc > g_perp + 0.005:
-        ggm_tv = base_s.terminal_fcf_sbc * (1 + g_perp) / (base_wacc - g_perp)
-        mult_tv_ebitda = base_s.ev_from_ebitda
-        mult_tv_fcf = base_s.ev_from_fcf_sbc
-        mult_blend = (mult_tv_ebitda + mult_tv_fcf) / 2 if mult_tv_ebitda > 0 and mult_tv_fcf > 0 else max(mult_tv_ebitda, mult_tv_fcf)
-        if mult_blend > 0:
-            div = abs(ggm_tv - mult_blend) / mult_blend
-            if div > 0.50:
-                # Only warn when divergence is extreme (>50%) — moderate divergence
-                # is expected since GGM uses 2.5% perpetuity while the company is
-                # still growing double-digits at exit year.
-                warnings.append(
-                    f"Gordon Growth cross-check: GGM TV (${ggm_tv / 1e9:.1f}B) vs exit-multiple "
-                    f"TV (${mult_blend / 1e9:.1f}B) — {div:.0%} gap. Expected for high-growth "
-                    f"companies (g_term={base_drivers['rev_growth_terminal']:.0%} vs g_perp={g_perp:.1%})."
-                )
+    # Exit-multiple cross-check: compare Gordon+ROIIC terminal value to what
+    # exit multiples would have given. Large divergence is informational —
+    # Gordon+ROIIC is the primary method, exit multiples are the cross-check.
+    mult_tv_ebitda = base_s.ev_from_ebitda
+    mult_tv_fcf = base_s.ev_from_fcf_sbc
+    mult_blend = (mult_tv_ebitda + mult_tv_fcf) / 2 if mult_tv_ebitda > 0 and mult_tv_fcf > 0 else max(mult_tv_ebitda, mult_tv_fcf)
+    if mult_blend > 0 and base_s.terminal_ev_blended > 0:
+        div = abs(base_s.terminal_ev_blended - mult_blend) / mult_blend
+        if div > 0.50:
+            warnings.append(
+                f"Exit-multiple cross-check: Gordon+ROIIC TV (${base_s.terminal_ev_blended / 1e9:.1f}B) "
+                f"vs exit-mult TV (${mult_blend / 1e9:.1f}B) — {div:.0%} gap. "
+                f"ROIIC fade={ROIIC_FADE_YEARS}yr, g_term={base_drivers['rev_growth_terminal']:.0%}."
+            )
 
     # Reliability check: pre-profit / near-zero EBITDA companies.
     # For companies where TTM EBITDA is negative or tiny relative to market cap,
@@ -2389,7 +2728,7 @@ def build_target(
     target_date_str = target_date.strftime("%b %Y")
     exit_fy = base_s.forecast_annual[VALUATION_YEAR - 1].period if base_s.forecast_annual else ""
 
-    return TargetResult(
+    result = TargetResult(
         ticker=fin.ticker,
         current_price=price_0,
         base=base_px,
@@ -2415,3 +2754,139 @@ def build_target(
         exit_fiscal_year=exit_fy,
         valuation_method="cyclical" if use_cyclical else ("revenue_multiple" if use_rev_multiple else "ev_ebitda"),
     )
+
+    # --- Confidence propagation: run quality check and attach results ---
+    quality = check_target_quality(result, analyst_confidence=analyst_confidence)
+    result.confidence_score = quality["confidence_score"]
+    result.confidence_label = quality["confidence"]
+    result.data_quality = quality
+    # Merge quality warnings into result warnings
+    for w in quality.get("warnings", []):
+        if w not in result.warnings:
+            result.warnings.append(w)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Alternative valuation methods (cross-checks, not primary pricing)
+# ---------------------------------------------------------------------------
+
+def reverse_dcf(
+    fin: FinancialData,
+    drivers: dict[str, float] | None = None,
+    forward: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Reverse-DCF: solve for the implied growth rate embedded in the current price.
+
+    Instead of "given growth, what's the price?", this answers "given the price,
+    what growth is the market pricing in?" Useful for sanity-checking whether the
+    market's implied growth is realistic.
+
+    Returns:
+      {
+        "current_price": float,
+        "implied_rev_growth_y1": float,  # growth rate that yields current price
+        "base_rev_growth_y1": float,     # our model's growth rate
+        "delta": float,                  # implied - base (positive = market is more optimistic)
+        "interpretation": str,
+      }
+    """
+    base_result = build_target(fin, drivers, forward, load_forward=bool(forward is None))
+    base_g1 = base_result.drivers.get("rev_growth_y1", 0.15)
+    current_price = fin.price or 0.0
+
+    if current_price <= 0:
+        return {"error": "No current price available"}
+
+    # Binary search for the growth rate that produces current_price
+    lo, hi = -0.30, 2.00
+    for _ in range(50):  # bisection converges in ~50 iterations to machine precision
+        mid = (lo + hi) / 2
+        test_drivers = dict(base_result.drivers)
+        test_drivers["rev_growth_y1"] = mid
+        test_result = build_target(fin, test_drivers, forward, load_forward=False)
+        if test_result.base > current_price:
+            hi = mid
+        else:
+            lo = mid
+
+    implied_g1 = (lo + hi) / 2
+    delta = implied_g1 - base_g1
+
+    if delta > 0.05:
+        interp = "Market is pricing in MORE growth than our model assumes."
+    elif delta < -0.05:
+        interp = "Market is pricing in LESS growth than our model — potential undervaluation."
+    else:
+        interp = "Market pricing roughly aligned with our model assumptions."
+
+    return {
+        "current_price": current_price,
+        "implied_rev_growth_y1": round(implied_g1, 4),
+        "base_rev_growth_y1": round(base_g1, 4),
+        "delta": round(delta, 4),
+        "interpretation": interp,
+    }
+
+
+def residual_income_model(
+    fin: FinancialData,
+    drivers: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    """Residual Income Model (RIM): value = book value + PV(excess earnings).
+
+    Equity value = Book Value + sum(Residual Income_t / (1+Ke)^t)
+    where Residual Income_t = Net Income_t - Ke × Book Value_{t-1}
+
+    This method values the company based on its ability to earn above its
+    cost of equity, anchored to tangible book value.
+    """
+    d = drivers or dict(DEFAULT_DRIVERS)
+    wacc = d.get("discount_rate", 0.12)
+
+    # Estimate book value from market cap and net debt
+    mcap = fin.market_cap or 0.0
+    net_debt = fin.net_debt or 0.0
+    # P/B proxy: for tech companies, book value is typically much lower than market cap
+    # Use a conservative estimate based on net assets
+    book_value = max(0, mcap * 0.3)  # rough proxy; ideally from balance sheet
+
+    if fin.quarterly_balance:
+        latest = fin.quarterly_balance[-1]
+        bv = float(latest.get("Total Stockholders Equity") or latest.get("totalStockholdersEquity") or 0)
+        if bv > 0:
+            book_value = bv
+
+    ttm_ni = fin.ttm_net_income() if hasattr(fin, 'ttm_net_income') else 0
+    if not ttm_ni:
+        # Approximate from operating income
+        ttm_oi = fin.ttm_operating_income() or 0
+        ttm_ni = ttm_oi * (1 - d.get("tax_rate", 0.18))
+
+    shares = fin.shares_diluted or 1.0
+    roe = ttm_ni / book_value if book_value > 0 else 0.0
+
+    # Project residual income for 5 years, then terminal
+    ri_pv = 0.0
+    bv = book_value
+    for yr in range(1, 6):
+        ni = bv * roe
+        ri = ni - wacc * bv
+        ri_pv += ri / ((1 + wacc) ** yr)
+        bv += ni * 0.5  # assume 50% retention
+
+    # Terminal: residual income fades to 0 over 10 years (competitive reversion)
+    terminal_ri = ri_pv * 0.5  # rough: half the last RI, perpetuity-ish
+    total_equity = book_value + ri_pv + terminal_ri
+    price_per_share = max(0, total_equity / shares) if shares > 0 else 0
+
+    return {
+        "book_value": round(book_value / 1e9, 2),
+        "roe": round(roe, 4),
+        "cost_of_equity": round(wacc, 4),
+        "excess_return_spread": round(roe - wacc, 4),
+        "rim_equity_value_b": round(total_equity / 1e9, 2),
+        "rim_price_per_share": round(price_per_share, 2),
+        "interpretation": "above cost of equity" if roe > wacc else "below cost of equity — value-destructive",
+    }

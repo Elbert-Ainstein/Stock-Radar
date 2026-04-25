@@ -1,0 +1,51 @@
+# Scout Refresh — cheap signal gathering (no Claude tokens)
+# Runs twice daily at 6am and 6pm UTC.
+# Each scout checks its own cadence and skips stocks with fresh signals.
+#
+# Manual trigger: Actions tab → "Scout Refresh" → "Run workflow"
+
+name: Scout Refresh
+
+on:
+  schedule:
+    - cron: "0 6,18 * * *"   # 6am + 6pm UTC daily
+  workflow_dispatch:           # manual trigger button
+
+concurrency:
+  group: stock-radar-scouts
+  cancel-in-progress: false   # let running scouts finish
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scout refresh
+        working-directory: scripts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python run_pipeline.py --scouts-only
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scout-refresh-${{ github.run_number }}
+          path: data/.pipeline-progress
+          retention-days: 7

@@ -57,11 +57,21 @@ def _get_supabase():
 
 
 def get_watchlist() -> list[dict]:
-    """Load the watchlist — Supabase first, JSON fallback."""
+    """Load the watchlist — Supabase first, JSON fallback.
+
+    If the PIPELINE_TICKER_FILTER env var is set (by run_single_ticker),
+    only return the matching stock. This prevents mini-pipelines from
+    scanning the entire watchlist when only one stock is needed.
+    """
+    ticker_filter = os.environ.get("PIPELINE_TICKER_FILTER", "").upper()
+
     sb = _get_supabase()
     if sb:
         try:
-            resp = sb.table("stocks").select("*").eq("active", True).execute()
+            query = sb.table("stocks").select("*").eq("active", True)
+            if ticker_filter:
+                query = query.eq("ticker", ticker_filter)
+            resp = query.execute()
             if resp.data:
                 # Map DB columns to the format scouts expect
                 stocks = []
@@ -73,6 +83,7 @@ def get_watchlist() -> list[dict]:
                         "thesis": row.get("thesis", ""),
                         "kill_condition": row.get("kill_condition", ""),
                         "tags": row.get("tags", []),
+                        "archetype": row.get("archetype"),
                         "target": {
                             "price": row.get("target_price"),
                             "timeline_years": row.get("timeline_years", 3),
@@ -85,14 +96,53 @@ def get_watchlist() -> list[dict]:
                         "criteria": row.get("criteria", []),
                     }
                     stocks.append(stock)
-                print(f"  [DB] Loaded {len(stocks)} stocks from Supabase")
+                label = f" (filtered: {ticker_filter})" if ticker_filter else ""
+                print(f"  [DB] Loaded {len(stocks)} stocks from Supabase{label}")
                 return stocks
         except Exception as e:
             print(f"  [DB] Supabase read failed, falling back to JSON: {e}")
 
     # JSON fallback
     cfg = json.loads((CONFIG_DIR / "watchlist.json").read_text(encoding="utf-8"))
-    return cfg.get("watchlist", cfg.get("stocks", []))
+    all_stocks = cfg.get("watchlist", cfg.get("stocks", []))
+    if ticker_filter:
+        all_stocks = [s for s in all_stocks if s["ticker"].upper() == ticker_filter]
+    return all_stocks
+
+
+def get_fresh_tickers(scout_name: str, max_age_hours: int | None = None) -> set[str]:
+    """Return tickers that already have recent signals for this scout.
+
+    Used by scouts to skip stocks that were already scanned recently,
+    avoiding redundant API calls on re-runs.
+
+    If *max_age_hours* is ``None`` (default), the cadence is looked up
+    from ``registries.SCOUT_CADENCE_HOURS``.  This keeps each scout's
+    refresh interval in one place instead of scattered across 7 files.
+    """
+    if max_age_hours is None:
+        try:
+            from registries import SCOUT_CADENCE_HOURS
+            max_age_hours = SCOUT_CADENCE_HOURS.get(scout_name.lower(), 20)
+        except ImportError:
+            max_age_hours = 20
+
+    sb = _get_supabase()
+    if not sb:
+        return set()
+    try:
+        from datetime import datetime, timezone, timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+        resp = (
+            sb.table("signals")
+            .select("ticker")
+            .eq("scout", scout_name.lower())
+            .gte("created_at", cutoff)
+            .execute()
+        )
+        return {r["ticker"] for r in (resp.data or [])}
+    except Exception:
+        return set()
 
 
 def get_screen_filters() -> dict:
@@ -102,8 +152,27 @@ def get_screen_filters() -> dict:
 
 
 def save_signals(scout_name: str, signals: list[dict]):
-    """Save scout signals — Supabase first, JSON fallback."""
+    """Save scout signals — Supabase first, JSON fallback.
+
+    Automatically computes and injects a confidence score (0.0-1.0) into
+    each signal's scores dict if not already present.
+    """
     run_id = get_run_id()
+
+    # Auto-inject confidence scores
+    try:
+        from confidence import compute_scout_confidence
+        for sig in signals:
+            scores = sig.get("scores") or {}
+            if "confidence" not in scores:
+                scores["confidence"] = compute_scout_confidence(
+                    scout_name.lower(),
+                    sig.get("data", {}),
+                    scores,
+                )
+                sig["scores"] = scores
+    except ImportError:
+        pass  # confidence module not available — skip silently
 
     sb = _get_supabase()
     if sb and run_id:

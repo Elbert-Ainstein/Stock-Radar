@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { execFile } from "child_process";
+import { execFile, execSync } from "child_process";
 import path from "path";
 import fs from "fs";
 
@@ -10,8 +10,8 @@ const LOCK_FILE = path.join(DATA_DIR, ".pipeline-running");
 const PROGRESS_FILE = path.join(DATA_DIR, ".pipeline-progress");
 const QUEUED_FILE = path.join(DATA_DIR, ".pipeline-queued");
 
-// Stale lock timeout: if lock file is older than 15 minutes, consider it stale
-const STALE_LOCK_MS = 15 * 60 * 1000;
+// Stale lock timeout: with 50 stocks, the full pipeline can take 2+ hours
+const STALE_LOCK_MS = 150 * 60 * 1000; // 2.5 hours
 
 function isLockStale(): boolean {
   try {
@@ -98,13 +98,67 @@ export async function POST(req: Request) {
     args.push("--free");
   }
 
-  execFile("python", args, { cwd: process.cwd(), timeout: 600000 }, (error, stdout, stderr) => {
-    if (error) console.error("[Pipeline] Error:", error.message);
-    if (stdout) console.log("[Pipeline] stdout:", stdout.slice(-500));
-    if (stderr) console.error("[Pipeline] stderr:", stderr.slice(-500));
+  // 2 hours — 50 stocks × ~2 min each for model generation alone
+  execFile("python", args, { cwd: process.cwd(), timeout: 7200000, maxBuffer: 10_000_000 }, (error, stdout, stderr) => {
+    if (error) {
+      const isTimeout = error.message?.includes("TIMEOUT") || error.killed;
+      console.error("[Pipeline] Error:", isTimeout ? "Process timed out after 2 hours" : error.message);
+    }
+    if (stdout) console.log("[Pipeline] stdout:", stdout.slice(-2000));
+    if (stderr) console.error("[Pipeline] stderr:", stderr.slice(-2000));
     try { fs.unlinkSync(LOCK_FILE); } catch {}
     // Progress file is cleaned by the Python script itself
   });
 
   return NextResponse.json({ success: true, message: "Pipeline started" });
+}
+
+export async function DELETE() {
+  // Force-stop any running pipeline process and clean up lock files.
+  // Kills all Python processes matching run_pipeline.py, scout_*, analyst, generate_model.
+  const killed: string[] = [];
+
+  const patterns = [
+    "run_pipeline.py",
+    "scout_quant",
+    "scout_news",
+    "scout_catalyst",
+    "scout_moat",
+    "scout_fundamentals",
+    "scout_insider",
+    "scout_social",
+    "scout_youtube",
+    "scout_filings",
+    "analyst.py",
+    "generate_model.py",
+  ];
+
+  for (const pat of patterns) {
+    try {
+      execSync(`pkill -f "${pat}"`, { timeout: 5000 });
+      killed.push(pat);
+    } catch {
+      // pkill returns non-zero if no matching process — not an error
+    }
+  }
+
+  // Clean up lock and progress files
+  try { fs.unlinkSync(LOCK_FILE); } catch {}
+  try { fs.unlinkSync(PROGRESS_FILE); } catch {}
+
+  // Clean up any cancel files
+  try {
+    const files = fs.readdirSync(DATA_DIR);
+    for (const f of files) {
+      if (f.startsWith(".pipeline-cancel-")) {
+        try { fs.unlinkSync(path.join(DATA_DIR, f)); } catch {}
+      }
+    }
+  } catch {}
+
+  return NextResponse.json({
+    success: true,
+    message: `Pipeline stopped. Killed: ${killed.length > 0 ? killed.join(", ") : "no active processes found"}.`,
+    killed,
+  });
 }

@@ -27,18 +27,36 @@ import ConfidenceMeter from "./components/ConfidenceMeter";
 import EventImpactsPanel from "./components/EventImpactsPanel";
 
 // ─── Implied Target Box (kept in orchestrator — small, tightly coupled to state) ───
+// Shows event-weighted target as headline when merge_enabled=True (authoritative).
+// Breaks it down: $total ($criteria + $events) so the composition is transparent.
 function ImpliedTargetBox({
   impliedPrice,
+  eventWeightedPrice,
+  eventDelta,
   thesisTarget,
   currentPrice,
   loading = false,
+  mergeEnabled = false,
+  engineConfidence,
+  engineConfidenceLabel,
 }: {
   impliedPrice: number;
+  eventWeightedPrice?: number;
+  eventDelta?: number;
   thesisTarget: number;
   currentPrice: number;
   loading?: boolean;
+  mergeEnabled?: boolean;
+  engineConfidence?: number;
+  engineConfidenceLabel?: string;
 }) {
-  const meetsTarget = impliedPrice >= thesisTarget * 0.98;
+  // Use event-weighted price as headline when events are merged
+  const headlinePrice = mergeEnabled && eventWeightedPrice && eventWeightedPrice > 0
+    ? eventWeightedPrice
+    : impliedPrice;
+  const hasEvents = mergeEnabled && eventWeightedPrice && eventWeightedPrice > 0 && eventDelta !== undefined && eventDelta !== 0;
+
+  const meetsTarget = headlinePrice >= thesisTarget * 0.98;
   const borderColor = loading
     ? "border-[var(--border)]"
     : meetsTarget
@@ -48,6 +66,9 @@ function ImpliedTargetBox({
     ? `$${thesisTarget.toLocaleString()} target met or exceeded`
     : `Below $${thesisTarget.toLocaleString()} target`;
   const statusColor = meetsTarget ? "text-emerald-500" : "text-amber-500";
+
+  const upsidePct = currentPrice > 0 ? ((headlinePrice / currentPrice - 1) * 100) : 0;
+  const upsideColor = upsidePct > 0 ? "text-emerald-400" : "text-red-400";
 
   if (loading) {
     return (
@@ -79,14 +100,48 @@ function ImpliedTargetBox({
         "text-5xl font-mono font-bold mb-3",
         meetsTarget ? "text-emerald-400" : "text-amber-400"
       )}>
-        ${impliedPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+        ${headlinePrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
       </div>
-      <div className="text-sm text-[var(--secondary)] mb-2">
-        vs ${thesisTarget.toLocaleString()} target \u00B7 current ~${currentPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+      {hasEvents ? (
+        <div className="text-sm text-[var(--secondary)] mb-2">
+          <span className="font-mono">${impliedPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          <span className="text-[var(--muted)]"> criteria </span>
+          <span className={cn("font-mono", (eventDelta ?? 0) >= 0 ? "text-emerald-400" : "text-red-400")}>
+            {(eventDelta ?? 0) >= 0 ? "+" : ""}{"\u200A"}${Math.abs(eventDelta ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </span>
+          <span className="text-[var(--muted)]"> events</span>
+        </div>
+      ) : (
+        <div className="text-sm text-[var(--secondary)] mb-2">
+          vs ${thesisTarget.toLocaleString()} target
+        </div>
+      )}
+      <div className="flex items-center justify-center gap-3">
+        <span className={cn("text-sm font-mono", upsideColor)}>
+          {upsidePct >= 0 ? "+" : ""}{upsidePct.toFixed(0)}% from ${currentPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+        </span>
+        <span className="text-[var(--faint)]">{"\u00B7"}</span>
+        <span className={cn("text-sm", statusColor)}>
+          {statusText}
+        </span>
       </div>
-      <div className={cn("text-sm", statusColor)}>
-        {statusText}
-      </div>
+      {engineConfidence !== undefined && engineConfidence > 0 && (
+        <div className="mt-3 flex items-center justify-center gap-2">
+          <div
+            className={cn(
+              "text-[11px] font-mono px-2 py-0.5 rounded-full border",
+              engineConfidenceLabel === "high"
+                ? "text-emerald-400 border-emerald-400/30 bg-emerald-400/10"
+                : engineConfidenceLabel === "medium"
+                ? "text-yellow-400 border-yellow-400/30 bg-yellow-400/10"
+                : "text-amber-400 border-amber-400/30 bg-amber-400/10"
+            )}
+            title={`Engine confidence: ${(engineConfidence * 100).toFixed(0)}% — measures data quality and model reliability, not bullishness`}
+          >
+            {engineConfidenceLabel === "high" ? "High" : engineConfidenceLabel === "medium" ? "Moderate" : "Low"} confidence {(engineConfidence * 100).toFixed(0)}%
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -478,7 +533,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
               )}
               {stock.researchCache.quant_snapshot?.price && (
                 <>
-                  {" "}\u00B7 Quant price at generation:{" "}
+                  {" "}· Quant price at generation:{" "}
                   <span className="font-mono text-[var(--secondary)]">
                     ${stock.researchCache.quant_snapshot.price.toFixed(2)}
                   </span>
@@ -561,13 +616,13 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
             )}
             {engineError && !enginePayload && (
               <span className="text-[10px] text-amber-500">
-                Engine unavailable \u2014 showing pipeline-derived defaults
+                Engine unavailable — showing pipeline-derived defaults
               </span>
             )}
             {usedAnalystFallback && (
               <span className="text-[10px] text-amber-500 flex items-center gap-1">
-                <span>\u26A0</span>
-                Using analyst targets \u2014 engine produced unreliable values
+                <span>⚠</span>
+                Using analyst targets — engine produced unreliable values
               </span>
             )}
             {/* Detailed-view link */}
@@ -579,9 +634,9 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
               <span>📊</span>
               <span>Detailed Model</span>
               {enginePayload && (
-                <span className="font-mono opacity-70">\u00B7 base ${Math.round(enginePayload.target.base)}</span>
+                <span className="font-mono opacity-70">· base ${Math.round(enginePayload.target.base)}</span>
               )}
-              <span>\u2192</span>
+              <span>→</span>
             </a>
           </div>
           <p className="text-[13px] text-[var(--secondary)] leading-relaxed mb-3">{valMethodInfo.justification}</p>
@@ -595,17 +650,17 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
           </div>
           {valMethodInfo.method === "cyclical" && (
             <div className="mt-3 text-[10px] text-[var(--faint)] border-t border-[var(--border)] pt-3">
-              Equation: EV = Revenue \u00D7 Normalized EBIT Margin \u00D7 EV/EBIT \u2192 Equity = EV \u2212 Net Debt \u2192 Price = Equity / Shares
+              Equation: EV = Revenue × Normalized EBIT Margin × EV/EBIT → Equity = EV − Net Debt → Price = Equity / Shares
             </div>
           )}
           {valMethodInfo.method === "ps" && (
             <div className="mt-3 text-[10px] text-[var(--faint)] border-t border-[var(--border)] pt-3">
-              Equation: Target Price = (Revenue / Diluted Shares) \u00D7 P/S Multiple
+              Equation: Target Price = (Revenue / Diluted Shares) × P/S Multiple
             </div>
           )}
           {valMethodInfo.method === "pe" && (
             <div className="mt-3 text-[10px] text-[var(--faint)] border-t border-[var(--border)] pt-3">
-              Equation: Target Price = (Revenue \u00D7 Op Margin \u00D7 (1 \u2212 Tax Rate)) / Diluted Shares \u00D7 P/E Multiple
+              Equation: Target Price = (Revenue × Op Margin × (1 − Tax Rate)) / Diluted Shares × P/E Multiple
             </div>
           )}
         </div>
@@ -621,7 +676,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
                 {priceHorizonMonths} months forward
                 {enginePayload?.target.price_target_date && (
                   <span className="text-[13px] font-normal text-[var(--muted)] ml-2">
-                    (\u2248 {enginePayload.target.price_target_date})
+                    (≈ {enginePayload.target.price_target_date})
                   </span>
                 )}
               </div>
@@ -629,7 +684,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
                 Exit fundamentals anchored at Y3
                 {enginePayload?.target.exit_fiscal_year &&
                   ` (${enginePayload.target.exit_fiscal_year})`}
-                {" "}\u2014 only the discount back to today changes with horizon.
+                {" "}— only the discount back to today changes with horizon.
               </div>
             </div>
             <div className="inline-flex rounded-md border border-[var(--border)] overflow-hidden">
@@ -741,12 +796,30 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
 
         {/* IMPLIED TARGET PRICE */}
         <div className="mb-8">
-          <ImpliedTargetBox
-            impliedPrice={targetPrice}
-            thesisTarget={configTargetPrice}
-            currentPrice={stock.currentPrice}
-            loading={engineLoading}
-          />
+          {(() => {
+            const ei = stock.eventImpacts;
+            const criteriaBase = configTargetPrice || targetPrice;
+            // Compute event delta from the blend's PERCENTAGE adjustment applied
+            // to the live slider target — NOT from the blend's absolute final_target,
+            // which was anchored to the pipeline engine's base (a different number).
+            const evPctWeighted = ei?.blend?.event_pct_weighted ?? 0;
+            const hasEventAdj = ei?.merge_enabled && Math.abs(evPctWeighted) > 0.01;
+            const evDelta = hasEventAdj ? Math.round(criteriaBase * evPctWeighted / 100) : undefined;
+            const eventWeightedPrice = evDelta !== undefined ? criteriaBase + evDelta : undefined;
+            return (
+              <ImpliedTargetBox
+                impliedPrice={criteriaBase}
+                eventWeightedPrice={eventWeightedPrice}
+                eventDelta={evDelta}
+                thesisTarget={configTargetPrice}
+                currentPrice={stock.currentPrice}
+                loading={engineLoading}
+                mergeEnabled={ei?.merge_enabled ?? false}
+                engineConfidence={enginePayload?.target?.confidence_score}
+                engineConfidenceLabel={enginePayload?.target?.confidence_label}
+              />
+            );
+          })()}
         </div>
 
         {/* DEDUCTION CHAIN */}
@@ -802,7 +875,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
         <div className="rounded-xl bg-[var(--card)] border border-[var(--border)] p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="text-[13px] text-[var(--muted)]">
-              Price path \u2014 {timeline}yr projection with {valMethodInfo.multipleLabel} {startMultiple > endMultiple ? "compression" : "expansion"}
+              Price path — {timeline}yr projection with {valMethodInfo.multipleLabel} {startMultiple > endMultiple ? "compression" : "expansion"}
             </div>
             <div className="flex items-center gap-4 text-xs text-[var(--muted)]">
               <div className="flex items-center gap-2">
@@ -819,7 +892,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
           </div>
           <TimePathChart path={timePath} currentPrice={stock.currentPrice} targetPrice={configTargetPrice || targetPrice} multipleLabel={valMethodInfo.multipleLabel} />
           <div className="mt-3 text-[10px] text-[var(--muted)]">
-            Revenue compounds at {(growthRate * 100).toFixed(0)}% CAGR. {valMethodInfo.multipleLabel} {startMultiple > endMultiple ? "compresses" : "expands"} {startMultiple}\u00D7 \u2192 {endMultiple}\u00D7 over {timeline}yr.
+            Revenue compounds at {(growthRate * 100).toFixed(0)}% CAGR. {valMethodInfo.multipleLabel} {startMultiple > endMultiple ? "compresses" : "expands"} {startMultiple}× → {endMultiple}× over {timeline}yr.
           </div>
         </div>
 
@@ -841,7 +914,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
         {enginePayload?.warnings && enginePayload.warnings.length > 0 && (
           <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4 mb-8">
             <div className="flex items-start gap-2">
-              <span className="text-yellow-400 text-sm mt-0.5">\u26A0</span>
+              <span className="text-yellow-400 text-sm mt-0.5">⚠</span>
               <div>
                 <div className="text-[13px] text-yellow-300 font-medium mb-1">Engine warnings</div>
                 {enginePayload.warnings.map((w, i) => (
@@ -972,7 +1045,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
 
         {/* Footer */}
         <footer className="pt-6 border-t border-[var(--border)] text-center text-[10px] text-[var(--muted)]">
-          All numbers are model outputs, not predictions \u2014 Not financial advice
+          All numbers are model outputs, not predictions — Not financial advice
         </footer>
       </main>
     </div>

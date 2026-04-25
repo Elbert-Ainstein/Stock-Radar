@@ -1,0 +1,92 @@
+{
+  "_meta": {
+    "source": "Damodaran January 2025 US company dataset (aswathdamodaran.blogspot.com / NYU Stern data sheets)",
+    "date": "2025-01",
+    "notes": "Median and population stdev across all US-listed companies in each sector. Fractions where noted (e.g. 0.22 = 22%). Multiples are raw numbers. quarterly_rev_variance_pct is coefficient of variation (stdev/mean) of quarterly revenue, expressed as a fraction.",
+    "usage": "Z-score = (company_value - sector_median) / sector_stdev. Used to route valuation method and flag outliers."
+  },
+
+  "semiconductors": {
+    "_description": "Broad semiconductor sector: fabless designers, IDMs, memory. Covers AMD, NVDA, MU, MRVL, SNDK, LITE.",
+    "operating_margin":           { "median": 0.220, "stdev": 0.185 },
+    "ebitda_margin":              { "median": 0.295, "stdev": 0.175 },
+    "ebitda_yield":               { "median": 0.028, "stdev": 0.022 },
+    "revenue_growth":             { "median": 0.110, "stdev": 0.280 },
+    "ev_ebitda":                  { "median": 22.5,  "stdev": 18.0  },
+    "ev_fcf":                     { "median": 30.0,  "stdev": 28.0  },
+    "pe_forward":                 { "median": 28.0,  "stdev": 22.0  },
+    "quarterly_rev_variance_pct": { "median": 0.085, "stdev": 0.065 }
+  },
+
+  "semiconductor_equipment": {
+    "_description": "Semiconductor capital equipment: test, deposition, lithography, inspection. Covers AEHR, TER, LRCX, ASML.",
+    "operating_margin":           { "median": 0.235, "stdev": 0.120 },
+    "ebitda_margin":              { "median": 0.290, "stdev": 0.115 },
+    "ebitda_yield":               { "median": 0.032, "stdev": 0.020 },
+    "revenue_growth":             { "median": 0.075, "stdev": 0.220 },
+    "ev_ebitda":                  { "median": 20.0,  "stdev": 14.0  },
+    "ev_fcf":                     { "median": 26.0,  "stdev": 22.0  },
+    "pe_forward":                 { "median": 24.0,  "stdev": 16.0  },
+    "quarterly_rev_variance_pct": { "median": 0.130, "stdev": 0.090 }
+  },
+
+  "software_application": {
+    "_description": "Consumer and enterprise application software: SaaS, consumer apps, ad-tech platforms. Covers APP.",
+    "operating_margin":           { "median": 0.120, "stdev": 0.210 },
+    "ebitda_margin":              { "median": 0.190, "stdev": 0.195 },
+    "ebitda_yield":               { "median": 0.018, "stdev": 0.020 },
+    "revenue_growth":             { "median": 0.145, "stdev": 0.260 },
+    "ev_ebitda":                  { "median": 32.0,  "stdev": 30.0  },
+    "ev_fcf":                     { "median": 40.0,  "stdev": 38.0  },
+    "pe_forward":                 { "median": 38.0,  "stdev": 35.0  },
+    "quarterly_rev_variance_pct": { "median": 0.055, "stdev": 0.045 }
+  },
+
+  "software_infrastructure": {
+    "_description": "Infrastructure, platform, and developer software: cloud, databases, security, networking software.",
+    "operating_margin":           { "median": 0.105, "stdev": 0.200 },
+    "ebitda_margin":              { "median": 0.175, "stdev": 0.190 },
+    "ebitda_yield":               { "median": 0.015, "stdev": 0.018 },
+    "revenue_growth":             { "median": 0.160, "stdev": 0.270 },
+    "ev_ebitda":                  { "median": 36.0,  "stdev": 32.0  },
+    "ev_fcf":                     { "median": 44.0,  "stdev": 40.0  },
+    "pe_forward":                 { "median": 42.0,  "stdev": 38.0  },
+    "quarterly_rev_variance_pct": { "median": 0.048, "stdev": 0.040 }
+  },
+
+  "technology_hardware": {
+    "_description": "General technology hardware: PCs, networking hardware, storage hardware, electronic components.",
+    "operating_margin":           { "median": 0.090, "stdev": 0.130 },
+    "ebitda_margin":              { "median": 0.145, "stdev": 0.130 },
+    "ebitda_yield":               { "median": 0.040, "stdev": 0.028 },
+    "revenue_growth":             { "median": 0.055, "stdev": 0.155 },
+    "ev_ebitda":                  { "median": 14.0,  "stdev": 12.0  },
+    "ev_fcf":                     { "median": 18.0,  "stdev": 16.0  },
+    "pe_forward":                 { "median": 18.0,  "stdev": 14.0  },
+    "quarterly_rev_variance_pct": { "median": 0.095, "stdev": 0.070 }
+  },
+
+  "industrials": {
+    "_description": "General industrials fallback: manufacturing, automation, defense-adjacent, specialty equipment.",
+    "operating_margin":           { "median": 0.105, "stdev": 0.095 },
+    "ebitda_margin":              { "median": 0.155, "stdev": 0.100 },
+    "ebitda_yield":               { "median": 0.048, "stdev": 0.030 },
+    "revenue_growth":             { "median": 0.055, "stdev": 0.120 },
+    "ev_ebitda":                  { "median": 13.5,  "stdev": 9.0   },
+    "ev_fcf":                     { "median": 18.0,  "stdev": 14.0  },
+    "pe_forward":                 { "median": 18.5,  "stdev": 12.0  },
+    "quarterly_rev_variance_pct": { "median": 0.075, "stdev": 0.055 }
+  },
+
+  "default": {
+    "_description": "Fallback for companies that do not match any specific sector. Uses broad US market medians (all non-financial firms, Damodaran January 2025).",
+    "operating_margin":           { "median": 0.095, "stdev": 0.175 },
+    "ebitda_margin":              { "median": 0.155, "stdev": 0.165 },
+    "ebitda_yield":               { "median": 0.038, "stdev": 0.030 },
+    "revenue_growth":             { "median": 0.075, "stdev": 0.200 },
+    "ev_ebitda":                  { "median": 16.0,  "stdev": 15.0  },
+    "ev_fcf":                     { "median": 22.0,  "stdev": 22.0  },
+    "pe_forward":                 { "median": 22.0,  "stdev": 20.0  },
+    "quarterly_rev_variance_pct": { "median": 0.080, "stdev": 0.065 }
+  }
+}

@@ -858,8 +858,23 @@ def main() -> list[dict]:
             print(f"\n  ✗ {target_ticker} not in watchlist — nothing to do.")
             return []
 
+    # Skip stocks with recent signals
+    if not target_ticker:
+        from utils import get_fresh_tickers
+        fresh = get_fresh_tickers("catalyst")
+        before = len(watchlist)
+        watchlist = [s for s in watchlist if s["ticker"] not in fresh]
+        if fresh:
+            from registries import SCOUT_CADENCE_HOURS
+            hrs = SCOUT_CADENCE_HOURS.get("catalyst", 48)
+            print(f"  Skipping {before - len(watchlist)} stocks with recent signals (<{hrs}h old)")
+
     print(f"  Stocks to scan: {len(watchlist)}")
     print("-" * 60)
+
+    if not watchlist:
+        print("  All stocks have recent catalyst data — nothing to do")
+        return []
 
     signals: list[dict] = []
     for stock in watchlist:

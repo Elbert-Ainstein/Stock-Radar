@@ -11,6 +11,19 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from utils import DATA_DIR, get_watchlist, get_run_id, timestamp
+from registries import SCOUT_DISPLAY_NAMES, MIN_SCOUTS_HIGH_CONFIDENCE, DISAGREEMENT_SIGMA
+
+try:
+    from confidence import weighted_harmonic_mean
+    _CONFIDENCE_AVAILABLE = True
+except ImportError:
+    _CONFIDENCE_AVAILABLE = False
+
+try:
+    from activity_logger import log_info, log_warn, log_error
+    _ACTIVITY_LOG = True
+except ImportError:
+    _ACTIVITY_LOG = False
 
 # Event reasoner is optional — degrade gracefully if not importable
 # (e.g. first deploy before dependencies are wired up).
@@ -123,15 +136,8 @@ def _load_scouts_from_supabase() -> dict | None:
         print(f"  [analyst] Supabase unavailable ({e}) — falling back to JSON scout files")
         return None
 
-    # Canonical scout capitalizations — analyst.analyze_stock matches on these.
-    name_map = {
-        "quant": "Quant",
-        "insider": "Insider",
-        "news": "News",
-        "social": "Social",
-        "youtube": "YouTube",
-        "fundamentals": "Fundamentals",
-    }
+    # Canonical scout capitalizations — from single-source registry.
+    name_map = SCOUT_DISPLAY_NAMES
 
     try:
         rows = sb.table("latest_signals").select("*").execute().data or []
@@ -986,6 +992,103 @@ def analyze_stock(ticker: str, name: str, sector: str, signals: list[dict], all_
         composite_raw = 5  # no data at all → neutral
     composite = round(max(0, min(10, composite_raw)), 1)
 
+    # ─── CIRCUIT BREAKER: Scout → Analyst boundary ───
+    # Check data quality before allowing the composite to propagate downstream.
+    # This does NOT block analysis — it annotates the output with confidence
+    # and warnings so downstream consumers (engine, frontend) can decide.
+    scored_scout_count = len(factors)
+    total_possible_scouts = len(FACTOR_WEIGHTS)
+
+    cb_warnings: list[str] = []
+
+    if scored_scout_count < MIN_SCOUTS_HIGH_CONFIDENCE:
+        cb_warnings.append(
+            f"LOW_CONFIDENCE: only {scored_scout_count}/{total_possible_scouts} "
+            f"scouts scored (minimum {MIN_SCOUTS_HIGH_CONFIDENCE} for high confidence)"
+        )
+
+    # Inter-scout disagreement check: if quant and fundamentals both report
+    # revenue growth but disagree by > DISAGREEMENT_SIGMA, flag it.
+    if quant_signal and fundamentals_data:
+        q_rev_growth = quant_data.get("revenue_growth_pct")
+        f_rev_growth = fundamentals_data.get("revenue_growth", {}).get("yoy_pct")
+        if q_rev_growth is not None and f_rev_growth is not None:
+            spread = abs(q_rev_growth - f_rev_growth)
+            # Use 5% as a rough sigma for revenue growth readings
+            if spread > DISAGREEMENT_SIGMA * 5:
+                cb_warnings.append(
+                    f"DISAGREEMENT: revenue growth quant={q_rev_growth:.1f}% vs "
+                    f"fundamentals={f_rev_growth:.1f}% (spread={spread:.1f}%, "
+                    f"threshold={DISAGREEMENT_SIGMA * 5:.0f}%)"
+                )
+
+    # ─── Composite confidence (harmonic mean of scout confidences) ───
+    # Harmonic mean ensures the weakest scout dominates — one garbage
+    # input drags the entire confidence down. This is the right behavior:
+    # a target built on 5 good scouts and 1 bad one is only as reliable
+    # as the bad one.
+    composite_confidence = 0.50  # default if confidence module unavailable
+    scout_confidences: dict[str, float] = {}
+    if _CONFIDENCE_AVAILABLE:
+        conf_values: list[float] = []
+        conf_weights: list[float] = []
+        for sig in signals:
+            scout_key = (sig.get("scout") or "").lower()
+            sig_scores = sig.get("scores") or {}
+            if isinstance(sig_scores, dict):
+                sc = sig_scores.get("confidence")
+                if sc is not None and isinstance(sc, (int, float)):
+                    scout_confidences[scout_key] = float(sc)
+                    conf_values.append(float(sc))
+                    conf_weights.append(FACTOR_WEIGHTS.get(
+                        # Map scout display name back to factor key
+                        {"quant": "quant_score", "insider": "insider_score",
+                         "news": "news_sentiment", "fundamentals": "fundamentals",
+                         "youtube": "youtube"}.get(scout_key, ""),
+                        0.10  # default weight for unmapped scouts
+                    ))
+        if conf_values:
+            composite_confidence = weighted_harmonic_mean(conf_values, conf_weights)
+
+    # Determine confidence level
+    if composite_confidence >= 0.70:
+        data_confidence = "high"
+    elif composite_confidence >= 0.40:
+        data_confidence = "medium"
+    else:
+        data_confidence = "low"
+
+    if data_confidence == "low":
+        cb_warnings.append(
+            f"LOW_COMPOSITE_CONFIDENCE: {composite_confidence:.2f} "
+            f"(harmonic mean of {len(scout_confidences)} scout confidences)"
+        )
+
+    data_quality = {
+        "confidence": data_confidence,
+        "confidence_score": composite_confidence,
+        "scouts_scored": scored_scout_count,
+        "scouts_total": total_possible_scouts,
+        "scout_names": list(factors.keys()),
+        "scout_confidences": scout_confidences,
+        "warnings": cb_warnings,
+    }
+    if cb_warnings:
+        print(f"  [circuit-breaker] {ticker}: {'; '.join(cb_warnings)}")
+        if _ACTIVITY_LOG:
+            for w in cb_warnings:
+                log_warn("circuit_breaker", w.split(":")[0],
+                         ticker=ticker, source="analyst",
+                         message=w, metadata=data_quality)
+
+    # Log analyst completion
+    if _ACTIVITY_LOG:
+        log_info("analyst", "Analysis completed",
+                 ticker=ticker, source="analyst",
+                 message=f"Composite: {composite}, Signal: {overall_signal if 'overall_signal' in dir() else 'pending'}",
+                 metadata={"composite": composite, "scouts_scored": scored_scout_count,
+                           "confidence": data_confidence})
+
     # Pull scoring fields back out for downstream use / display
     quant_score = factors.get("quant_score", 5)
     insider_score = factors.get("insider_score", 5)
@@ -1184,6 +1287,7 @@ def analyze_stock(ticker: str, name: str, sector: str, signals: list[dict], all_
         "sector": sector,
         "overall_signal": overall_signal,
         "composite_score": composite,
+        "data_quality": data_quality,
         "convergence": convergence,
         "signals": signals,
         "scores": {

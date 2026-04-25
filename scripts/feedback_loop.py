@@ -72,19 +72,10 @@ DEFAULT_WEIGHTS = {
     "news_sentiment": 0.10,
 }
 
-# Map scout names to factor weight keys.
-# Some factors (convergence, momentum) are derived, not from a single scout.
-SCOUT_TO_FACTOR = {
-    "quant": "quant_score",
-    "insider": "insider_score",
-    "news": "news_sentiment",
-    "fundamentals": "fundamentals",
-    # social, youtube, catalyst, filings, moat → contribute to convergence indirectly
-    # We track their accuracy but they feed into the convergence factor
-}
+# Map scout names to factor weight keys — imported from single-source registry.
+from registries import SCORE_SCOUTS as SCOUT_TO_FACTOR, CONVERGENCE_SCOUTS
 
-# Scouts that contribute to the convergence factor (their accuracy lifts/lowers convergence weight)
-CONVERGENCE_SCOUTS = ["social", "youtube", "catalyst", "filings", "moat"]
+# CONVERGENCE_SCOUTS imported from registries.py (single source of truth)
 
 
 def _fetch_historical_price(ticker: str, date: datetime) -> float | None:
@@ -451,6 +442,141 @@ def get_adaptive_weights(window_days: int = 30) -> dict[str, float]:
     return weights
 
 
+def compute_information_coefficient(window_days: int = 30) -> dict:
+    """Compute sector-neutral Information Coefficient (IC) per scout.
+
+    IC = Spearman rank correlation between predicted signal scores and
+    realized returns over the evaluation window.  Sector-neutral IC is
+    computed by calculating IC within each sector, then averaging across
+    sectors (equal-weighted).
+
+    This is the audit-recommended replacement for binary hit/miss accuracy.
+    IC captures HOW WELL the scout discriminates (rank ordering) rather than
+    just whether it got the direction right.
+
+    Returns: {
+        "raw_ic": {scout: float},       # Overall IC per scout
+        "sector_ic": {scout: {sector: float}},  # Per-sector IC
+        "neutral_ic": {scout: float},    # Sector-neutral (avg across sectors)
+        "n_observations": {scout: int},  # Sample size
+    }
+    """
+    import statistics
+
+    sb = get_client()
+
+    # Load outcomes with stock sector info
+    try:
+        resp = sb.table("signal_outcomes").select("*").eq("window_days", window_days).execute()
+        outcomes = resp.data or []
+    except Exception as e:
+        print(f"[feedback] IC computation failed: {e}")
+        return {"raw_ic": {}, "sector_ic": {}, "neutral_ic": {}, "n_observations": {}}
+
+    if len(outcomes) < 5:
+        return {"raw_ic": {}, "sector_ic": {}, "neutral_ic": {}, "n_observations": {}}
+
+    # Load stock sectors
+    try:
+        resp = sb.table("stocks").select("ticker,sector").execute()
+        sector_map = {r["ticker"]: r.get("sector", "Unknown") for r in (resp.data or [])}
+    except Exception:
+        sector_map = {}
+
+    # Group by scout: list of (signal_score, realized_return, sector)
+    from collections import defaultdict
+    scout_data: dict[str, list[tuple[float, float, str]]] = defaultdict(list)
+
+    for o in outcomes:
+        scout = o.get("scout", "unknown")
+        signal = o.get("signal", "neutral")
+        ret = float(o.get("return_pct") or 0)
+        ticker = o.get("ticker", "")
+        sector = sector_map.get(ticker, "Unknown")
+
+        # Convert signal to numeric score: bullish=+1, neutral=0, bearish=-1
+        score = {"bullish": 1.0, "neutral": 0.0, "bearish": -1.0}.get(signal, 0.0)
+        scout_data[scout].append((score, ret, sector))
+
+    def _spearman_rank_corr(x: list[float], y: list[float]) -> float | None:
+        """Compute Spearman rank correlation between two lists."""
+        n = len(x)
+        if n < 3:
+            return None
+        # Rank both lists
+        def _rank(vals):
+            sorted_idx = sorted(range(n), key=lambda i: vals[i])
+            ranks = [0.0] * n
+            for rank, idx in enumerate(sorted_idx, 1):
+                ranks[idx] = float(rank)
+            return ranks
+
+        rx, ry = _rank(x), _rank(y)
+        # Pearson correlation of ranks
+        mx = sum(rx) / n
+        my = sum(ry) / n
+        cov = sum((rx[i] - mx) * (ry[i] - my) for i in range(n))
+        sx = (sum((rx[i] - mx) ** 2 for i in range(n))) ** 0.5
+        sy = (sum((ry[i] - my) ** 2 for i in range(n))) ** 0.5
+        if sx == 0 or sy == 0:
+            return None
+        return cov / (sx * sy)
+
+    result = {
+        "raw_ic": {},
+        "sector_ic": {},
+        "neutral_ic": {},
+        "n_observations": {},
+    }
+
+    for scout, data in scout_data.items():
+        scores = [d[0] for d in data]
+        returns = [d[1] for d in data]
+        result["n_observations"][scout] = len(data)
+
+        # Raw IC (all observations)
+        ic = _spearman_rank_corr(scores, returns)
+        if ic is not None:
+            result["raw_ic"][scout] = round(ic, 4)
+
+        # Sector-neutral IC: compute IC per sector, then average
+        sector_groups: dict[str, list[tuple[float, float]]] = defaultdict(list)
+        for score, ret, sector in data:
+            # Normalize sector to top-level
+            top_sector = sector.split("/")[0].strip() if sector else "Unknown"
+            sector_groups[top_sector].append((score, ret))
+
+        sector_ics: dict[str, float] = {}
+        for sector, pairs in sector_groups.items():
+            if len(pairs) < 3:
+                continue
+            s_scores = [p[0] for p in pairs]
+            s_returns = [p[1] for p in pairs]
+            s_ic = _spearman_rank_corr(s_scores, s_returns)
+            if s_ic is not None:
+                sector_ics[sector] = round(s_ic, 4)
+
+        if sector_ics:
+            result["sector_ic"][scout] = sector_ics
+            result["neutral_ic"][scout] = round(
+                statistics.mean(sector_ics.values()), 4
+            )
+
+    # Print IC summary
+    if result["raw_ic"]:
+        print("\n[feedback] Information Coefficient (IC) Summary:")
+        for scout in sorted(result["raw_ic"], key=lambda s: abs(result["raw_ic"].get(s, 0)), reverse=True):
+            raw = result["raw_ic"].get(scout, 0)
+            neutral = result["neutral_ic"].get(scout, 0)
+            n = result["n_observations"].get(scout, 0)
+            quality = "🟢" if abs(neutral) > 0.05 else "🟡" if abs(neutral) > 0.02 else "⚪"
+            print(f"  {quality} {scout:<15} IC={raw:+.3f}  sector-neutral={neutral:+.3f}  (n={n})")
+    else:
+        print("[feedback] Not enough data for IC computation yet")
+
+    return result
+
+
 def load_scout_accuracy(window_days: int = 30) -> list[dict]:
     """Load scout accuracy data for dashboard display."""
     sb = get_client()
@@ -480,6 +606,9 @@ def run_feedback_loop() -> dict:
 
     accuracy_rows = compute_accuracy()
 
+    # Compute Information Coefficient (sector-neutral)
+    ic_result = compute_information_coefficient(window_days=30)
+
     # Print adaptive weights comparison
     adaptive = get_adaptive_weights()
     has_adjustments = any(
@@ -507,6 +636,7 @@ def run_feedback_loop() -> dict:
         "accuracy_rows": len(accuracy_rows),
         "adaptive_weights": adaptive,
         "has_adjustments": has_adjustments,
+        "information_coefficient": ic_result,
     }
 
 

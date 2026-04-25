@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import fs from "fs";
+import path from "path";
+
+const DATA_DIR = path.join(process.cwd(), "data");
 
 export async function POST(request: Request) {
   try {
@@ -22,6 +26,16 @@ export async function POST(request: Request) {
 
     if (!data || data.length === 0) {
       return NextResponse.json({ error: "Stock not found" }, { status: 404 });
+    }
+
+    // Signal any running mini-pipeline for this ticker to stop.
+    // The pipeline checks for this file between stages and halts early.
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      const cancelFile = path.join(DATA_DIR, `.pipeline-cancel-${ticker}`);
+      fs.writeFileSync(cancelFile, new Date().toISOString(), "utf-8");
+    } catch {
+      // Non-fatal — pipeline will just finish normally
     }
 
     return NextResponse.json({

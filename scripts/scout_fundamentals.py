@@ -393,8 +393,22 @@ def main():
             print(f"\n  Ticker {specific_ticker} not found in watchlist")
             return []
 
+    # Skip stocks with recent signals (avoid redundant Perplexity + Claude calls)
+    from utils import get_fresh_tickers
+    fresh = get_fresh_tickers("fundamentals")
+    before = len(watchlist)
+    watchlist = [s for s in watchlist if s["ticker"] not in fresh]
+    if fresh:
+        from registries import SCOUT_CADENCE_HOURS
+        hrs = SCOUT_CADENCE_HOURS.get("fundamentals", 48)
+        print(f"  Skipping {before - len(watchlist)} stocks with recent signals (<{hrs}h old)")
+
     print(f"  Analyzing {len(watchlist)} stocks (2 at a time)")
     print("-" * 50)
+
+    if not watchlist:
+        print("  All stocks have recent fundamentals — nothing to do")
+        return []
 
     start = time.time()
     signals = []

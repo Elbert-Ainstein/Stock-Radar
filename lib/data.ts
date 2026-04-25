@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { SCOUT_REGISTRY } from "./registries";
 
 // ─── Interfaces ───
 export interface ScoutSignal {
@@ -7,6 +8,15 @@ export interface ScoutSignal {
   signal: "bullish" | "bearish" | "neutral";
   summary: string;
   timestamp: string;
+}
+
+export interface DataQuality {
+  confidence: "high" | "medium" | "low";
+  confidence_score: number;
+  scouts_scored: number;
+  scouts_total: number;
+  scout_names: string[];
+  warnings: string[];
 }
 
 export interface Stock {
@@ -34,6 +44,7 @@ export interface Stock {
   tags: string[];
   overallSignal: string;
   convergence: { bullish: number; bearish: number; neutral: number; total: number };
+  dataQuality?: DataQuality | null;
 }
 
 export interface MacroContext {
@@ -127,6 +138,23 @@ export async function loadStocks(): Promise<Stock[]> {
     const score = analysis?.composite_score || 0;
     const convergence = analysis?.convergence || { bullish: 0, bearish: 0, neutral: 0, total: 0 };
 
+    // Data quality from analyst circuit breaker (if available).
+    // Fallback: count distinct scouts from signals array.
+    const analystDQ = analysis?.data_quality;
+    const distinctScouts = new Set(signals.map(s => s.scout.toLowerCase()));
+    const fallbackConfidence = distinctScouts.size >= 6 ? "high" : distinctScouts.size >= 4 ? "medium" : "low";
+    const fallbackScore = distinctScouts.size >= 6 ? 0.80 : distinctScouts.size >= 4 ? 0.55 : 0.35;
+    const dataQuality: DataQuality = analystDQ || {
+      confidence: fallbackConfidence,
+      confidence_score: fallbackScore,
+      scouts_scored: distinctScouts.size,
+      scouts_total: 9,
+      scout_names: Array.from(distinctScouts),
+      warnings: distinctScouts.size < 4
+        ? [`Only ${distinctScouts.size}/9 scouts contributed signals`]
+        : [],
+    };
+
     return {
       ticker,
       name: row.name || ticker,
@@ -145,6 +173,7 @@ export async function loadStocks(): Promise<Stock[]> {
       tags: row.tags || [],
       overallSignal: analysis?.overall_signal || "neutral",
       convergence,
+      dataQuality,
     };
   });
 
@@ -177,14 +206,7 @@ export interface ScoutInfo {
   requiresKey: boolean;
 }
 
-const SCOUT_REGISTRY: Record<string, { label: string; requiresKey: boolean; keyName?: string }> = {
-  quant: { label: "Quant Screener", requiresKey: false },
-  insider: { label: "Insider Tracker", requiresKey: false },
-  social: { label: "Social Sentiment", requiresKey: false },
-  news: { label: "News Scanner", requiresKey: true, keyName: "PERPLEXITY_API_KEY" },
-  fundamentals: { label: "Business Fundamentals", requiresKey: true, keyName: "ANTHROPIC_API_KEY / OPENAI_API_KEY" },
-  youtube: { label: "YouTube Intel", requiresKey: true, keyName: "GEMINI_API_KEY" },
-};
+// SCOUT_REGISTRY imported from lib/registries.ts (single source of truth)
 
 // ─── Load metadata ───
 export async function loadMeta(): Promise<{ generatedAt: string; scoutsActive: string[]; scoutDetails: ScoutInfo[] }> {

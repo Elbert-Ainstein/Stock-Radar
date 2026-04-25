@@ -18,57 +18,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
-# ---------------------------------------------------------------------------
-# Scout priority matrix: archetype -> {always, recommended, optional}
-# ---------------------------------------------------------------------------
-
-SCOUT_PRIORITY: dict[str, dict[str, list[str]]] = {
-    "garp": {
-        "always": ["quant", "fundamentals", "news", "catalyst"],
-        "recommended": ["moat", "insider", "filings"],
-        "optional": ["youtube", "social"],
-    },
-    "cyclical": {
-        "always": ["quant", "fundamentals", "news"],
-        "recommended": ["catalyst", "insider", "filings"],
-        "optional": ["moat", "youtube", "social"],
-    },
-    "compounder": {
-        "always": ["quant", "fundamentals", "moat"],
-        "recommended": ["news", "filings", "insider"],
-        "optional": ["catalyst", "youtube", "social"],
-    },
-    "transformational": {
-        "always": ["quant", "fundamentals", "news", "catalyst", "social"],
-        "recommended": ["moat", "youtube"],
-        "optional": ["insider", "filings"],
-    },
-    "special_situation": {
-        "always": ["quant", "news", "catalyst", "filings", "insider"],
-        "recommended": ["fundamentals"],
-        "optional": ["moat", "youtube", "social"],
-    },
-}
-
-# Complete set of all scouts known to the pipeline.
-ALL_SCOUTS = [
-    "quant", "news", "catalyst", "moat", "social",
-    "insider", "filings", "fundamentals", "youtube",
-]
-
-# Map scout names to their importable module names.
-SCOUT_MODULE_MAP: dict[str, str] = {
-    "quant": "scout_quant",
-    "news": "scout_news",
-    "catalyst": "scout_catalyst",
-    "moat": "scout_moat",
-    "social": "scout_social",
-    "insider": "scout_insider",
-    "filings": "scout_filings",
-    "fundamentals": "scout_fundamentals",
-    "youtube": "scout_youtube",
-}
+from registries import (
+    ALL_SCOUTS,
+    SCOUT_MODULE_MAP,
+    ARCHETYPE_SCOUT_PRIORITY as SCOUT_PRIORITY,
+)
 
 
 # ---------------------------------------------------------------------------

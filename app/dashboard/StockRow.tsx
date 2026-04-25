@@ -57,13 +57,38 @@ export default function StockRow({ stock, isSelected, onClick }: { stock: Stock;
           </div>
         </div>
 
-        {/* Scout convergence */}
+        {/* Scout convergence + data completeness */}
         <div className="min-w-[80px] text-center">
           <div className="text-sm">
             <span className="text-[var(--success)] font-mono font-semibold">{bullishCount}</span>
             <span className="text-[var(--muted)]">/{totalScouts}</span>
           </div>
           <div className="text-[10px] text-[var(--muted)]">scouts bullish</div>
+          {stock.dataQuality && (
+            <div
+              className={cn(
+                "text-[10px] font-mono mt-0.5 px-1 py-0.5 rounded",
+                stock.dataQuality.confidence === "high"
+                  ? "text-emerald-400 bg-emerald-400/10"
+                  : stock.dataQuality.confidence === "medium"
+                  ? "text-yellow-400 bg-yellow-400/10"
+                  : "text-amber-400 bg-amber-400/10"
+              )}
+              title={[
+                stock.dataQuality.confidence_score
+                  ? `Confidence: ${(stock.dataQuality.confidence_score * 100).toFixed(0)}%`
+                  : null,
+                ...(stock.dataQuality.warnings || []),
+              ].filter(Boolean).join("\n") || "Full scout coverage"}
+            >
+              {stock.dataQuality.scouts_scored}/{stock.dataQuality.scouts_total} data
+              {stock.dataQuality.confidence_score > 0 && (
+                <span className="ml-1 opacity-70">
+                  {(stock.dataQuality.confidence_score * 100).toFixed(0)}%
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Sparkline */}

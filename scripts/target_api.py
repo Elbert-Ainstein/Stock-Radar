@@ -45,12 +45,13 @@ def _get_batch_tickers() -> list[str]:
 
 
 def _load_stock_from_db(ticker: str) -> dict:
-    """Load archetype, model_defaults, valuation_method, and scenarios from Supabase.
+    """Load archetype, model_defaults, valuation_method, scenarios, and analyst_confidence from Supabase.
 
-    Returns a dict with keys: archetype, model_defaults, valuation_method, scenarios.
+    Returns a dict with keys: archetype, model_defaults, valuation_method, scenarios, analyst_confidence.
     All values may be None if DB is unreachable.
     """
-    result = {"archetype": None, "model_defaults": None, "valuation_method": None, "scenarios": None}
+    result = {"archetype": None, "model_defaults": None, "valuation_method": None,
+              "scenarios": None, "analyst_confidence": None}
     try:
         from supabase_helper import get_client
         sb = get_client()
@@ -66,6 +67,24 @@ def _load_stock_from_db(ticker: str) -> dict:
             result["model_defaults"] = resp.data.get("model_defaults")
             result["valuation_method"] = resp.data.get("valuation_method")
             result["scenarios"] = resp.data.get("scenarios")
+
+        # Load latest analyst confidence from analysis table
+        try:
+            analysis_resp = (
+                sb.table("analysis")
+                .select("data_quality")
+                .eq("ticker", ticker.upper())
+                .order("created_at", desc=True)
+                .limit(1)
+                .maybe_single()
+                .execute()
+            )
+            if analysis_resp.data:
+                dq = analysis_resp.data.get("data_quality")
+                if isinstance(dq, dict):
+                    result["analyst_confidence"] = dq.get("confidence_score")
+        except Exception:
+            pass  # analysis table may not exist yet — non-fatal
     except Exception as e:
         print(f"  [target_api] DB load failed for {ticker}: {e}", file=__import__("sys").stderr)
     return result
@@ -143,7 +162,8 @@ def payload_for(
         merged_overrides.update(overrides)
 
     try:
-        t = build_target(fin, merged_overrides or {}, horizon_months=horizon_months, archetype=arch_primary)
+        t = build_target(fin, merged_overrides or {}, horizon_months=horizon_months,
+                         archetype=arch_primary, analyst_confidence=db_data.get("analyst_confidence"))
     except Exception as e:
         return {"ticker": ticker, "error": f"target engine failed: {e}"}
 

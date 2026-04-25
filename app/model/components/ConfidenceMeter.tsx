@@ -83,7 +83,7 @@ export default function ConfidenceMeter({
         <div className="text-right">
           <div className="text-3xl font-mono font-bold text-[var(--text)]">{score.toFixed(0)}%</div>
           <div className="text-xs text-[var(--muted)]">
-            {metCount} met \u00B7 {failedCount} failed \u00B7 {pendingCount} pending
+            {metCount} met · {failedCount} failed · {pendingCount} pending
           </div>
         </div>
       </div>
@@ -108,7 +108,7 @@ export default function ConfidenceMeter({
         </div>
         <div className="flex gap-4 mt-2 text-[10px]">
           <span className="text-emerald-400/70">Upside pool: +{totalUpside}%</span>
-          <span className="text-rose-400/70">Risk pool: \u2212{totalDownside}%</span>
+          <span className="text-rose-400/70">Risk pool: −{totalDownside}%</span>
         </div>
       </div>
 

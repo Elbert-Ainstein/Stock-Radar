@@ -16,8 +16,8 @@ export interface EngineScenario {
   ev_ebitda_multiple: number;
 }
 export interface ArchetypeInfo {
-  primary: "garp" | "cyclical" | "transformational" | "compounder" | "special_situation";
-  secondary?: string | null;
+  primary: import("@/lib/registries").Archetype;
+  secondary?: import("@/lib/registries").Archetype | null;
   justification?: string;
 }
 
@@ -42,6 +42,15 @@ export interface EnginePayload {
     exit_fiscal_year?: string;
     net_debt?: number;
     upside_base_pct?: number;
+    confidence_score?: number;
+    confidence_label?: string;
+    data_quality?: {
+      confidence: string;
+      confidence_score: number;
+      analyst_confidence?: number;
+      warnings: string[];
+      flags: string[];
+    };
   };
   capitalization?: {
     price: number;
@@ -218,10 +227,11 @@ export interface Props {
 }
 
 // ─── Valuation Methods ───
-export type ValuationMethod = "pe" | "ps" | "cyclical";
+// ValuationMethod type re-exported from single-source registry.
+export type { ValuationMethod } from "@/lib/registries";
 
 export interface ValuationMethodInfo {
-  method: ValuationMethod;
+  method: import("@/lib/registries").ValuationMethod;
   label: string;
   multipleLabel: string;
   justification: string;

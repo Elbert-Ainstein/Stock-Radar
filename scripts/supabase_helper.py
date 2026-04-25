@@ -231,6 +231,82 @@ def seed_stocks_from_watchlist(watchlist_path: str) -> int:
     return len(resp.data) if resp.data else 0
 
 
+# ── Schema Validation ────────────────────────────────────────────
+
+# Expected columns per table — the code writes these fields and will
+# silently drop data if they're missing.  Run validate_schema() at
+# pipeline startup to catch drift early.
+EXPECTED_SCHEMA = {
+    "stocks": [
+        "ticker", "name", "sector", "thesis", "kill_condition", "tags",
+        "target_price", "timeline_years", "valuation_method", "target_multiple",
+        "target_notes", "model_defaults", "scenarios", "criteria",
+        "archetype", "research_cache", "active", "added_at", "updated_at",
+    ],
+    "signals": [
+        "ticker", "scout", "signal", "ai", "summary", "data", "scores",
+        "run_id", "created_at",
+    ],
+    "analysis": [
+        "ticker", "composite_score", "overall_signal", "convergence",
+        "scores", "valuation", "auto_tiers", "alerts", "criteria_eval",
+        "event_impacts", "fundamentals", "price_data", "run_id", "created_at",
+    ],
+    "pipeline_runs": [
+        "run_id", "started_at", "completed_at", "success", "free_only",
+        "scouts_active", "scout_details", "stock_count", "error", "log_tail",
+        "duration_s",
+    ],
+    "archetype_history": [
+        "ticker", "archetype", "secondary", "justification", "created_at",
+    ],
+}
+
+
+def validate_schema(verbose: bool = True) -> dict[str, list[str]]:
+    """Check that all expected columns exist in Supabase.
+
+    Returns a dict of {table: [missing_columns]}.  Empty dict = all good.
+    Uses a lightweight probe: SELECT a single row and check the returned keys.
+    For empty tables, attempts an INSERT+rollback-style probe via column listing.
+    """
+    sb = get_client()
+    missing: dict[str, list[str]] = {}
+
+    for table, expected_cols in EXPECTED_SCHEMA.items():
+        try:
+            # Fetch one row to see which columns come back
+            resp = sb.table(table).select("*").limit(1).execute()
+            if resp.data:
+                actual_cols = set(resp.data[0].keys())
+            else:
+                # Empty table — try selecting all expected columns explicitly
+                col_list = ",".join(expected_cols)
+                try:
+                    sb.table(table).select(col_list).limit(1).execute()
+                    actual_cols = set(expected_cols)  # All columns exist
+                except Exception:
+                    actual_cols = set()  # Table may not exist
+
+            table_missing = [c for c in expected_cols if c not in actual_cols]
+            if table_missing:
+                missing[table] = table_missing
+                if verbose:
+                    print(
+                        f"  [schema] WARNING: {table} missing columns: "
+                        f"{', '.join(table_missing)}. Run migration.sql to fix.",
+                    )
+        except Exception as e:
+            if verbose:
+                print(f"  [schema] WARNING: Could not probe table '{table}': {e}")
+            missing[table] = ["<table_missing_or_inaccessible>"]
+
+    if verbose and not missing:
+        print("  [schema] All tables and columns verified OK")
+
+    return missing
+
+
 if __name__ == "__main__":
     # Quick test: print watchlist count
     import sys

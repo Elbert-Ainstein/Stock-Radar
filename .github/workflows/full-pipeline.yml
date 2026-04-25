@@ -1,0 +1,69 @@
+# Full Pipeline — scouts + analyst + models (manual trigger only)
+# Use this when you want a complete fresh run from scratch,
+# e.g. after adding many new stocks or after a DB wipe.
+
+name: Full Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Pipeline mode"
+        required: true
+        default: "smart"
+        type: choice
+        options:
+          - smart
+          - full
+          - fast
+          - free
+
+concurrency:
+  group: stock-radar-full
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run full pipeline
+        working-directory: scripts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          if [ "$MODE" = "full" ]; then
+            python run_pipeline.py --full
+          elif [ "$MODE" = "fast" ]; then
+            python run_pipeline.py --fast
+          elif [ "$MODE" = "free" ]; then
+            python run_pipeline.py --free
+          else
+            python run_pipeline.py
+          fi
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-pipeline-${{ github.run_number }}
+          path: data/.pipeline-progress
+          retention-days: 14

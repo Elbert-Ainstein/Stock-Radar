@@ -4,6 +4,471 @@ All notable changes made to the project are documented here, with reasoning and 
 
 ---
 
+## [2026-04-25] Session: Bug Audit & Pipeline Reliability Fixes
+
+### 1. Auto-seed stocks table after DB wipe (`scripts/run_pipeline.py`)
+- **What:** Added `_ensure_stocks_seeded()` helper that checks if the `stocks` table is empty and, if so, populates it from `config/watchlist.json` via `seed_stocks_from_watchlist()`. Called at the start of both full pipeline and mini-pipeline runs.
+- **Why:** After a database wipe, the pipeline would write signals and analysis but the dashboard couldn't find any stocks (it reads from the `stocks` table). This was the root cause of "models don't show up."
+- **Files:** `scripts/run_pipeline.py`
+
+### 2. Fix generate_model.py UPDATE → UPSERT (`scripts/generate_model.py`)
+- **What:** Changed `update_stock_in_supabase()` from `.update()` to `.upsert(on_conflict="ticker")`. Now ensures `ticker`, `name`, and `active` fields are always present so a missing stock row is created rather than silently skipped.
+- **Why:** After a DB wipe or for new tickers, the UPDATE matched zero rows and model data was silently lost. The dashboard would show the stock but with no model.
+- **Files:** `scripts/generate_model.py`
+
+### 3. Add ticker filtering to mini-pipeline (`scripts/utils.py`, `scripts/run_pipeline.py`)
+- **What:** `run_single_ticker()` now sets `PIPELINE_TICKER_FILTER` env var. `get_watchlist()` respects this filter, returning only the matching stock. This prevents the quant scout and analyst from scanning all 50 stocks when only one was requested.
+- **Why:** Previously, adding a single stock via the dashboard triggered a full watchlist scan in both quant and analyst stages, wasting ~5 minutes of API calls.
+- **Files:** `scripts/utils.py`, `scripts/run_pipeline.py`
+
+### 4. Run more scouts in mini-pipeline (`scripts/run_pipeline.py`)
+- **What:** `run_single_ticker()` now runs 4 scouts in parallel (quant, insider, social, fundamentals) instead of just quant. Uses ThreadPoolExecutor with 4 workers.
+- **Why:** A newly added stock only had quant data, producing a composite score from a single factor. Now it gets 4 signal sources for better initial coverage.
+- **Files:** `scripts/run_pipeline.py`
+
+### 5. Fix get_watchlist() missing archetype field (`scripts/utils.py`)
+- **What:** Added `"archetype": row.get("archetype"),` to the Supabase row mapping in `get_watchlist()`.
+- **Why:** Smart routing in the full pipeline reads `stock.get("archetype")` to route scouts per-stock. Without the field, every stock was treated as having no archetype, disabling smart routing.
+- **Files:** `scripts/utils.py`
+
+### 6. Dynamic fiscal year references in research queries (`scripts/generate_model.py`)
+- **What:** Replaced hardcoded `FY2025 FY2026 FY2027` and `2026 2027` in Perplexity research queries with dynamically computed years based on `datetime.now().year`. Also fixed `query_labels` to have 4 entries matching 4 queries.
+- **Why:** Hardcoded years go stale. By April 2027 the queries would be asking for historical data instead of forward guidance.
+- **Files:** `scripts/generate_model.py`
+
+### 7. Remove dashboard auto-run on empty data (`app/dashboard/Dashboard.tsx`)
+- **What:** Removed the `useEffect` that auto-triggered `runPipeline(true)` when no signal data existed. Added a comment explaining the removal.
+- **Why:** After a DB wipe with 50 stocks, the dashboard would silently start a 10-15 minute free pipeline run without user consent on every page load until signals existed.
+- **Files:** `app/dashboard/Dashboard.tsx`
+
+### 8. Split pipeline into scouts-only / rebuild-only modes (`scripts/run_pipeline.py`)
+- **What:** Added `--scouts-only` and `--rebuild-only` CLI flags. `--scouts-only` runs all scouts in parallel but skips analyst, model generation, feedback loop, and prediction logging. `--rebuild-only` skips scouts entirely and runs analyst + models against existing signals in Supabase. The default (no flag) runs everything as before.
+- **Why:** Separates cheap work (signal gathering, ~2-5 min, no Claude tokens) from expensive work (analyst + models, ~30-60 min, uses Claude + Perplexity). Enables scheduling scouts frequently and rebuilds less often to save API costs.
+- **Files:** `scripts/run_pipeline.py`
+
+### 9. GitHub Actions workflows for 24/7 automation
+- **What:** Added three workflow files: `scout-refresh.yml` (twice daily at 6am/6pm UTC, `--scouts-only`), `analyst-rebuild.yml` (daily at 7am UTC, `--rebuild-only`), and `full-pipeline.yml` (manual trigger with mode selector). All workflows use `concurrency` groups to prevent overlapping runs and include artifact upload for logs.
+- **Why:** Pipeline needs to run 24/7 regardless of whether any device is on. GitHub Actions provides free cron scheduling with secrets management, no VPS required.
+- **Setup:** Push repo to GitHub → Settings → Secrets → add SUPABASE_URL, SUPABASE_KEY, ANTHROPIC_API_KEY, PERPLEXITY_API_KEY, EODHD_API_KEY, ALPHA_VANTAGE_API_KEY, GEMINI_API_KEY.
+- **Files:** `.github/workflows/scout-refresh.yml`, `.github/workflows/analyst-rebuild.yml`, `.github/workflows/full-pipeline.yml`
+
+### 10. Centralized scout cadence tiering (`scripts/registries.py`, all scouts)
+- **What:** Added `SCOUT_CADENCE_HOURS` dict to `registries.py` — the single source of truth for how often each scout's signals go stale. Three tiers: daily (quant 12h, news 18h, social/insider 20h), periodic (catalyst/fundamentals/moat 48h), and weekly (youtube/filings 168h). Updated `get_fresh_tickers()` in `utils.py` to auto-resolve cadence from the registry when no explicit `max_age_hours` is passed. Removed all hardcoded hour values from 7 scout files.
+- **Why:** Previously each scout had a hardcoded `max_age_hours` — changing a cadence meant editing a random scout file and hoping you found the right one. Now all cadences are in one place, tunable without touching scout code. The tiering reflects real signal decay: prices go stale in hours, competitive moats don't change for days.
+- **Files:** `scripts/registries.py`, `scripts/utils.py`, `scripts/scout_quant.py`, `scripts/scout_news.py`, `scripts/scout_catalyst.py`, `scripts/scout_moat.py`, `scripts/scout_insider.py`, `scripts/scout_fundamentals.py`, `scripts/scout_social.py`
+
+### 9. Signal freshness checks across all scouts
+- **What:** Added `get_fresh_tickers()` calls to scout_quant (12h), scout_news (20h), scout_catalyst (20h), scout_moat (20h), scout_insider (20h), scout_fundamentals (20h), and scout_social (20h). Each scout now skips stocks that already have recent signals in Supabase.
+- **Why:** With 50 stocks, re-scanning stocks that were just scanned hours ago wastes API calls and time. First run processes all 50; subsequent runs within the same day skip most and only process new/stale stocks.
+- **Files:** `scripts/scout_quant.py`, `scripts/scout_news.py`, `scripts/scout_catalyst.py`, `scripts/scout_moat.py`, `scripts/scout_insider.py`, `scripts/scout_fundamentals.py`, `scripts/scout_social.py`
+
+### 9. YouTube scout moved to --full only (`scripts/run_pipeline.py`)
+- **What:** YouTube scout (`scout_youtube`) is no longer included in default or smart-mode pipeline runs. It only runs with `--full` flag.
+- **Why:** YouTube scout is the slowest (~2 min/stock × 50 stocks = ~100 min) and returns 0 results for most stocks. Moving it to --full cuts default pipeline time significantly.
+- **Files:** `scripts/run_pipeline.py`
+
+### 10. Within-scout stock-level parallelism
+- **What:** Added `ThreadPoolExecutor` to process stocks in parallel within each scout: quant (6 workers), insider (4 workers), news (3 workers). Social scout already had parallelism (4 workers).
+- **Why:** Sequential processing of 50 stocks within each scout was the biggest bottleneck. With parallelism, each scout completes in the time of its slowest stock rather than the sum of all stocks.
+- **Before:** Each scout processed ~50 stocks sequentially (e.g., quant: 50 × ~3s = ~150s)
+- **After:** Each scout processes ~50 stocks in parallel (e.g., quant: ~50/6 batches × ~3s = ~25s)
+- **Files:** `scripts/scout_quant.py`, `scripts/scout_insider.py`, `scripts/scout_news.py`
+
+---
+
+## [2026-04-24] Session: Confidence Propagation + Feedback Calibration (Resilience Phase 2-3)
+
+### 1. Confidence propagation through target engine (`scripts/target_engine.py`)
+- **What:** `TargetResult` dataclass now carries `confidence_score` (0.0-1.0), `confidence_label` ("high"/"medium"/"low"), and `data_quality` dict. `build_target()` accepts optional `analyst_confidence` parameter and auto-runs `check_target_quality()` at the end, degrading confidence by scenario spread width and circuit-breaker flags.
+- **Why:** Confidence must flow end-to-end — scout → analyst → engine → frontend — so users know which targets are data-rich vs. data-poor.
+- **Files:** `scripts/target_engine.py`, `scripts/target_api.py`, `scripts/run_pipeline.py`
+
+### 2. Confidence indicators on dashboard and model page (`app/dashboard/StockRow.tsx`, `app/model/TargetPriceModel.tsx`)
+- **What:** Dashboard scout completeness badge now shows 3-level confidence (high/medium/low) with numeric percentage in tooltip. Model page's ImpliedTargetBox shows engine confidence as a colored pill badge below the target price. Updated `DataQuality` interface to include `"medium"` level and numeric `confidence_score`.
+- **Why:** Silent degradation → visible degradation. Users need to see "this target is based on 4/9 scouts with 55% confidence" right next to the price.
+- **Files:** `lib/data.ts`, `app/dashboard/StockRow.tsx`, `app/model/TargetPriceModel.tsx`, `app/model/types.ts`
+
+### 3. Event magnitude calibration + target convergence tracking (`scripts/calibration.py`)
+- **What:** New `calibration.py` module with two feedback readers: (a) `calibrate_event_magnitudes()` — compares predicted event impacts to actual price changes, produces per-event-type calibration ratios; (b) `compute_target_convergence()` — tracks systematic bias by archetype and sector from prediction_log vs prediction_outcomes. Calibration ratios auto-applied in `event_reasoner.py` to scale future predictions. Results cached in new `calibration_cache` Supabase table.
+- **Why:** The pipeline needs to learn from its mistakes. If earnings_beat events consistently over-predict by 30%, the ratio (0.70) automatically dampens future predictions.
+- **Files:** `scripts/calibration.py` (new), `scripts/event_reasoner.py`, `scripts/run_pipeline.py`, `supabase/calibration_cache.sql` (new)
+
+### 4. Pipeline wiring
+- **What:** `run_pipeline.py` builds analyst_confidence_map after analyst stage and passes it through to `build_target()`. Calibration runs after the feedback loop. `target_api.py` loads analyst confidence from the latest analysis row in Supabase.
+- **Files:** `scripts/run_pipeline.py`, `scripts/target_api.py`
+
+---
+
+## [2026-04-24] Session: Activity Logs Page
+
+### 1. Activity log infrastructure (`scripts/activity_logger.py`, `supabase/activity_log.sql`)
+- **What:** New `activity_log` Supabase table with structured columns (category, level, ticker, source, title, message, run_id, metadata jsonb, duration_ms). Python logger module with `log_info()`, `log_warn()`, `log_error()`, and `LogTimer` context manager. Fire-and-forget — never breaks the pipeline.
+- **Why:** The system logs everything but it's all print() to stdout. No queryable, filterable, persistent record of what happened. The assessment called it "a system with a perfect diary and zero self-awareness."
+- **Files:** `scripts/activity_logger.py` (new), `supabase/activity_log.sql` (new)
+
+### 2. Pipeline + analyst logging wired up (`scripts/run_pipeline.py`, `scripts/analyst.py`)
+- **What:** Pipeline start/end events logged with run_id, mode, duration, stock count. Analyst circuit breaker warnings logged as warn-level entries with full data_quality metadata. All logging is gracefully degraded (optional import, fire-and-forget writes).
+- **Why:** Logs page needs data to display. These are the highest-value log points — pipeline lifecycle and data quality warnings.
+- **Files:** `scripts/run_pipeline.py`, `scripts/analyst.py`
+
+### 3. Logs API route (`app/api/logs/route.ts`)
+- **What:** `GET /api/logs` with filters for category, level, ticker, run_id, time range. Supports pagination (limit/offset). Returns both flat log list and grouped-by-run-id view for timeline rendering.
+- **Files:** `app/api/logs/route.ts` (new)
+
+### 4. /logs dashboard page (`app/logs/page.tsx`, `app/logs/LogsDashboard.tsx`)
+- **What:** Full-page activity log viewer at `/logs`. Features: category/level/ticker filtering, auto-refresh (15s), expandable entries showing full message + metadata, color-coded by level (info=neutral, warn=amber, error=red), category icons, duration badges, pagination. Empty state guides user to create the Supabase table.
+- **Why:** Transparent audit trail — everything the bot does, organized and accessible. Not raw JSON dumps, but structured entries with human-readable titles, expandable details, and filterable categories.
+- **Files:** `app/logs/page.tsx` (new), `app/logs/LogsDashboard.tsx` (new)
+
+### 5. Navigation link (`app/dashboard/Dashboard.tsx`)
+- **What:** Added "Logs" link to dashboard header navigation alongside Watchlist, Discovery, Models, Ask AI.
+
+---
+
+## [2026-04-24] Session: Contract Layer + Circuit Breakers (Resilience Phase 1)
+
+### 1. Single-source registries (`scripts/registries.py`, `lib/registries.ts`)
+- **What:** Created canonical registry files for Python and TypeScript. ALL scout names, valuation methods, archetypes, lifecycle stages, and circuit breaker thresholds defined once.
+- **Why:** Registry fragmentation was the #1 structural failure category — scouts were defined in 5 places independently, archetypes in 4, valuation methods in 4. Adding a scout or archetype required editing every file, and missing one caused silent degradation (3 scouts invisible on dashboard).
+- **Files:** `scripts/registries.py` (new), `lib/registries.ts` (new), `scripts/analyst.py`, `scripts/research_manager.py`, `scripts/feedback_loop.py`, `scripts/run_pipeline.py`, `scripts/target_engine.py`, `scripts/generate_model.py`, `lib/data.ts`, `app/model/types.ts`
+- **Impact:** Future scout/archetype/method additions require editing ONE file per language. All consumers import from the canonical source.
+
+### 2. Circuit breaker: Scout → Analyst boundary (`scripts/analyst.py`)
+- **What:** After computing composite score, analyst now checks: (1) how many scouts actually contributed scored signals — flags LOW_CONFIDENCE if < 4; (2) inter-scout disagreement on overlapping metrics (revenue growth quant vs fundamentals). Produces `data_quality` field in output.
+- **Why:** Silent degradation — when scouts fail, the composite score is computed from incomplete data with no visible warning. Assessment identified this as the most dangerous failure mode: "plausible-looking wrong numbers."
+- **Impact:** `data_quality.confidence` propagates to frontend for display. Circuit breaker logs warnings but does not halt — downstream consumers decide what to do.
+
+### 3. Circuit breaker: Analyst → Engine boundary (`scripts/target_engine.py`)
+- **What:** New `check_target_quality()` function that validates: (1) extreme target-to-price ratio (>3x); (2) target swing > 30% between runs; (3) composite score regime change (>2 points); (4) kill condition / signal contradiction.
+- **Why:** The cascade path from the assessment: stale data → slightly wrong growth → compounded 5-year forecast → wrong terminal value (60-80% of EV) → wrong target → user trusts it.
+- **Impact:** Returns confidence level + warnings + machine-readable flags. Frontend/API can display warnings alongside targets.
+
+### 4. Circuit breaker: Engine → Frontend boundary (`app/api/model/[ticker]/route.ts`)
+- **What:** API route now checks target payload before sending to dashboard: (1) extreme prediction warning; (2) required fields present and non-null; (3) scenario ordering sanity (low < base < high). Attaches `_data_quality` metadata to response.
+- **Why:** Last line of defense before a wrong number reaches the user. Assessment: "Circuit breakers do not fix bad data. They stop the cascade so bad data does not reach the user as a confident-looking number."
+- **Impact:** Frontend can render confidence badges and warnings for flagged targets.
+
+### 5. Scout completeness indicator on dashboard (`app/dashboard/StockRow.tsx`, `lib/data.ts`)
+- **What:** Every stock card now shows "X/9 data" badge with color coding (green for high confidence, amber for low). Sourced from analyst `data_quality` field (if available) or computed from distinct scout count in signals.
+- **Why:** Assessment's "simplest immediate fix" — eliminates the most dangerous form of silent degradation: the user not knowing that scouts failed. Data already existed in the system; it just wasn't surfaced.
+- **Impact:** User immediately sees "3/9 data" in amber and knows half the picture is missing — vs. previously seeing a confident score with no indication of incomplete input.
+
+---
+
+## [2026-04-24] Session: Dashboard Bug Fixes — Event Impact Display + Scout Registry + Pipeline Cancellation
+
+### 1. Fix event impact over-adjustment (-$608 LITE, -$203 AMD) (`app/model/TargetPriceModel.tsx`)
+- **What:** Event delta was computed as `blend.final_target - liveSliderTarget`, but `blend.final_target` was anchored to the pipeline engine's base (a different number from the live slider target). This caused absurd deltas when the two bases diverged.
+- **Fix:** Compute event delta from `blend.event_pct_weighted` applied to the live slider target, so the numbers are always internally consistent.
+- **Before:** LITE showed -$608 events on $676 base = $68 target (-92%); AMD showed -$203 on $340 = $137 (-61%).
+- **After:** Event delta is correctly percentage-based. If blend says -5.2% events, delta = $676 × -5.2% = -$35.
+
+### 2. Add missing scouts to dashboard registry (`lib/data.ts`)
+- **What:** `SCOUT_REGISTRY` only had 6 scouts (quant, insider, social, news, fundamentals, youtube). Catalyst, Moat, and Filings scouts were missing — their signals weren't counted in the "X/Y scouts active" display.
+- **Fix:** Added catalyst, moat, and filings to the registry. Dashboard now shows 9 scouts.
+- **Before:** Dashboard showed "4/6 scouts active" even when 8 scouts ran successfully.
+- **After:** Dashboard correctly reports all scouts including catalyst, moat, and filings.
+
+### 3. Add missing scouts to analyst name_map (`scripts/analyst.py`)
+- **What:** The `_load_scouts_from_supabase` function's `name_map` only mapped 6 scout names. While the fallback `.capitalize()` handled unmapped scouts, adding catalyst/moat/filings to the map ensures explicit correctness.
+- **Fix:** Added "catalyst": "Catalyst", "moat": "Moat", "filings": "Filings" to name_map.
+
+### 4. Pipeline cancellation on stock deletion (`scripts/run_pipeline.py`, `app/api/stocks/delete/route.ts`)
+- **What:** When a user added a stock (triggering a mini-pipeline) then immediately deleted it, the pipeline continued running all stages (quant → analyst → model generation), wasting API calls on a stock that no longer exists.
+- **Fix:** Delete API now writes a `.pipeline-cancel-{TICKER}` file. The mini-pipeline checks for this cancellation signal between each stage and halts early if found, cleaning up the cancel file.
+- **Before:** Pipeline ran to completion even for deleted stocks.
+- **After:** Pipeline detects deletion within seconds and stops at the next stage boundary.
+
+### 5. Add "Stop Pipeline" button + DELETE /api/pipeline endpoint (`app/api/pipeline/route.ts`, `app/dashboard/Dashboard.tsx`)
+- **What:** No way to manually stop a running pipeline from the dashboard. If a wrong ticker was added or the pipeline was stuck, the only option was to wait 10-15 minutes or SSH in and `pkill`.
+- **Fix:** Added a `DELETE /api/pipeline` endpoint that kills all pipeline-related Python processes (`run_pipeline.py`, all scouts, analyst, generate_model) and cleans up lock/progress files. The dashboard's "Run Pipeline" button transforms into a red "Stop Pipeline" button while the pipeline is running.
+- **Before:** No stop mechanism; had to manually kill processes.
+- **After:** One-click stop from the dashboard; processes are killed immediately.
+
+---
+
+## [2026-04-24] Session: Institutional DCF Overhaul + Infrastructure Build-out
+
+### 1. Gordon Growth + ROIIC Fade Terminal Value (`scripts/target_engine.py`)
+- **What:** Replaced dual 50/50 EV/EBITDA + EV/FCF-SBC exit-multiple blend with a single Gordon Growth model featuring a 7-year ROIIC fade period
+- **How:** Growth fades linearly from g_terminal to g_perpetuity (≤2.5%) over ROIIC_FADE_YEARS=7, then applies steady-state Gordon Growth
+- **Why:** Audit identified the old dual blend as a "Trojan Horse" mixing intrinsic (DCF) with relative (exit multiples). Pure Gordon Growth is theoretically clean
+- **Fallback:** Exit-multiple method retained as fallback when Gordon returns None
+
+### 2. Bottom-Up Beta WACC (`scripts/target_engine.py`)
+- **What:** Replaced blanket 12% WACC with company-specific WACC derived from Damodaran sector unlevered betas
+- **How:** Re-levers unlevered beta with company D/E ratio (Modigliani-Miller with taxes), then CAPM: Ke = Rf + βL × ERP. WACC = weighted average of Ke and Kd(1-t). 18 sector betas included
+- **Clamped:** WACC bounded to [6%, 22%] to prevent absurd values
+
+### 3. Archetype-Dependent Forecast Horizons (`scripts/target_engine.py`)
+- **What:** GARP=5yr, transformational=7yr, cyclical=8yr, compounder=10yr explicit forecast periods instead of a fixed global constant
+- **Added:** ARCHETYPE_FORECAST_YEARS, ARCHETYPE_VALUATION_YEAR, ARCHETYPE_MARGIN_RAMP dicts and _archetype_params() function
+
+### 4. Alternative Valuation Methods (`scripts/target_engine.py`)
+- **What:** Added reverse_dcf() — binary search for implied growth rate given current market price — and residual_income_model() — book value + PV of excess earnings above cost of equity
+
+### 5. Volatility-Scaled Event Caps (`scripts/event_reasoner.py`)
+- **What:** Replaced fixed ±10%/±15% event impact caps with k×σ_firm scaling. Single event cap = 0.4×annualized_vol, total cap = 0.6×annualized_vol
+- **How:** _estimate_annualized_vol() uses 6-month yfinance history, daily vol × √252, clamped to [0.15, 1.50]
+
+### 6. Inverse-Variance Sample Selection (`scripts/self_consistency.py`)
+- **What:** Replaced "closest to mean base price" heuristic with inverse-variance weighting across all numeric fields (prices + defaults)
+- **Why:** Old method only looked at one field and could pick outliers on other dimensions
+
+### 7. Damodaran Lifecycle × Morningstar Moat 2D Grid (`scripts/generate_model.py`)
+- **What:** Added lifecycle_stage (startup/high_growth/mature_growth/mature_stable/decline) and moat_width (none/narrow/wide) to archetype classification schema
+
+### 8. SEC EDGAR XBRL Point-in-Time Data Layer (`scripts/edgar_xbrl.py`)
+- **What:** New module for fetching financial data directly from SEC 10-K/10-Q filings with filing dates for backtesting-safe data retrieval
+- **Features:** CIK lookup via company_tickers.json, rate limiting, company facts fetching, quarterly data extraction with automatic concept selection (picks most recent XBRL concept)
+- **Why:** Eliminates look-ahead bias — filing date = knowledge date
+
+### 9. Walk-Forward + CPCV Backtesting Harness (`scripts/backtest.py`)
+- **What:** New module implementing anchored/rolling walk-forward and Combinatorial Purged Cross-Validation (de Prado ch.12) with embargo gaps
+- **Metrics:** Hit rate, Information Coefficient, mean return, annualized Sharpe per fold
+- **CPCV:** Deflated Sharpe p-value for multiple-testing correction (Bailey & de Prado 2014)
+
+### 10. Alpaca Paper-Trading Bridge (`scripts/paper_trade.py`)
+- **What:** Translates model outputs + composite scores into paper-trade orders on Alpaca's paper-trading API
+- **Sizing:** Half-Kelly with 10% per-position cap, minimum score threshold, top-15 positions
+- **Features:** Rebalancing, dry-run mode, portfolio state logging, daily P&L tracking
+
+### 11. Factor Exposure Analysis (`scripts/factor_exposure.py`)
+- **What:** OLS regression of stock/portfolio returns against factor proxy ETFs (market, size, value, growth, momentum, quality, low_vol)
+- **Output:** Per-factor beta, t-stat, p-value, variance contribution. Alpha (annualized), R², systematic vs idiosyncratic risk decomposition
+- **Warnings:** Flags high single-factor exposures and low diversification
+
+### 12. Experiment Tracking (`scripts/experiment_tracker.py`)
+- **What:** Lightweight experiment tracker with local JSON-lines storage + optional MLflow integration
+- **Features:** Context manager API, parameter/metric/artifact logging, git commit tracking, run comparison, best-run search
+
+### 13. Drift Monitoring (`scripts/drift_monitor.py`)
+- **What:** Three-pronged drift detection: feature drift (KS test + Evidently reports), prediction drift (PSI + KS), concept drift (IC degradation)
+- **Evidently:** HTML drift reports generated to data/drift_reports/ when evidently is installed
+
+### 14. Market Regime Detection & Macro Overlay (`scripts/regime_detection.py`)
+- **What:** Hidden Markov Model (Hamilton 1989) on SOX returns to identify risk-on/risk-off/transition regimes
+- **Macro overlay:** VIX, yield curve, credit stress, USD trend. Outputs bear probability adjustment and position scaling
+- **Fallback:** Heuristic vol-percentile regime detection when hmmlearn not installed
+
+### 15. HRP Position Sizing (`scripts/position_sizing.py`)
+- **What:** Hierarchical Risk Parity (López de Prado 2016) as alternative to Kelly sizing
+- **How:** Correlation distance → hierarchical clustering → quasi-diagonalization → recursive bisection
+- **Blended mode:** 60% Kelly + 40% HRP for conviction-weighted diversification
+
+### 16. Property-Based Testing (`scripts/test_engine.py`)
+- **What:** 5 Hypothesis fuzz tests: forecast length invariant, revenue non-negativity, FCF ≤ EBITDA margin, Gordon monotonicity, WACC bounds
+- **Total tests:** 41 (up from 19 at start of audit response), all passing
+
+### Files Modified
+- `scripts/target_engine.py` — Gordon+ROIIC, bottom-up WACC, archetype horizons, reverse-DCF, RIM
+- `scripts/event_reasoner.py` — vol-scaled event caps
+- `scripts/self_consistency.py` — inverse-variance selection
+- `scripts/generate_model.py` — lifecycle_stage + moat_width in schema
+- `scripts/feedback_loop.py` — IC wired into run_feedback_loop()
+- `scripts/test_engine.py` — 22 new tests
+
+### Files Created
+- `scripts/edgar_xbrl.py` — SEC EDGAR XBRL data layer
+- `scripts/backtest.py` — Walk-forward + CPCV backtesting
+- `scripts/paper_trade.py` — Alpaca paper-trading bridge
+- `scripts/factor_exposure.py` — Factor exposure analysis
+- `scripts/experiment_tracker.py` — Experiment tracking
+- `scripts/drift_monitor.py` — Drift monitoring
+- `scripts/regime_detection.py` — Regime detection + macro overlay
+- `scripts/position_sizing.py` — HRP + blended position sizing
+
+---
+
+## [2026-04-24] Session: Structured Outputs + Watchlist Expansion + P1 Task Sprint
+
+### 1. Watchlist Expanded to 50 Stocks (`config/watchlist.json`, `CLAUDE.md`)
+- **What:** Added 36 new stocks across 16 sectors to reach the audit-recommended 50-stock universe
+- **Sectors added:** Semiconductors (MRVL, WOLF, CEVA, MTSI), AI Software (PATH, SOUN, BBAI, AI), Cybersecurity (S, ZS), Cloud/Data (NET, MDB, CFLT), Biotech (RXRX, BEAM, CRSP), Clean Energy (ENPH, BE, FSLR), Fintech (SOFI, AFRM, HOOD), Space (ASTS, LUNR, RDW), Quantum Computing (IONQ, RGTI, QBTS), Consumer/EdTech (DUOL, GRAB), Robotics/Mobility (SERV, JOBY), EV (RIVN), Observability (DDOG), Industrial (AXON, TMC)
+- **Verification:** All 50 tickers confirmed with live price data via yfinance
+- **Why:** Audit flagged all-semi watchlist as statistically meaningless (effective independent bets ≈ 3.4). Sector-stratified universe enables meaningful IC measurement and factor exposure analysis
+
+### 2. Schema-Drift Fix (`supabase/migration.sql`, `scripts/supabase_helper.py`, `scripts/run_pipeline.py`)
+- **What:** Updated migration.sql to include ALL columns the code expects (archetype, research_cache on stocks table, plus new archetype_history table). Added `validate_schema()` function that probes Supabase at pipeline startup and warns about missing columns
+- **Before:** Code silently stripped columns that didn't exist in DB — data loss went unnoticed
+- **After:** Pipeline startup validates schema, logs specific missing columns with "run migration.sql to fix" guidance. Column-stripping retained as degraded-mode fallback but now tagged as a defect
+
+### 3. SNDK Data Integrity & Delisted-Ticker Awareness (`scripts/finance_data.py`)
+- **What:** Added `TICKER_DATA_CUTOFFS` dict mapping tickers to earliest valid data date, and `DELISTED_TICKERS` dict for immediate rejection. SNDK cutoff set to Feb 2025 (re-IPO date)
+- **How:** `_apply_data_cutoff()` filters quarterly/annual periods by parsing period labels (1Q25, 2024, etc.) and dropping periods before the cutoff. Applied automatically in `fetch_financials()` after provider fetch + fallback
+- **Before:** SNDK could ingest 2016-era SanDisk data from yfinance, contaminating models
+- **After:** Pre-Feb-2025 SNDK data automatically dropped with warning
+
+### 4. LLM Self-Consistency Sampling (`scripts/self_consistency.py`, `scripts/generate_model.py`)
+- **What:** New module that samples LLM model generation N times and reports mean ± stderr for scenario prices, probabilities, model defaults, and archetype consensus
+- **Config:** `SELF_CONSISTENCY_N` env var (default: 1 for backward compat). Set to 5+ for production sampling
+- **Integration:** `process_stock()` in generate_model.py auto-uses self-consistency when N>1, picks the result closest to mean base price, and attaches consistency metadata for observability
+- **High-variance detection:** Fields with coefficient of variation >15% are flagged in `high_variance` list
+
+### 5. Research Memo Generator (`scripts/research_memo.py`)
+- **What:** Auto-generates 2-minute Markdown research memos per stock covering thesis, key numbers, scenarios, top criteria, kill condition, and model notes
+- **Usage:** `python research_memo.py --ticker LITE` (single), `--all` (all watchlist), `--digest` (combined overview table)
+- **Output:** Individual memos in `data/memos/`, daily digest with upside-sorted watchlist table
+
+---
+
+## [2026-04-24] Session: Replace JSON Repair Pipeline with Structured Outputs
+
+### 1. Anthropic Structured Outputs Integration (`scripts/generate_model.py`)
+- **What:** Replaced the 4-layer JSON repair pipeline (brace extraction → trailing comma fix → truncation repair → retry with compact prompt) with Anthropic's Structured Outputs, which guarantees schema-conformant JSON at the API level
+- **How:** Added `output_config.format.json_schema` to the Claude API request body with a comprehensive `MODEL_OUTPUT_SCHEMA` constant that mirrors the MODEL_GEN_PROMPT template exactly
+- **Schema covers:** thesis, sector, kill_condition, archetype (with enum for 5 types), valuation_method (pe/ps), model_defaults (7 fields including nullable pe_multiple/ps_multiple), scenarios (bull/base/bear with probability/price/trigger), criteria (array with 9 fields including enum constraints), target_notes, divergence_note (nullable)
+- **Legacy fallback retained:** The old repair code is kept as a safety net but tagged with "this is a defect — please investigate" logging. It should never fire with structured outputs
+- **Before:** ~70 lines of repair code across 4 fallback layers; ~5-10% of generations needed repair; truncated responses required costly retries
+- **After:** Zero-repair path; JSON is guaranteed valid by the API; repair_method reports "structured_output" for clean observability
+- **Live tested:** AAPL test returned valid JSON on first parse with all 11 required fields, correct enum values, and proper nullable handling
+- **Files:** `scripts/generate_model.py`
+
+### 2. Schema Regression Tests (`scripts/test_engine.py`)
+- **Added 6 new tests** in `TestModelOutputSchema` class (total: 25 tests, up from 19)
+- Tests cover: required keys completeness, additionalProperties=false enforcement, valid model key matching, jsonschema validation (if installed), archetype enum values, criteria variable enum
+- **Files:** `scripts/test_engine.py`
+
+---
+
+## [2026-04-24] Session: Institutional Audit Response + Watchlist Expansion
+
+### 1. Watchlist Expanded from 6 to 14 Stocks (`config/watchlist.json`)
+- **Added 8 new stocks:** ASML (semi equipment/monopoly), 6082.HK (Chinese GPU), COHR (AI photonics), NOK (telecom infra), ALAB (AI connectivity), U (gaming/3D platform), FSLY (edge cloud), CRCL (stablecoin/fintech)
+- **Why:** Audit flagged the all-semi watchlist as statistically meaningless (effective independent bets ≈ 3.4). New additions diversify across semiconductor equipment, telecom, software, edge infra, and fintech
+- **Data verification:** 13/14 tickers confirmed working with yfinance. 6082.HK has limited yfinance coverage (no quarterly income/cashflow) — needs EODHD or manual data
+- **Files:** `config/watchlist.json`, `CLAUDE.md`
+
+### 2. Comprehensive Roadmap Created from External Audit
+- **Source:** 11-page institutional-quality audit covering 7 ranked weaknesses + 22 prioritized recommendations
+- **Key findings accepted:** (1) Universe too narrow/correlated, (2) DCF terminal value is a "Trojan Horse" blending intrinsic + relative, (3) Feedback loop sample size ≈ 1% of what's needed, (4) Schema-drift and JSON repair are load-bearing hacks, (5) Event caps not empirically calibrated
+- **25 tasks created:** 2 P0, 5 P1, 10 P2, 8 P3 with dependency chains
+- **Files:** Task list updated, `CLAUDE.md` updated with new watchlist
+
+---
+
+## [2026-04-24] Session: EODHD Migration + Buffered Scout Output + System Report
+
+### 1. EODHD Provider Fallback Logic (`scripts/finance_data.py`)
+- **What:** Added automatic yfinance fallback in `fetch_financials()` when the primary EODHD provider fails
+- **Why:** EODHD API can have transient failures; pipeline should not halt when a fallback data source exists
+- **How:** `fetch_financials()` now catches `EarningsFetchError` from the primary provider and retries with `YFinanceProvider()`, appending a FALLBACK warning to the result
+- **Impact:** Pipeline resilience — EODHD outages no longer block model generation; fallback is logged in `FinancialData.warnings`
+- **Files:** `scripts/finance_data.py` (fetch_financials function)
+
+### 2. Provider Auto-Selection Verified
+- **What:** Confirmed `get_provider()` already auto-selects EODHD when `EODHD_API_KEY` is present, falls back to yfinance otherwise
+- **Why:** The EODHD migration was already implemented in a prior session; this session verified it and added the fallback safety net
+- **How:** Precedence: explicit name → `FINANCE_DATA_PROVIDER` env var → auto-detect (EODHD if key present, else yfinance)
+- **Files:** `scripts/finance_data.py` (get_provider function — verified, not changed)
+
+### 3. Buffered Scout Output (`scripts/run_pipeline.py`)
+- **What:** Replaced interleaved parallel scout stdout with per-scout `StringIO` buffers, printed as grouped blocks after completion
+- **Why:** When 8 scouts run in `ThreadPoolExecutor`, their print statements interleave into unreadable noise
+- **Before:** `[OK] quant` mixed with news scout HTTP logs mixed with YouTube transcript lines
+- **After:** Clean grouped blocks with box-drawing characters: `┌─── quant [OK] ───` / `│ output lines` / `└────────────`
+- **How:** Each scout's `_run_scout()` uses `contextlib.redirect_stdout/stderr` into a `StringIO`. After all futures complete, output is printed scout-by-scout in definition order
+- **Files:** `scripts/run_pipeline.py` (_run_scout function, scout execution block)
+
+### 4. Regression Tests
+- All 19 `test_engine.py` tests pass after changes
+
+---
+
+## [2026-04-23] Session: Adaptive Routing Implementation — Binary Gates to Continuous Scoring
+
+### 1. Create adaptive_scoring.py — Core continuous scoring module
+
+**Summary:** Built the central module that replaces 68+ binary/stepped thresholds with three continuous function types: parameterized sigmoids (smooth transitions), log-decay curves (size-dependent caps), and sector-relative z-scores (Damodaran-calibrated context). Also includes input-stability EMA tracking for volatile LLM-derived parameters (moat score, TAM, guided growth) with 2-sigma alert detection.
+
+**Files created:**
+- `scripts/adaptive_scoring.py` — sigmoid(), z_score(), log_decay_cap(), continuous_routing_score(), continuous_margin_target(), continuous_margin_expansion(), continuous_multiple_cap(), continuous_growth_cap(), projection_score_revenue_growth(), projection_score_forward_pe(), adaptive_scenario_offsets(), has_margin_expansion_story(), InputStabilityTracker class, build_adaptive_context()
+- `config/sector_stats.json` — Damodaran-sourced sector statistics (median + stdev) for 7 sectors covering semiconductors, semi-equipment, software, industrials, and default fallback. Metrics: operating margin, EBITDA margin, EBITDA yield, revenue growth, EV/EBITDA, EV/FCF, forward PE, quarterly revenue variance.
+
+**Reasoning:** The recommendations document identified that z-scores should come first (not full per-archetype parameterization) because 6 archetypes x 11 sectors x 3 size bands = 198 contexts with ~9 data points is massively underdetermined. Z-scores auto-calibrate to sector norms with zero tunable parameters per context.
+
+---
+
+### 2. Integrate continuous routing into target_engine.py (Phase 1)
+
+**Summary:** Replaced the stepped EBITDA yield transition zone (0.5%-2.0% linear interpolation) with a continuous sigmoid fed by sector-relative z-scores. Replaced the binary margin expansion guard (guided_op > 15% AND ebitda_target > 20%) with continuous signal detection. Replaced banded margin ramp (>60%/>40%/>15%/>0%), stepped multiple caps (45x/55x/60x/70x), and banded growth caps (rev >500B/150B/30B) with continuous functions.
+
+**Files modified:**
+- `scripts/target_engine.py` — Added `_map_sector()` helper. Rewrote `_should_use_revenue_multiple()` Trigger 3 to use `continuous_routing_score()`. Replaced margin expansion detection with `has_margin_expansion_story()` (continuous signal 0.0-1.0, threshold 0.3 vs old binary). Replaced `compute_smart_defaults()` margin bands with `continuous_margin_target()`, growth bands with `continuous_growth_cap()`, multiple caps with `continuous_multiple_cap()`.
+
+**Impact:** AMD target should increase from $332 → ~$500+ (no longer misrouted by missing guided_op_margin). LITE should increase from $629 → ~$1,200+ (margin expansion recognized via continuous signal). AEHR continues to route through cyclical engine correctly. NVDA and APP remain stable.
+
+---
+
+### 3. Integrate continuous sigmoids into target_blend.py (Phase 2)
+
+**Summary:** Replaced stepped projection score contributions (≥40% → +0.30, ≥25% → +0.20, etc.) with continuous sigmoid functions that produce smooth, cliff-free scores.
+
+**Files modified:**
+- `scripts/target_blend.py` — Signal 1 (revenue growth): replaced 5-branch if/elif with `projection_score_revenue_growth()`. Signal 2 (forward PE): replaced 4-branch if/elif with `projection_score_forward_pe()`. Signals 3-5 (tags, valuation method, data quality) unchanged.
+
+**Impact:** A 1pp change in revenue growth no longer produces a score jump > 0.05. Old system: 39% → +0.20 but 40% → +0.30 (50% jump). New system: 39% → +0.271 and 40% → +0.278 (2.6% change).
+
+---
+
+### 4. Add archetype-adapted scenario offsets (Phase 4, minimal)
+
+**Summary:** Added `adaptive_scenario_offsets()` that adjusts scenario widths by archetype without requiring earnings surprise data. Cyclicals get wider down-scenarios (0.82x rev vs 0.88x). Compounders get tighter scenarios (0.92x rev vs 0.88x). Transformationals get the widest asymmetry (0.80x down, 1.18x up).
+
+**Files created/modified:**
+- `scripts/adaptive_scoring.py` — `adaptive_scenario_offsets()` function with per-archetype override tables.
+
+---
+
+### 5. Wire prediction logging into run_pipeline.py
+
+**Summary:** Added prediction snapshot logging after model generation in the pipeline. Each run now records target prices, valuation method, archetype, and context inputs for all watchlist stocks.
+
+**Files modified:**
+- `scripts/run_pipeline.py` — Added prediction logging block after model generation using `log_predictions_batch()`.
+
+---
+
+### 6. Verification Results
+
+- 19/19 regression tests pass (test_engine.py)
+- Cliff elimination test: old system had 0→100% P/S weight jump at yield=2.0%, new system transitions smoothly (0.694→0.654)
+- All continuous functions produce sensible outputs at edges and boundaries
+- Margin expansion detection now catches AMD/LITE cases that the binary guard missed (signal ≥ 0.3 with either guided margin OR high EBITDA target)
+
+---
+
+## [2026-04-23] Session: Prediction Logger — Phase 5 Feedback Calibration Foundation
+
+### Add prediction_logger.py and prediction_log.sql
+
+**Summary:** Created the prediction logging infrastructure required by Phase 5 of the adaptive routing plan. Every pipeline run can now record a full snapshot of its target prices, valuation method, archetype, routing/projection scores, sigmoid parameters, and context inputs to Supabase. A companion `prediction_outcomes` table receives actual price observations from the price-tracker cron, enabling regression-based calibration of sigmoid parameters over time.
+
+**Files created:**
+- `scripts/prediction_logger.py` — Three public functions: `log_prediction(ticker, snapshot_data)` for single-stock upserts, `log_predictions_batch(predictions)` for whole-watchlist batch inserts, and `record_price_outcome(ticker, prediction_id, days_elapsed, actual_price)` for the cron tracker. Follows the analyst.py column-stripping retry pattern (up to 5 attempts) for schema-drift resilience. Imports `get_client` from `supabase_helper` and `get_run_id` from `utils`.
+- `supabase/prediction_log.sql` — DDL for `prediction_log` and `prediction_outcomes` tables with three performance indexes. Apply via Supabase SQL Editor before first pipeline run.
+
+**Reasoning:** Prediction data is irreplaceable — you cannot retroactively reconstruct what the engine believed on a given run. Logging must start before calibration work begins (Phase 5). The schema captures every variable the feedback loop will need: current price, all three scenario targets, method, archetype, both routing scores, event weight, final blended target, raw sigmoid parameters, and context inputs.
+
+**Impact:** No existing behaviour changed. `log_predictions_batch` should be wired into `run_pipeline.py` after model generation completes.
+
+---
+
+## [2026-04-23] Session: Adaptive Routing Architecture Report
+
+### Adaptive Routing Architecture Report (.docx)
+
+**Summary:** Created a comprehensive internal technical report classifying all 78+ hardcoded thresholds across the engine into hard criteria (10 thresholds that must stay binary) vs. flexible criteria (68+ that should become continuous scoring functions). The report proposes a 3-layer adaptive architecture: continuous sigmoid/log-decay scoring functions, context injection (archetype, sector, scale, moat), and feedback-calibrated parameter tuning.
+
+**Files created:**
+- `docs/Adaptive_Routing_Architecture.docx` — Full report with executive summary, cliff-effect case studies (AMD $332, LITE $629, AEHR $9), hard/flexible classification tables, proposed sigmoid/log-decay/z-score replacements for each threshold, context injection design, implementation plan (5 phases), and expected impact matrix.
+
+**Reasoning:** The engine had accumulated 78+ hardcoded cutoffs that produced valuation cliffs — 1pp changes in input metrics could swing targets 30%+. Three confirmed mis-pricings (AMD, LITE, AEHR) were caused by binary gates that didn't account for company-specific context. The report provides a roadmap to replace stepped gates with smooth, context-aware functions.
+
+**Impact:** No code changes — this is a design document. Implementation follows the phased plan in the report (Phase 1: projection score sigmoids, Phase 2: routing, Phase 3: margins/multiples, Phase 4: scenario widths, Phase 5: feedback calibration).
+
+---
+
 ## [2026-04-23] Session: Target Price Reliability — Engine Bugs, Analyst Fallback, DB Schema Fix
 
 ### 1. Fix Model Generation Not Saving Thesis/Sector/Target Price to DB
