@@ -140,7 +140,13 @@ def _load_scouts_from_supabase() -> dict | None:
     name_map = SCOUT_DISPLAY_NAMES
 
     try:
-        rows = sb.table("latest_signals").select("*").execute().data or []
+        # Get active tickers to filter out stale signals from deactivated stocks
+        active_resp = sb.table("stocks").select("ticker").eq("active", True).execute()
+        active_tickers = {r["ticker"] for r in (active_resp.data or [])}
+
+        all_rows = sb.table("latest_signals").select("*").execute().data or []
+        # Only keep signals for currently active stocks
+        rows = [r for r in all_rows if r.get("ticker") in active_tickers]
     except Exception as e:
         print(f"  [analyst] latest_signals query failed ({e}) — falling back to JSON")
         return None

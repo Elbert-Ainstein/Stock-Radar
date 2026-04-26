@@ -226,7 +226,13 @@ def _validate_quarterly_revenue(periods: list[dict]) -> list[str]:
     if not periods:
         return warnings
 
+    # Only check the most recent 8 quarters (2 years) — flagging ancient
+    # data (e.g. ASML 2010) is noise, not signal.
+    start_idx = max(0, len(periods) - 8)
+
     for i, p in enumerate(periods):
+        if i < start_idx:
+            continue
         rev = p.get("Total Revenue")
         if rev is None or rev <= 0:
             continue

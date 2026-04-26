@@ -524,13 +524,31 @@ def run():
         # Advance stage_idx past the parallel scouts block
         stage_idx = num_scouts
 
+        # ─── Detect whether scouts actually gathered new data ─────────
+        # If all scouts hit their freshness window and skipped, there's no
+        # new information to re-score or re-model.  Total scout duration
+        # under 10s reliably means "nothing happened" — real API calls
+        # (Perplexity, yfinance, Reddit) take 3-30s each.
+        # We still allow --rebuild-only to force a rebuild regardless.
+        total_scout_duration = sum(
+            m.duration_s for m in metrics.scout_metrics
+        ) if not rebuild_only else 999
+        scouts_had_new_data = total_scout_duration > 10.0 or rebuild_only
+
+        if not scouts_had_new_data and not scouts_only:
+            print("\n  [skip] All scouts skipped (no new data in freshness window).")
+            print("  [skip] Skipping analyst + model regeneration to save API costs.")
+            print("  [skip] Use --rebuild-only to force a full rebuild with existing signals.")
+
         # ─── REBUILD PHASE ────────────────────────────────────────────
         # Analyst, feedback loop, and model generation depend on scout outputs
         # and MUST run after all scouts complete.
-        # Skipped in --scouts-only mode.
+        # Skipped in --scouts-only mode or when scouts gathered no new data.
 
         if scouts_only:
             print("\n  [scouts-only] Skipping analyst/models — signals refreshed only")
+        elif not scouts_had_new_data:
+            pass  # Already printed skip message above
         else:
             # Analyst
             stage_idx += 1
@@ -608,10 +626,13 @@ def run():
             # Log prediction snapshots immediately after model generation.
             # This data is irreplaceable — every week of delay is a week of
             # prediction history that cannot be recovered.
+            #
+            # We read the already-computed targets from the analysis results
+            # (written to Supabase by the analyst) instead of re-running the
+            # engine for each stock. This avoids 12+ redundant EODHD API calls
+            # and engine computations.
             try:
                 from prediction_logger import log_predictions_batch
-                from finance_data import fetch_financials
-                from target_engine import build_target, compute_smart_defaults
                 from utils import get_watchlist as _get_wl_pred
 
                 wl_pred = _get_wl_pred()
@@ -619,30 +640,34 @@ def run():
                 for s in wl_pred:
                     t = s["ticker"]
                     try:
-                        fin = fetch_financials(t)
+                        # Read targets from the analysis result the analyst just saved
+                        analysis_entry = None
+                        if result:
+                            analysis_entry = next(
+                                (a for a in result if a.get("ticker") == t), None
+                            )
+                        if not analysis_entry:
+                            continue
+
                         archetype_obj = s.get("archetype") or {}
                         arch_primary = archetype_obj.get("primary") if isinstance(archetype_obj, dict) else None
-                        a_conf = analyst_confidence_map.get(t)
-                        result = build_target(fin, archetype=arch_primary, analyst_confidence=a_conf)
+                        target_price = analysis_entry.get("target_price") or 0
+                        current_price = analysis_entry.get("current_price") or s.get("price") or 0
 
                         predictions.append({
                             "ticker": t,
-                            "current_price": fin.price or 0,
-                            "target_base": result.base,
-                            "target_low": result.low,
-                            "target_high": result.high,
-                            "valuation_method": getattr(result, "valuation_method", "ev_ebitda"),
+                            "current_price": current_price,
+                            "target_base": target_price,
+                            "target_low": target_price * 0.7,   # approximate from analyst
+                            "target_high": target_price * 1.3,
+                            "valuation_method": analysis_entry.get("valuation_method", "ev_ebitda"),
                             "archetype": arch_primary or "",
-                            "routing_score": getattr(result, "routing_score", 0.0),
-                            "projection_score": 0.0,  # Computed separately in blend
+                            "routing_score": 0.0,
+                            "projection_score": 0.0,
                             "event_weight": 0.0,
-                            "final_target": result.base,
+                            "final_target": target_price,
                             "sigmoid_params": {},
-                            "context_inputs": {
-                                "sector": getattr(fin, "sector", ""),
-                                "revenue_scale_b": (fin.ttm_revenue() or 0) / 1e9,
-                                "moat_score": float(archetype_obj.get("moat_score", 5.0)) if isinstance(archetype_obj, dict) else 5.0,
-                            },
+                            "context_inputs": {},
                             "scenario_probabilities": {"bear": 0.2, "base": 0.6, "bull": 0.2},
                         })
                     except Exception as pe:

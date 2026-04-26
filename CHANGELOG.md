@@ -4,6 +4,40 @@ All notable changes made to the project are documented here, with reasoning and 
 
 ---
 
+## [2026-04-26] Session: Pipeline Efficiency & Bug Fixes
+
+### 16. Skip rebuild when scouts gather no new data (`scripts/run_pipeline.py`)
+- **What:** Pipeline now detects when all scouts skipped (freshness window not expired) and short-circuits the analyst + model generation stages.
+- **Why:** Pipeline was spending ~32 minutes and ~$3-4 in API costs regenerating identical models from stale signals.
+- **Impact:** Saves 30+ minutes and all Claude/Perplexity costs on redundant runs. Use `--rebuild-only` to force a rebuild.
+
+### 17. Filter analyst signals to active stocks only (`scripts/analyst.py`)
+- **What:** Analyst now queries active tickers from the `stocks` table and filters `latest_signals` to only include signals for active stocks.
+- **Why:** Was loading 51 signals (from old 50-stock watchlist) instead of 12, creating noise in logs.
+- **Impact:** Cleaner logs, slightly faster analyst processing.
+
+### 18. Limit revenue sanity checks to last 8 quarters (`scripts/finance_data.py`)
+- **What:** Revenue sanity check now only scans the most recent 8 quarters (2 years) instead of all history.
+- **Why:** ASML was flagging 2010 Q1 revenue jumps — 16-year-old data noise, not actionable.
+- **Impact:** Eliminates false positive warnings on mature companies with long data histories.
+
+### 19. Create `prediction_log` table (`supabase/2026-04-26_prediction_log.sql`)
+- **What:** Added migration SQL for the `prediction_log` table with proper schema and RLS policy.
+- **Why:** Calibration and prediction logging were failing with `Could not find the table 'public.prediction_log'` error.
+- **Impact:** Run this migration in Supabase SQL Editor to enable prediction tracking and calibration feedback.
+
+### 20. Eliminate redundant engine runs in prediction logging (`scripts/run_pipeline.py`)
+- **What:** Prediction logging now reads targets from the analyst's already-computed results instead of re-running `fetch_financials` + `build_target` for each stock.
+- **Why:** Engine was running 2-3x per stock per pipeline: once in analyst, once in model generator post-save, once in prediction logging.
+- **Impact:** Eliminates 12+ redundant EODHD API calls and engine computations per run.
+
+### 21. Fix model_export.py KeyError: 'discount_rate' (`scripts/model_export.py`)
+- **What:** Removed `discount_rate` from the `scenario_keys` list in `_build_assumptions`.
+- **Why:** `discount_rate` was intentionally removed from `SCENARIO_OFFSETS` (constant WACC across scenarios) but the export still referenced it.
+- **Impact:** Fixes crash when exporting models to Excel.
+
+---
+
 ## [2026-04-25] Session: Watchlist Trim & Pipeline Optimization
 
 ### 12. Trim watchlist to 6 core stocks (`config/watchlist.json`, `CLAUDE.md`)
