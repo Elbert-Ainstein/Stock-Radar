@@ -88,7 +88,7 @@ python run_pipeline.py --ticker MRVL  # Single-stock mini-pipeline
 ```bash
 python generate_model.py --all              # Regenerate all models
 python generate_model.py --ticker LITE      # Single ticker
-python generate_model.py --all --parallel 3 # Control parallelism (default: 3)
+python generate_model.py --all --parallel 5 # Control parallelism (default: 5)
 ```
 
 ### Dashboard
@@ -110,30 +110,12 @@ ALPHA_VANTAGE_API_KEY=  # Alpha Vantage — fallback financial data
 
 ---
 
-## Current Watchlist (50 stocks, sector-stratified)
+## Current Watchlist (6 stocks)
 
-**Core (6):** LITE, PLTR, RKLB, ACHR, CELH, SNDK
-**Added Apr 2026 — Wave 1 (8):** ASML, 6082.HK, COHR, NOK, ALAB, U, FSLY, CRCL
-**Added Apr 2026 — Wave 2 (36):**
-- Semiconductors: MRVL, WOLF, CEVA, MTSI
-- AI Software: PATH, SOUN, BBAI, AI
-- Cybersecurity: S, ZS
-- Cloud/Data: NET, MDB, CFLT
-- Biotech: RXRX, BEAM, CRSP
-- Clean Energy: ENPH, BE, FSLR
-- Fintech: SOFI, AFRM, HOOD
-- Space: ASTS, LUNR, RDW
-- Quantum Computing: IONQ, RGTI, QBTS
-- Consumer/EdTech: DUOL, GRAB
-- Robotics/Mobility: SERV, JOBY
-- EV: RIVN
-- Observability: DDOG
-- Industrial: AXON, TMC
+**Core:** LITE, PLTR, RKLB, ACHR, CELH, SNDK
 
 ### Data Provider Notes
-- **6082.HK (Biren Technology):** HK-listed, yfinance has minimal financial data (no quarterly income/cashflow). Requires EODHD with `.HK` suffix or manual data entry. Pipeline will skip model generation if finance_data.py hard-fails.
 - **SNDK:** Re-IPO'd Feb 24, 2025. Any pre-Feb-2025 data is from the old SanDisk (acquired by WDC 2016). Verify no stale data is ingested.
-- **CRCL (Circle):** Recently IPO'd, limited quarterly history. P/S valuation only.
 
 ---
 

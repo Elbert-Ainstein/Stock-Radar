@@ -128,11 +128,12 @@ def _try_supabase_complete(run_id: str, success: bool, stock_count: int,
 
 
 def _ensure_stocks_seeded():
-    """If the stocks table is empty, seed it from watchlist.json.
+    """Ensure all watchlist.json stocks exist in Supabase.
 
-    This handles the post-DB-wipe scenario where the pipeline has stocks
-    in config/watchlist.json but nothing in Supabase. Without this,
-    scouts write signals but the dashboard can't find any stocks to display.
+    The database is the source of truth for which stocks are active.
+    This only ADDS missing stocks — it never deactivates stocks that
+    the user added via the dashboard. Use bulk delete on the dashboard
+    to remove stocks you no longer want tracked.
     """
     try:
         from supabase_helper import get_client, seed_stocks_from_watchlist
@@ -142,6 +143,11 @@ def _ensure_stocks_seeded():
             wl_path = str(Path(__file__).resolve().parent.parent / "config" / "watchlist.json")
             n = seed_stocks_from_watchlist(wl_path)
             print(f"  [seed] Stocks table was empty — seeded {n} stocks from watchlist.json")
+        else:
+            # Count active stocks for logging
+            count_resp = sb.table("stocks").select("ticker").eq("active", True).execute()
+            n = len(count_resp.data) if count_resp.data else 0
+            print(f"  [seed] {n} active stocks in database")
     except Exception as e:
         print(f"  [seed] Could not check/seed stocks table (non-fatal): {e}")
 

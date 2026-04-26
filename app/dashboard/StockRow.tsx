@@ -4,21 +4,48 @@ import Sparkline from "./Sparkline";
 
 // ─── Stock Card (Collapsed) ───
 
-export default function StockRow({ stock, isSelected, onClick }: { stock: Stock; isSelected: boolean; onClick: () => void }) {
+export default function StockRow({
+  stock,
+  isSelected,
+  onClick,
+  selectMode = false,
+  isChecked = false,
+  onCheck,
+}: {
+  stock: Stock;
+  isSelected: boolean;
+  onClick: () => void;
+  selectMode?: boolean;
+  isChecked?: boolean;
+  onCheck?: (ticker: string) => void;
+}) {
   const bullishCount = stock.signals.filter(s => s.signal === "bullish").length;
   const totalScouts = stock.signals.length;
 
   return (
     <div
-      onClick={onClick}
+      onClick={selectMode ? () => onCheck?.(stock.ticker) : onClick}
       className={cn(
-        "stock-card cursor-pointer border rounded-lg p-4 mb-2",
-        isSelected ? "bg-[var(--card)] border-[var(--accent-muted)]" : "bg-[var(--bg-elevated)] border-[var(--border)]"
+        "stock-card cursor-pointer border rounded-lg p-3 sm:p-4 mb-2",
+        isSelected && !selectMode ? "bg-[var(--card)] border-[var(--accent-muted)]" : "bg-[var(--bg-elevated)] border-[var(--border)]",
+        selectMode && isChecked && "border-red-500/40 bg-red-500/5"
       )}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 flex-wrap sm:flex-nowrap">
+        {/* Checkbox (select mode) */}
+        {selectMode && (
+          <div className="flex-shrink-0" onClick={e => { e.stopPropagation(); onCheck?.(stock.ticker); }}>
+            <div className={cn(
+              "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
+              isChecked ? "bg-red-500 border-red-500" : "border-[var(--border)] hover:border-[var(--muted)]"
+            )}>
+              {isChecked && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </div>
+          </div>
+        )}
+
         {/* Ticker + Name */}
-        <div className="min-w-[140px]">
+        <div className="min-w-[100px] sm:min-w-[140px]">
           <div className="flex items-center gap-2">
             <span className="font-mono font-bold text-lg">{stock.ticker}</span>
             {stock.scoreDelta > 0.5 && (
@@ -29,7 +56,7 @@ export default function StockRow({ stock, isSelected, onClick }: { stock: Stock;
         </div>
 
         {/* Price */}
-        <div className="min-w-[90px] text-right">
+        <div className="min-w-[80px] sm:min-w-[90px] text-right">
           <div className="font-mono font-semibold">${stock.price.toFixed(2)}</div>
           <div className={cn("text-xs font-mono", stock.change >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]")}>
             {stock.change >= 0 ? "+" : ""}{stock.change.toFixed(2)} ({stock.changePct >= 0 ? "+" : ""}{stock.changePct.toFixed(2)}%)
@@ -47,7 +74,7 @@ export default function StockRow({ stock, isSelected, onClick }: { stock: Stock;
         </div>
 
         {/* Score bar */}
-        <div className="flex-1 min-w-[100px] max-w-[200px]">
+        <div className="hidden md:block flex-1 min-w-[100px] max-w-[200px]">
           <div className="w-full h-2 bg-[var(--border)] rounded-full overflow-hidden">
             <div className={cn("h-full rounded-full score-bar", scoreBg(stock.score))} style={{ width: `${stock.score * 10}%`, opacity: 0.7 }} />
           </div>
@@ -58,7 +85,7 @@ export default function StockRow({ stock, isSelected, onClick }: { stock: Stock;
         </div>
 
         {/* Scout convergence + data completeness */}
-        <div className="min-w-[80px] text-center">
+        <div className="hidden lg:block min-w-[80px] text-center">
           <div className="text-sm">
             <span className="text-[var(--success)] font-mono font-semibold">{bullishCount}</span>
             <span className="text-[var(--muted)]">/{totalScouts}</span>
@@ -92,12 +119,12 @@ export default function StockRow({ stock, isSelected, onClick }: { stock: Stock;
         </div>
 
         {/* Sparkline */}
-        <div className="min-w-[120px]">
+        <div className="hidden lg:block min-w-[120px]">
           <Sparkline data={stock.scoreHistory} color={stock.scoreDelta >= 0 ? "#34d399" : "#f43f5e"} />
         </div>
 
         {/* Sector tag */}
-        <div className="min-w-[120px] text-right">
+        <div className="hidden sm:block min-w-[80px] lg:min-w-[120px] text-right">
           <span className="text-[10px] px-2 py-1 rounded-full bg-[var(--border)] text-[var(--secondary)]">{stock.sector}</span>
         </div>
       </div>

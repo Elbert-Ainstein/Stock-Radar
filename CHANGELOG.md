@@ -4,6 +4,32 @@ All notable changes made to the project are documented here, with reasoning and 
 
 ---
 
+## [2026-04-25] Session: Watchlist Trim & Pipeline Optimization
+
+### 12. Trim watchlist to 6 core stocks (`config/watchlist.json`, `CLAUDE.md`)
+- **What:** Removed all 44 expansion stocks (Wave 1 + Wave 2), keeping only: LITE, PLTR, RKLB, ACHR, CELH, SNDK.
+- **Why:** 50 stocks made pipeline runs take ~2 hours. Core 6 stocks are the actual investment focus; extras were added to test system scaling but created unnecessary cost and runtime.
+- **Files:** `config/watchlist.json`, `CLAUDE.md`
+
+### 13. Parallelize Perplexity research queries (`scripts/generate_model.py`)
+- **What:** Changed `research_financials()` from sequential 4-query loop (with 1.5s sleep between each) to concurrent 4-query execution via ThreadPoolExecutor. Eliminated the inter-query sleep entirely.
+- **Why:** Each model generation spent ~10s on sequential Perplexity queries (4 × 2-3s response + 4 × 1.5s sleep). Concurrent execution reduces this to ~3s per stock. For 6 stocks, saves ~40s total.
+- **Files:** `scripts/generate_model.py`
+- **Before:** ~10s per stock for Perplexity research (sequential)
+- **After:** ~3s per stock (concurrent)
+
+### 14. Increase default model parallelism from 3 to 5 (`scripts/generate_model.py`)
+- **What:** Changed default `max_workers` for `--all` from 3 to 5.
+- **Why:** With only 6 stocks, 5 parallel workers means nearly all stocks generate models concurrently. Claude and Perplexity APIs can handle this concurrency.
+- **Files:** `scripts/generate_model.py`
+
+### 15. Fix PipelineMetrics.scout_metrics attribute error (`scripts/observability.py`)
+- **What:** Added public `scout_metrics` property to PipelineMetrics class. The `_scouts` list was private but `run_pipeline.py` referenced it as `metrics.scout_metrics`, causing `AttributeError` crash.
+- **Why:** This was the bug causing "PIPELINE FAILED after 3.9s" on GitHub Actions.
+- **Files:** `scripts/observability.py`, `scripts/run_pipeline.py`
+
+---
+
 ## [2026-04-25] Session: Bug Audit & Pipeline Reliability Fixes
 
 ### 1. Auto-seed stocks table after DB wipe (`scripts/run_pipeline.py`)

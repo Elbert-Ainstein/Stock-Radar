@@ -4,7 +4,7 @@
       "ticker": "LITE",
       "name": "Lumentum Holdings",
       "sector": "Photonics / AI Infra",
-      "thesis": "AI era 'light supplier' \u2014 makes EML laser chips (50-60% global share), 1.6T optical modules, and OCS optical circuit switches. Demand exceeds supply by 25-30%. Management guides $2B/quarter ($8B annualized) revenue at 40%+ operating margin. $1500 = $8B \u00d7 40% \u00d7 83% \u00f7 74M shares \u00d7 42 P/E = $1,508.",
+      "thesis": "AI era 'light supplier' — makes EML laser chips (50-60% global share), 1.6T optical modules, and OCS optical circuit switches. Demand exceeds supply by 25-30%. Management guides $2B/quarter ($8B annualized) revenue at 40%+ operating margin. $1500 = $8B × 40% × 83% ÷ 74M shares × 42 P/E = $1,508.",
       "kill_condition": "Gross margin stuck below 40% for 2 quarters OR management says 'supply normalizing' on EML OR AI capex cut by 2+ hyperscalers",
       "tags": [
         "AI Infrastructure",
@@ -54,29 +54,29 @@
           "status": "not_yet",
           "price_impact_pct": 12,
           "price_impact_direction": "up",
-          "eval_hint": "Check latest quarterly gross margin from earnings. Met if \u226546% or trending up \u22652 ppt QoQ toward 48%."
+          "eval_hint": "Check latest quarterly gross margin from earnings. Met if ≥46% or trending up ≥2 ppt QoQ toward 48%."
         },
         {
           "id": "ocs_revenue_share",
           "label": "OCS revenue reaches 15-20% of total",
-          "detail": "$4B+ order book converting. When OCS breaks 15-20% of quarterly revenue, market re-rates Lumentum from 'components company' to 'systems company' \u2014 completely different valuation level.",
+          "detail": "$4B+ order book converting. When OCS breaks 15-20% of quarterly revenue, market re-rates Lumentum from 'components company' to 'systems company' — completely different valuation level.",
           "variable": "P",
           "weight": "critical",
           "status": "not_yet",
           "price_impact_pct": 15,
           "price_impact_direction": "up",
-          "eval_hint": "Check OCS revenue as % of total quarterly revenue from earnings breakdown. Met if OCS \u226515% of total."
+          "eval_hint": "Check OCS revenue as % of total quarterly revenue from earnings breakdown. Met if OCS ≥15% of total."
         },
         {
           "id": "qoq_growth",
           "label": "QoQ revenue growth sustains 15%+",
-          "detail": "Q1\u2192Q2 was 24.7%, Q2\u2192Q3 guided ~21%. Sustaining \u226515% QoQ gets to $2B/quarter target ahead of schedule. Any sequential decline (even 1-2%) is a major red flag.",
+          "detail": "Q1→Q2 was 24.7%, Q2→Q3 guided ~21%. Sustaining ≥15% QoQ gets to $2B/quarter target ahead of schedule. Any sequential decline (even 1-2%) is a major red flag.",
           "variable": "R",
           "weight": "critical",
           "status": "not_yet",
           "price_impact_pct": 10,
           "price_impact_direction": "up",
-          "eval_hint": "Calculate QoQ revenue growth from last 2 quarterly revenue figures. Met if \u226515%."
+          "eval_hint": "Calculate QoQ revenue growth from last 2 quarterly revenue figures. Met if ≥15%."
         },
         {
           "id": "eml_pricing",
@@ -98,7 +98,7 @@
           "status": "not_yet",
           "price_impact_pct": -8,
           "price_impact_direction": "down_if_failed",
-          "eval_hint": "Check diluted share count from latest 10-Q. Met if fully diluted shares \u226480M."
+          "eval_hint": "Check diluted share count from latest 10-Q. Met if fully diluted shares ≤80M."
         },
         {
           "id": "customer_diversification",
@@ -109,7 +109,7 @@
           "status": "not_yet",
           "price_impact_pct": 7,
           "price_impact_direction": "up",
-          "eval_hint": "Check 10-K/10-Q customer concentration disclosures. Met if \u22652 customers above 10% revenue."
+          "eval_hint": "Check 10-K/10-Q customer concentration disclosures. Met if ≥2 customers above 10% revenue."
         },
         {
           "id": "cpo_orders",
@@ -125,7 +125,7 @@
         {
           "id": "operating_leverage",
           "label": "Opex growth < 50% of revenue growth for 3 quarters",
-          "detail": "Q2 operating margin expanded 1700 bps YoY \u2014 this operating leverage separates '$1000 stock' from '$1500 stock'. If opex growth stays below half of revenue growth rate, profitability explosion incoming.",
+          "detail": "Q2 operating margin expanded 1700 bps YoY — this operating leverage separates '$1000 stock' from '$1500 stock'. If opex growth stays below half of revenue growth rate, profitability explosion incoming.",
           "variable": "M",
           "weight": "monitoring",
           "status": "not_yet",
@@ -182,13 +182,13 @@
         {
           "id": "us_commercial_growth",
           "label": "US commercial revenue growth sustains 80%+ YoY",
-          "detail": "Q4 2025 was 137% YoY. This is the single most important metric \u2014 proves AIP is not just hype. Must sustain \u226580% for the next 4 quarters. Deceleration to 50% seriously wounds the thesis.",
+          "detail": "Q4 2025 was 137% YoY. This is the single most important metric — proves AIP is not just hype. Must sustain ≥80% for the next 4 quarters. Deceleration to 50% seriously wounds the thesis.",
           "variable": "R",
           "weight": "critical",
           "status": "not_yet",
           "price_impact_pct": 15,
           "price_impact_direction": "up",
-          "eval_hint": "Check quarterly US commercial revenue YoY growth from earnings. Met if \u226580% YoY."
+          "eval_hint": "Check quarterly US commercial revenue YoY growth from earnings. Met if ≥80% YoY."
         },
         {
           "id": "adj_operating_margin",
@@ -199,12 +199,12 @@
           "status": "not_yet",
           "price_impact_pct": 10,
           "price_impact_direction": "up",
-          "eval_hint": "Check adjusted operating margin from quarterly earnings. Met if \u226555%."
+          "eval_hint": "Check adjusted operating margin from quarterly earnings. Met if ≥55%."
         },
         {
           "id": "aip_customer_count",
           "label": "AIP customer count growing 50%+ YoY",
-          "detail": "AIP bootcamp \u2192 production conversion rate and net-new AIP customers are the leading indicators. More customers = more durable growth, less concentration risk.",
+          "detail": "AIP bootcamp → production conversion rate and net-new AIP customers are the leading indicators. More customers = more durable growth, less concentration risk.",
           "variable": "R",
           "weight": "critical",
           "status": "not_yet",
@@ -221,7 +221,7 @@
           "status": "not_yet",
           "price_impact_pct": 8,
           "price_impact_direction": "up",
-          "eval_hint": "Check latest FY2026 revenue guidance from earnings. Met if guidance \u2265$7.2B and not lowered."
+          "eval_hint": "Check latest FY2026 revenue guidance from earnings. Met if guidance ≥$7.2B and not lowered."
         },
         {
           "id": "government_stability",
@@ -232,7 +232,7 @@
           "status": "not_yet",
           "price_impact_pct": -10,
           "price_impact_direction": "down_if_failed",
-          "eval_hint": "Check government segment revenue YoY growth from earnings. Met if \u226515% YoY."
+          "eval_hint": "Check government segment revenue YoY growth from earnings. Met if ≥15% YoY."
         },
         {
           "id": "fcf_conversion",
@@ -243,7 +243,7 @@
           "status": "not_yet",
           "price_impact_pct": 7,
           "price_impact_direction": "up",
-          "eval_hint": "Check trailing 4Q adjusted free cash flow from earnings or 10-K. Met if \u2265$4B annualized."
+          "eval_hint": "Check trailing 4Q adjusted free cash flow from earnings or 10-K. Met if ≥$4B annualized."
         },
         {
           "id": "international_expansion",
@@ -254,7 +254,7 @@
           "status": "not_yet",
           "price_impact_pct": 5,
           "price_impact_direction": "up",
-          "eval_hint": "Check international revenue YoY growth from earnings. Met if \u226525% YoY."
+          "eval_hint": "Check international revenue YoY growth from earnings. Met if ≥25% YoY."
         },
         {
           "id": "sbc_dilution",
@@ -333,7 +333,7 @@
           "status": "not_yet",
           "price_impact_pct": 12,
           "price_impact_direction": "up",
-          "eval_hint": "Check total backlog figure from quarterly earnings. Met if backlog \u2265$2.5B."
+          "eval_hint": "Check total backlog figure from quarterly earnings. Met if backlog ≥$2.5B."
         },
         {
           "id": "revenue_growth_50",
@@ -344,7 +344,7 @@
           "status": "not_yet",
           "price_impact_pct": 10,
           "price_impact_direction": "up",
-          "eval_hint": "Check quarterly revenue YoY growth from earnings. Met if \u226550% YoY."
+          "eval_hint": "Check quarterly revenue YoY growth from earnings. Met if ≥50% YoY."
         },
         {
           "id": "electron_cadence",
@@ -366,7 +366,7 @@
           "status": "not_yet",
           "price_impact_pct": 8,
           "price_impact_direction": "up",
-          "eval_hint": "Check non-GAAP gross margin from quarterly earnings. Met if \u226540%."
+          "eval_hint": "Check non-GAAP gross margin from quarterly earnings. Met if ≥40%."
         },
         {
           "id": "space_systems_diversification",
@@ -382,7 +382,7 @@
         {
           "id": "neutron_commercial_contracts",
           "label": "Neutron secures 3+ commercial launch contracts pre-flight",
-          "detail": "Pre-flight commercial demand for Neutron validates market need. SpaceX backlog proves demand exists \u2014 Neutron just needs to credibly offer an alternative.",
+          "detail": "Pre-flight commercial demand for Neutron validates market need. SpaceX backlog proves demand exists — Neutron just needs to credibly offer an alternative.",
           "variable": "R",
           "weight": "monitoring",
           "status": "not_yet",
@@ -399,7 +399,7 @@
           "status": "not_yet",
           "price_impact_pct": -6,
           "price_impact_direction": "down_if_failed",
-          "eval_hint": "Check cash position and quarterly burn rate from 10-Q. Met if cash / quarterly burn \u2265 6 quarters remaining."
+          "eval_hint": "Check cash position and quarterly burn rate from 10-Q. Met if cash / quarterly burn ≥ 6 quarters remaining."
         }
       ]
     },
@@ -478,7 +478,7 @@
           "status": "not_yet",
           "price_impact_pct": -15,
           "price_impact_direction": "down_if_failed",
-          "eval_hint": "Calculate: cash / quarterly adjusted EBITDA loss from latest financials. Met if \u22656 quarters of runway remaining."
+          "eval_hint": "Calculate: cash / quarterly adjusted EBITDA loss from latest financials. Met if ≥6 quarters of runway remaining."
         },
         {
           "id": "united_order_conversion",
@@ -522,7 +522,7 @@
           "status": "not_yet",
           "price_impact_pct": 4,
           "price_impact_direction": "up",
-          "eval_hint": "Check cumulative flight test hours from Archer press releases or earnings. Met if \u2265500 hours accumulated."
+          "eval_hint": "Check cumulative flight test hours from Archer press releases or earnings. Met if ≥500 hours accumulated."
         },
         {
           "id": "competitor_gap",
@@ -590,7 +590,7 @@
           "status": "not_yet",
           "price_impact_pct": 10,
           "price_impact_direction": "up",
-          "eval_hint": "Check US energy drink dollar market share from Nielsen/IRI data referenced in earnings. Met if \u226520%."
+          "eval_hint": "Check US energy drink dollar market share from Nielsen/IRI data referenced in earnings. Met if ≥20%."
         },
         {
           "id": "gross_margin_50",
@@ -601,7 +601,7 @@
           "status": "not_yet",
           "price_impact_pct": 8,
           "price_impact_direction": "up",
-          "eval_hint": "Check gross margin from quarterly earnings. Met if \u226550% for 2 consecutive quarters."
+          "eval_hint": "Check gross margin from quarterly earnings. Met if ≥50% for 2 consecutive quarters."
         },
         {
           "id": "revenue_growth_20",
@@ -612,7 +612,7 @@
           "status": "not_yet",
           "price_impact_pct": 10,
           "price_impact_direction": "up",
-          "eval_hint": "Check organic revenue growth (ex-acquisition) from earnings commentary. Met if \u226520% YoY organic."
+          "eval_hint": "Check organic revenue growth (ex-acquisition) from earnings commentary. Met if ≥20% YoY organic."
         },
         {
           "id": "international_100m",
@@ -623,12 +623,12 @@
           "status": "not_yet",
           "price_impact_pct": 7,
           "price_impact_direction": "up",
-          "eval_hint": "Check international segment revenue from quarterly earnings, annualize. Met if \u2265$150M annualized."
+          "eval_hint": "Check international segment revenue from quarterly earnings, annualize. Met if ≥$150M annualized."
         },
         {
           "id": "pepsi_alignment",
           "label": "Pepsi distribution metrics improving (ACV, distribution points)",
-          "detail": "As Pepsi's energy category captain, Celsius should see expanding ACV (all-commodity volume) and new distribution points. This is the moat \u2014 Monster has Coke, Celsius has Pepsi.",
+          "detail": "As Pepsi's energy category captain, Celsius should see expanding ACV (all-commodity volume) and new distribution points. This is the moat — Monster has Coke, Celsius has Pepsi.",
           "variable": "R",
           "weight": "important",
           "status": "not_yet",
@@ -645,18 +645,18 @@
           "status": "not_yet",
           "price_impact_pct": 8,
           "price_impact_direction": "up",
-          "eval_hint": "Check GAAP operating margin from quarterly earnings. Met if \u226515%."
+          "eval_hint": "Check GAAP operating margin from quarterly earnings. Met if ≥15%."
         },
         {
           "id": "alani_integration",
           "label": "Alani Nu integration complete with margin accretion",
-          "detail": "Alani Nu acquisition created short-term margin pressure. Successful integration means combined portfolio margin \u2265 pre-acquisition levels. Two billion-dollar brands under one roof.",
+          "detail": "Alani Nu acquisition created short-term margin pressure. Successful integration means combined portfolio margin ≥ pre-acquisition levels. Two billion-dollar brands under one roof.",
           "variable": "M",
           "weight": "monitoring",
           "status": "not_yet",
           "price_impact_pct": 5,
           "price_impact_direction": "up",
-          "eval_hint": "Look for management commentary on Alani Nu integration completion, margin impact. Met if integration complete and combined gross margin \u226550%."
+          "eval_hint": "Look for management commentary on Alani Nu integration completion, margin impact. Met if integration complete and combined gross margin ≥50%."
         }
       ]
     },
@@ -664,7 +664,7 @@
       "ticker": "SNDK",
       "name": "SanDisk Corporation",
       "sector": "Semiconductors / NAND Flash",
-      "thesis": "NAND flash super-cycle beneficiary \u2014 spun off from Western Digital Feb 2025. AI-driven storage demand structural through 2028+. Q3 FY2026 guided $4.4-4.8B revenue at 65-67% gross margin. Forward P/E only 9.76\u00d7. $1500 = $25B revenue \u00d7 45% op margin \u00d7 88% after-tax \u00f7 157M shares \u00d7 24 P/E = $1,513.",
+      "thesis": "NAND flash super-cycle beneficiary — spun off from Western Digital Feb 2025. AI-driven storage demand structural through 2028+. Q3 FY2026 guided $4.4-4.8B revenue at 65-67% gross margin. Forward P/E only 9.76×. $1500 = $25B revenue × 45% op margin × 88% after-tax ÷ 157M shares × 24 P/E = $1,513.",
       "kill_condition": "NAND ASP declines for 2 consecutive quarters OR gross margin drops below 45% OR AI storage capex cuts by 2+ hyperscalers",
       "tags": [
         "AI Infrastructure",
@@ -678,7 +678,7 @@
         "timeline_years": 2,
         "valuation_method": "pe",
         "target_multiple": 24,
-        "notes": "P/E 24x \u2014 premium to current 9.76\u00d7 forward PE, justified by structural AI demand + supply discipline + margin expansion. Revenue $25B (FY2027E from Q3 run-rate growth), Op margin 45% (gross 65% - 20% opex), Tax 12% (semi tax credits), Shares 157M diluted.",
+        "notes": "P/E 24x — premium to current 9.76× forward PE, justified by structural AI demand + supply discipline + margin expansion. Revenue $25B (FY2027E from Q3 run-rate growth), Op margin 45% (gross 65% - 20% opex), Tax 12% (semi tax credits), Shares 157M diluted.",
         "model_defaults": {
           "revenue_b": 25,
           "op_margin": 0.45,
@@ -690,17 +690,17 @@
           "bull": {
             "probability": 0.25,
             "price": 2200,
-            "trigger": "NAND shortage extends through 2028, revenue $30B+, gross margin 70%+, op margin 50%+, P/E re-rates to 30\u00d7 as market recognizes structural moat"
+            "trigger": "NAND shortage extends through 2028, revenue $30B+, gross margin 70%+, op margin 50%+, P/E re-rates to 30× as market recognizes structural moat"
           },
           "base": {
             "probability": 0.5,
             "price": 1500,
-            "trigger": "Revenue $25B (FY2027), op margin 45%, 24\u00d7 P/E, sustained AI storage demand"
+            "trigger": "Revenue $25B (FY2027), op margin 45%, 24× P/E, sustained AI storage demand"
           },
           "bear": {
             "probability": 0.25,
             "price": 700,
-            "trigger": "NAND cycle peaks mid-2027, ASP declines, revenue $18B, margin compresses to 30%, P/E 14\u00d7"
+            "trigger": "NAND cycle peaks mid-2027, ASP declines, revenue $18B, margin compresses to 30%, P/E 14×"
           }
         }
       },
@@ -714,18 +714,18 @@
           "status": "not_yet",
           "price_impact_pct": 15,
           "price_impact_direction": "up",
-          "eval_hint": "Check non-GAAP gross margin from quarterly earnings. Met if \u226565% for 2 consecutive quarters."
+          "eval_hint": "Check non-GAAP gross margin from quarterly earnings. Met if ≥65% for 2 consecutive quarters."
         },
         {
           "id": "revenue_growth_qoq",
           "label": "Sequential revenue growth sustains 20%+ QoQ",
-          "detail": "Q1\u2192Q2 was 31% sequential growth. Q3 guided ~50% sequential growth ($4.6B vs $3.03B). Sustaining 20%+ QoQ means $25B annualized run rate achievable by mid-FY2027.",
+          "detail": "Q1→Q2 was 31% sequential growth. Q3 guided ~50% sequential growth ($4.6B vs $3.03B). Sustaining 20%+ QoQ means $25B annualized run rate achievable by mid-FY2027.",
           "variable": "R",
           "weight": "critical",
           "status": "not_yet",
           "price_impact_pct": 12,
           "price_impact_direction": "up",
-          "eval_hint": "Calculate QoQ revenue growth from last 2 quarters. Met if \u226520% sequential."
+          "eval_hint": "Calculate QoQ revenue growth from last 2 quarters. Met if ≥20% sequential."
         },
         {
           "id": "datacenter_revenue",
@@ -736,12 +736,12 @@
           "status": "not_yet",
           "price_impact_pct": 10,
           "price_impact_direction": "up",
-          "eval_hint": "Check data center segment revenue as % of total from earnings breakdown. Met if \u226525%."
+          "eval_hint": "Check data center segment revenue as % of total from earnings breakdown. Met if ≥25%."
         },
         {
           "id": "nand_supply_discipline",
           "label": "Industry NAND supply remains constrained (no major capacity additions)",
-          "detail": "Current NAND shortage is structural \u2014 supply discipline across Samsung, SK Hynix, Micron, SanDisk. Any major capacity expansion announcement would break the thesis.",
+          "detail": "Current NAND shortage is structural — supply discipline across Samsung, SK Hynix, Micron, SanDisk. Any major capacity expansion announcement would break the thesis.",
           "variable": "P",
           "weight": "critical",
           "status": "not_yet",
@@ -758,946 +758,20 @@
           "status": "not_yet",
           "price_impact_pct": 8,
           "price_impact_direction": "up",
-          "eval_hint": "Check adjusted free cash flow / revenue from quarterly earnings. Met if \u226525%."
+          "eval_hint": "Check adjusted free cash flow / revenue from quarterly earnings. Met if ≥25%."
         },
         {
           "id": "pe_expansion",
-          "label": "Forward P/E expands from 9.76\u00d7 toward 15-20\u00d7",
-          "detail": "Currently trading at 9.76\u00d7 forward PE \u2014 well below semiconductor median. As market recognizes structural (not cyclical) nature of NAND demand, P/E should re-rate toward 15-20\u00d7. $1500 needs 24\u00d7.",
+          "label": "Forward P/E expands from 9.76× toward 15-20×",
+          "detail": "Currently trading at 9.76× forward PE — well below semiconductor median. As market recognizes structural (not cyclical) nature of NAND demand, P/E should re-rate toward 15-20×. $1500 needs 24×.",
           "variable": "P",
           "weight": "important",
           "status": "not_yet",
           "price_impact_pct": 12,
           "price_impact_direction": "up",
-          "eval_hint": "Check forward PE from financial data. Met if forward PE \u226515\u00d7."
+          "eval_hint": "Check forward PE from financial data. Met if forward PE ≥15×."
         }
       ]
-    },
-    {
-      "ticker": "ASML",
-      "name": "ASML Holding",
-      "sector": "Semiconductor Equipment / Lithography",
-      "thesis": "100% monopoly on EUV lithography \u2014 every sub-7nm chip on Earth requires ASML machines at $400M+ each. AI capex boom drives memory + logic expansion. Q1 2026 revenue \u20ac8.8B, raised full-year guidance to \u20ac36-40B. Structural winner regardless of which chipmaker leads.",
-      "kill_condition": "China export restrictions block >25% of backlog OR EUV technology leapfrogged by alternative lithography OR two consecutive quarters of order intake decline >30%",
-      "tags": [
-        "Semiconductor Equipment",
-        "EUV",
-        "Monopoly",
-        "AI Infrastructure",
-        "Netherlands"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline. P/E appropriate \u2014 highly profitable compounder with 30%+ net margins."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "6082.HK",
-      "name": "Shanghai Biren Technology",
-      "sector": "Semiconductors / Chinese GPU",
-      "thesis": "China\u2019s leading GPGPU designer for AI training and inference, positioned as domestic alternative to NVIDIA under US export controls. High-risk/high-reward bet on China\u2019s AI self-sufficiency push. Government-backed with strong policy tailwinds but execution and yield risks.",
-      "kill_condition": "Flagship BR100/BR200 chip yields remain below 50% for 2+ quarters OR key government funding pulled OR major customer defects to competing Chinese GPU (Huawei Ascend gains >60% share)",
-      "tags": [
-        "Chinese GPU",
-        "AI",
-        "GPGPU",
-        "Export Controls",
-        "Hong Kong"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated. P/S appropriate \u2014 pre-profit, high-growth. HK-listed, requires .HK suffix for data providers."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "COHR",
-      "name": "Coherent Corp",
-      "sector": "Photonics / AI Data Center Optics",
-      "thesis": "Reinvented from industrial laser company to AI photonics leader. S&P 500 inclusion March 2026. Makes optical transceivers (1.6T/3.2T/12.8T), InP wafers, and VCSELs for AI data center interconnects. 75%+ gross margins on InP. SiC and CPO optionality. Stock up 42% YTD 2026.",
-      "kill_condition": "AI data center optics revenue growth declines below 20% YoY for 2 quarters OR InP wafer manufacturing yield issues persist OR loses top-3 hyperscaler customer",
-      "tags": [
-        "Photonics",
-        "AI Infrastructure",
-        "Optical",
-        "InP",
-        "S&P 500"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated. P/E appropriate \u2014 profitable with strong margin expansion story."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "NOK",
-      "name": "Nokia Corporation",
-      "sector": "Telecom Infrastructure / Networking",
-      "thesis": "Telecom infrastructure play pivoting to AI/data center networking. Q1 2026: \u20ac4.5B revenue (+4% CC), raised Network Infrastructure guidance on AI boom. Optical Networks and IP Networks positioned for hyperscaler data center buildout. Deep value at ~$11 with improving margins. Technology Standards segment provides stable royalty income.",
-      "kill_condition": "Network Infrastructure segment revenue declines 2 consecutive quarters OR operating margin falls below 8% OR loses major 5G RAN contract to Ericsson/Huawei in top-3 market",
-      "tags": [
-        "Telecom",
-        "5G",
-        "AI Networking",
-        "Optical",
-        "Finland",
-        "Value"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated. P/E appropriate \u2014 profitable, dividend-paying telecom infra."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "ALAB",
-      "name": "Astera Labs",
-      "sector": "Semiconductors / AI Connectivity",
-      "thesis": "Designs connectivity solutions (PCIe/CXL retimers, smart cable modules, fabric switches) for AI data centers. 75.7% gross margin, zero debt, $1.1B cash. Revenue $270M last quarter growing rapidly. Acquired aiXscale Photonics for optical connectivity. Positioned at the GPU-to-GPU interconnect layer that bottlenecks AI scaling.",
-      "kill_condition": "Revenue growth decelerates below 30% YoY for 2 quarters OR NVIDIA internalizes retimer/switch functions OR gross margin drops below 65%",
-      "tags": [
-        "AI Infrastructure",
-        "Connectivity",
-        "PCIe",
-        "CXL",
-        "Semiconductors"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated. P/S likely appropriate \u2014 hyper-growth, may need to check profitability for P/E."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "U",
-      "name": "Unity Software",
-      "sector": "Software / Gaming / 3D Platform",
-      "thesis": "Dominant real-time 3D engine for gaming, extending into industrial/automotive/film. Vector ad platform hit $1B+ annualized run rate. Create business accelerating, China revenue +50%. Raised Q1 2026 guidance to $505-508M. Turnaround story under CEO Bromberg \u2014 cut costs, refocused on core, EBITDA improving to $130-135M. Non-semi software diversification.",
-      "kill_condition": "Vector ad revenue growth stalls below 20% YoY for 2 quarters OR major game studio defects to Unreal Engine 6 OR adjusted EBITDA turns negative again",
-      "tags": [
-        "Gaming",
-        "3D Engine",
-        "Advertising",
-        "Software Platform",
-        "Turnaround"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated. P/S appropriate \u2014 positive but thin margins, growth story."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "FSLY",
-      "name": "Fastly Inc",
-      "sector": "Cloud Infrastructure / Edge Computing",
-      "thesis": "Edge cloud platform for content delivery + security. Q4 2025 revenue $172.6M (+23% YoY), security revenue +32%. 2026 guidance: $710M revenue (+14%), $55M operating income. RPO up 55% YoY to $354M signals strong contracted future revenue. Positioned for agentic AI era where edge computing becomes critical for latency-sensitive AI workloads.",
-      "kill_condition": "Revenue growth decelerates below 10% YoY for 2 quarters OR net retention rate drops below 110% OR operating income guidance turns negative",
-      "tags": [
-        "Edge Cloud",
-        "CDN",
-        "Security",
-        "Agentic AI",
-        "Infrastructure"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated. P/S appropriate \u2014 newly profitable, growth acceleration."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "CRCL",
-      "name": "Circle Internet Group",
-      "sector": "Fintech / Crypto Infrastructure",
-      "thesis": "Issuer of USDC, the second-largest stablecoin. Revenue $2.7B TTM from interest on USDC reserves + transaction fees. Recently IPO\u2019d. Stablecoin regulation tailwinds (Qivalis framework). Pure-play bet on stablecoin adoption as payment/settlement infrastructure. Non-tech sector diversification for the watchlist.",
-      "kill_condition": "USDC market cap share drops below 15% (Tether dominance) OR stablecoin regulatory framework imposes reserve yield caps OR net income remains negative for 4 consecutive quarters post-IPO",
-      "tags": [
-        "Stablecoin",
-        "USDC",
-        "Crypto",
-        "Fintech",
-        "Payments",
-        "IPO"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated. P/S appropriate \u2014 pre-profit, revenue from reserve interest."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "MRVL",
-      "name": "Marvell Technology",
-      "sector": "Semiconductors / Custom Silicon",
-      "thesis": "Leading custom silicon provider for cloud and AI \u2014 designs custom accelerators for Amazon, Microsoft, Google. Data center revenue growing 80%+ YoY. 5nm/3nm ramp and CXL interconnect position create structural tailwinds through 2028.",
-      "kill_condition": "Custom silicon wins fall below 3 active hyperscaler programs OR data center revenue growth declines below 20% for 2 consecutive quarters",
-      "tags": [
-        "AI Infrastructure",
-        "Custom Silicon",
-        "Cloud",
-        "Networking",
-        "5nm"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "WOLF",
-      "name": "Wolfspeed",
-      "sector": "Power Semiconductors / SiC",
-      "thesis": "Dominant silicon carbide (SiC) wafer manufacturer at cyclical trough. Mohawk Valley fab ramping \u2014 world's largest SiC facility. EV power electronics and industrial adoption create massive TAM. Currently burning cash but long-term supply agreements with major auto OEMs provide visibility.",
-      "kill_condition": "Mohawk Valley fab yield stays below 50% for 4 quarters OR bankruptcy/restructuring risk materializes OR SiC market share drops below 30%",
-      "tags": [
-        "SiC",
-        "Power Semiconductors",
-        "EV",
-        "Cyclical Trough",
-        "Fab Ramp"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "CEVA",
-      "name": "CEVA Inc",
-      "sector": "Semiconductor IP / Licensing",
-      "thesis": "Asset-light IP licensing model for wireless (5G/WiFi/Bluetooth) and AI processors. Royalties scale with smartphone/IoT chip volumes without fab capex. Sensor fusion IP for automotive ADAS growing rapidly. High operating leverage \u2014 each design win produces years of royalties.",
-      "kill_condition": "Annual licensing revenue declines >15% OR major licensee (Samsung, MediaTek) switches to in-house IP OR royalty per unit drops >25%",
-      "tags": [
-        "IP Licensing",
-        "5G",
-        "WiFi",
-        "IoT",
-        "Automotive ADAS"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "MTSI",
-      "name": "MACOM Technology",
-      "sector": "Analog Semiconductors / RF",
-      "thesis": "Analog semiconductor specialist in high-performance RF, microwave, and photonic solutions. Defense/aerospace provides stable base while 5G and data center optical interconnect drive growth. Gross margins expanding toward 65%+ as product mix shifts to higher-value ICs.",
-      "kill_condition": "Defense revenue declines >20% due to budget cuts OR gross margin falls below 55% for 2 quarters OR 5G buildout stalls globally",
-      "tags": [
-        "Analog",
-        "RF",
-        "Defense",
-        "5G",
-        "Optical Interconnect"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "PATH",
-      "name": "UiPath",
-      "sector": "Enterprise Software / RPA",
-      "thesis": "Market leader in Robotic Process Automation with AI-powered automation platform. Enterprise penetration still early \u2014 only ~15% of Fortune 500 at scale. AI Agent era transforms RPA from macro-recording to intelligent workflow orchestration. Net retention >120% with growing platform attach.",
-      "kill_condition": "ARR growth falls below 10% for 2 quarters OR net retention drops below 110% OR Microsoft Power Automate captures >30% market share",
-      "tags": [
-        "RPA",
-        "AI Agents",
-        "Automation",
-        "Enterprise SaaS",
-        "Workflow"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "SOUN",
-      "name": "SoundHound AI",
-      "sector": "AI Software / Voice",
-      "thesis": "Voice AI platform for restaurants, automotive, and IoT. Backlog >$1B with multi-year contracts. Conversational AI in drive-throughs and cars is a massive TAM barely penetrated. Strategic partnerships with Hyundai, Stellantis, and major QSR chains provide visibility.",
-      "kill_condition": "Backlog cancellations exceed 20% OR revenue growth falls below 40% for 2 quarters OR major auto partner switches to competing voice platform",
-      "tags": [
-        "Voice AI",
-        "Conversational AI",
-        "Automotive",
-        "QSR",
-        "IoT"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "BBAI",
-      "name": "BigBear.ai",
-      "sector": "Defense AI / Analytics",
-      "thesis": "AI-powered decision intelligence for defense and intelligence communities. Proprietary knowledge graph and predictive analytics used by DoD, intelligence agencies. Defense AI spending accelerating with autonomous systems adoption. Low valuation relative to defense AI TAM.",
-      "kill_condition": "Loss of 2+ major government contracts OR revenue declines >15% YoY OR security clearance issues impact contract eligibility",
-      "tags": [
-        "Defense AI",
-        "Intelligence",
-        "Knowledge Graph",
-        "Government",
-        "Predictive Analytics"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "AI",
-      "name": "C3.ai",
-      "sector": "Enterprise AI / Platform",
-      "thesis": "Enterprise AI platform enabling large organizations to deploy AI/ML applications at scale. Pivoted to consumption-based pricing driving faster adoption. Federal/defense vertical growing rapidly. Partnerships with Microsoft Azure, AWS, and Google Cloud extend distribution.",
-      "kill_condition": "Revenue growth stalls below 15% for 3 quarters OR consumption pricing fails to drive net new customers >20% YoY OR cash burn exceeds $50M/quarter consistently",
-      "tags": [
-        "Enterprise AI",
-        "AI Platform",
-        "Federal",
-        "Consumption Model",
-        "Cloud Partnership"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "S",
-      "name": "SentinelOne",
-      "sector": "Cybersecurity / Endpoint",
-      "thesis": "AI-native cybersecurity platform \u2014 Singularity XDR unifies endpoint, cloud, and identity protection. Fastest-growing cybersecurity company at scale. Displacement of legacy vendors (McAfee, Symantec, CrowdStrike post-outage) accelerating. Path to profitability improving with 75%+ gross margins.",
-      "kill_condition": "ARR growth falls below 20% OR gross margin drops below 70% OR net retention falls below 110%",
-      "tags": [
-        "Cybersecurity",
-        "XDR",
-        "AI-Native",
-        "Endpoint",
-        "Cloud Security"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "ZS",
-      "name": "Zscaler",
-      "sector": "Cybersecurity / Zero Trust",
-      "thesis": "Zero Trust security leader \u2014 cloud-native architecture replacing legacy VPNs and firewalls. 150+ data centers globally process 500B+ daily transactions. Enterprise adoption still early \u2014 SASE market growing 25%+ CAGR. Expanding into data protection and AI security.",
-      "kill_condition": "Billings growth falls below 15% for 2 quarters OR net retention drops below 115% OR Palo Alto SASE captures dominant market share",
-      "tags": [
-        "Zero Trust",
-        "SASE",
-        "Cloud Security",
-        "Network Security",
-        "Enterprise"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "NET",
-      "name": "Cloudflare",
-      "sector": "Cloud Infrastructure / Edge",
-      "thesis": "Global edge network handling ~20% of all web traffic. Workers AI platform positions Cloudflare as the inference-at-the-edge layer for AI applications. R2 storage disrupting AWS S3 pricing. Developer platform stickiness creates expanding moat. Revenue growing 25%+.",
-      "kill_condition": "Revenue growth declines below 20% for 2 quarters OR Workers AI fails to reach $100M ARR by 2027 OR major security incident damages brand trust",
-      "tags": [
-        "Edge Computing",
-        "CDN",
-        "AI Inference",
-        "Developer Platform",
-        "Security"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "MDB",
-      "name": "MongoDB",
-      "sector": "Database / Developer Platform",
-      "thesis": "Document database leader benefiting from AI workload explosion \u2014 vector search, real-time AI applications, and unstructured data storage. Atlas (cloud) growing 30%+ and now majority of revenue. Developer-first GTM creates organic adoption that converts to enterprise contracts.",
-      "kill_condition": "Atlas growth falls below 20% OR significant customer churn to PostgreSQL/vector-native DBs OR operating losses widen for 3 consecutive quarters",
-      "tags": [
-        "Database",
-        "Document DB",
-        "Atlas Cloud",
-        "AI Workloads",
-        "Developer Platform"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "CFLT",
-      "name": "Confluent",
-      "sector": "Data Streaming / Infrastructure",
-      "thesis": "Data streaming platform built on Apache Kafka \u2014 the nervous system for real-time enterprise data. Cloud-native Confluent Cloud growing 35%+ as enterprises need real-time data pipelines for AI/ML. Only pure-play data streaming company at scale. Path to profitability accelerating.",
-      "kill_condition": "Confluent Cloud growth falls below 25% OR gross margin drops below 70% OR Amazon MSK captures >40% of managed Kafka market",
-      "tags": [
-        "Data Streaming",
-        "Kafka",
-        "Real-Time Data",
-        "Cloud Native",
-        "AI Pipelines"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "RXRX",
-      "name": "Recursion Pharmaceuticals",
-      "sector": "Biotech / AI Drug Discovery",
-      "thesis": "AI-first drug discovery platform using computer vision and biological datasets to identify drug candidates. Partnership with Roche/Genentech validates platform. Acquired Exscientia to consolidate AI drug discovery. Pipeline advancing multiple candidates into clinical trials simultaneously.",
-      "kill_condition": "Two or more clinical trial failures in same quarter OR Roche partnership terminated OR cash runway drops below 12 months without fundraising path",
-      "tags": [
-        "AI Drug Discovery",
-        "Biotech",
-        "Computer Vision",
-        "Roche Partnership",
-        "Clinical Pipeline"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "BEAM",
-      "name": "Beam Therapeutics",
-      "sector": "Biotech / Gene Editing",
-      "thesis": "Pioneer in base editing \u2014 precision gene editing without double-strand DNA breaks. Differentiated from CRISPR-Cas9 by higher precision and fewer off-target effects. Lead programs in sickle cell disease and oncology. Platform approach enables broad pipeline from single technology.",
-      "kill_condition": "Lead program (BEAM-101) clinical data shows safety concerns OR FDA clinical hold on 2+ programs OR base editing precision advantage disproven by competing tech",
-      "tags": [
-        "Gene Editing",
-        "Base Editing",
-        "Sickle Cell",
-        "Oncology",
-        "Precision Medicine"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "CRSP",
-      "name": "CRISPR Therapeutics",
-      "sector": "Biotech / Gene Therapy",
-      "thesis": "First CRISPR gene therapy approved (Casgevy for sickle cell/beta-thalassemia). Commercial launch in US and EU. Pipeline expanding into oncology (CAR-T), cardiovascular, and autoimmune. Manufacturing scale-up underway to serve growing patient demand. Platform creates option value across multiple diseases.",
-      "kill_condition": "Casgevy commercial revenue below $200M in first full year OR safety signal in post-marketing OR competing gene therapies capture >50% market share",
-      "tags": [
-        "CRISPR",
-        "Gene Therapy",
-        "Sickle Cell",
-        "CAR-T",
-        "Commercial Launch"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "ENPH",
-      "name": "Enphase Energy",
-      "sector": "Clean Energy / Solar",
-      "thesis": "Dominant microinverter company for residential solar \u2014 80%+ US market share. IQ8 microinverters with grid-forming capability create energy independence. Battery storage attach rate rising. European expansion and IRA tailwinds provide multi-year growth runway. Cyclical trough recovery underway.",
-      "kill_condition": "US residential solar installations decline >20% YoY for 2 quarters OR market share drops below 60% in US OR IRA solar credits repealed/significantly reduced",
-      "tags": [
-        "Solar",
-        "Microinverters",
-        "Energy Storage",
-        "Residential",
-        "IRA"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "BE",
-      "name": "Bloom Energy",
-      "sector": "Clean Energy / Fuel Cells",
-      "thesis": "Solid oxide fuel cell platform for distributed power generation. Data center power demand from AI creating massive new TAM \u2014 fuel cells provide reliable baseload power where grid capacity is constrained. Hydrogen electrolyzer capability adds green hydrogen optionality. Revenue growing 20%+ with improving margins.",
-      "kill_condition": "Data center power orders fail to materialize (<$100M by 2027) OR fuel cell efficiency doesn't improve to >65% OR natural gas prices spike making fuel cells uneconomic",
-      "tags": [
-        "Fuel Cells",
-        "Data Center Power",
-        "Hydrogen",
-        "Distributed Energy",
-        "AI Infrastructure"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "FSLR",
-      "name": "First Solar",
-      "sector": "Clean Energy / Solar Manufacturing",
-      "thesis": "Only major US-based solar panel manufacturer \u2014 CdTe thin-film technology with superior performance in high-heat environments. 80GW+ contracted backlog provides multi-year visibility. IRA domestic manufacturing credits ($0.17/watt) create structural cost advantage vs imports. India factory expanding for global market.",
-      "kill_condition": "IRA manufacturing credits repealed or reduced >50% OR CdTe technology disrupted by perovskite OR contracted backlog cancellations exceed 15%",
-      "tags": [
-        "Solar Panels",
-        "US Manufacturing",
-        "IRA",
-        "Thin Film",
-        "Backlog"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "SOFI",
-      "name": "SoFi Technologies",
-      "sector": "Fintech / Digital Banking",
-      "thesis": "All-in-one digital financial services platform \u2014 banking, lending, investing, insurance. Bank charter provides low-cost deposit funding advantage. Member count growing 30%+ YoY with increasing product cross-sell (now 2.5+ products per member). Technology platform (Galileo + Technisys) serves 150M+ accounts as banking infrastructure.",
-      "kill_condition": "Member growth falls below 15% YoY OR net interest margin compresses below 5% OR loan default rates exceed 5% in personal lending",
-      "tags": [
-        "Digital Banking",
-        "Bank Charter",
-        "Lending",
-        "Platform",
-        "Cross-Sell"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "AFRM",
-      "name": "Affirm Holdings",
-      "sector": "Fintech / BNPL",
-      "thesis": "Buy-now-pay-later leader with superior underwriting \u2014 0% delinquency rate loans available at scale. Debit+ card driving offline adoption. Merchant network expanding beyond e-commerce into in-store and B2B. Revenue growth 35%+ with path to GAAP profitability as scale improves unit economics.",
-      "kill_condition": "Delinquency rates exceed 4% on core products OR GMV growth falls below 15% OR CFPB regulation materially restricts BNPL lending model",
-      "tags": [
-        "BNPL",
-        "Consumer Lending",
-        "Debit Card",
-        "Underwriting",
-        "E-Commerce"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "HOOD",
-      "name": "Robinhood Markets",
-      "sector": "Fintech / Trading Platform",
-      "thesis": "Retail trading platform expanding into wealth management, retirement (IRA), and crypto. Gold subscription driving ARPU growth to $120+. International expansion (UK, EU) opens large new markets. Youngest customer base in brokerage industry creates decades of AUM accumulation. Event contracts and prediction markets add new revenue stream.",
-      "kill_condition": "Monthly active users decline below 10M for 2 quarters OR crypto revenue >50% of total (concentration risk) OR SEC enforcement action restricts core trading model",
-      "tags": [
-        "Retail Trading",
-        "Crypto",
-        "Wealth Management",
-        "Gold Subscription",
-        "International"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "ASTS",
-      "name": "AST SpaceMobile",
-      "sector": "Space / Satellite Communications",
-      "thesis": "Building satellite network for direct-to-smartphone broadband \u2014 connecting 5.5B mobile subscribers without new hardware. First commercial satellites launched 2025 with AT&T and Vodafone partnerships. TAM of $1T+ mobile backhaul market. Technology proven with successful video calls and 4G/5G data in testing.",
-      "kill_condition": "Commercial service launch delayed beyond Q2 2027 OR satellite failure rate exceeds 20% in first constellation OR AT&T/Vodafone partnerships terminated",
-      "tags": [
-        "Direct-to-Device",
-        "Satellite",
-        "Mobile Broadband",
-        "AT&T",
-        "Space Infrastructure"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "LUNR",
-      "name": "Intuitive Machines",
-      "sector": "Space / Lunar Services",
-      "thesis": "Only private company to successfully land on the Moon (Odysseus, Feb 2024). NASA CLPS contract pipeline >$4B for lunar delivery services. Expanding into lunar data relay and navigation infrastructure. First-mover advantage in cislunar economy \u2014 Artemis program creates sustained demand.",
-      "kill_condition": "Two consecutive mission failures OR NASA CLPS program funding cut >30% OR Artemis program cancelled/indefinitely delayed",
-      "tags": [
-        "Lunar Landing",
-        "NASA CLPS",
-        "Artemis",
-        "Space Services",
-        "Cislunar"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "RDW",
-      "name": "Redwire Corporation",
-      "sector": "Space / Manufacturing",
-      "thesis": "Space infrastructure company \u2014 3D printing, solar arrays, and sensors for satellites and space stations. Only US company with heritage in-space manufacturing. Backlog >$370M growing with defense and civil space demand. Acquisitive strategy consolidating fragmented space manufacturing market.",
-      "kill_condition": "Backlog declines >20% YoY OR two consecutive quarters of negative revenue growth OR key acquisition integration fails causing margin deterioration >500bps",
-      "tags": [
-        "Space Manufacturing",
-        "3D Printing",
-        "Solar Arrays",
-        "Defense",
-        "In-Space Assembly"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "IONQ",
-      "name": "IonQ",
-      "sector": "Quantum Computing / Trapped Ion",
-      "thesis": "Leading trapped-ion quantum computing company \u2014 highest published quantum volume. Cloud-accessible quantum computers via AWS, Azure, and Google Cloud. Government and enterprise contracts growing. #AQ benchmarking shows consistent performance improvements. First to achieve commercially relevant error rates.",
-      "kill_condition": "Algorithmic qubit (#AQ) progress stalls for 4 quarters OR annual revenue growth falls below 50% OR superconducting approach proves definitively superior for practical applications",
-      "tags": [
-        "Quantum Computing",
-        "Trapped Ion",
-        "Cloud Quantum",
-        "Enterprise",
-        "Government"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "RGTI",
-      "name": "Rigetti Computing",
-      "sector": "Quantum Computing / Superconducting",
-      "thesis": "Full-stack quantum computing company \u2014 designs and manufactures superconducting quantum processors in-house (Fab-1). Ankaa processor series achieving record gate fidelities. Quantum-classical hybrid computing via Rigetti QCS platform. Partnership with government labs and enterprises for near-term quantum advantage applications.",
-      "kill_condition": "Gate fidelity improvements stall below 99.5% for 2 generations OR cash runway drops below 12 months OR no demonstrable quantum advantage in any application by 2028",
-      "tags": [
-        "Quantum Computing",
-        "Superconducting",
-        "In-House Fab",
-        "Hybrid Computing",
-        "QPU"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "QBTS",
-      "name": "D-Wave Quantum",
-      "sector": "Quantum Computing / Annealing",
-      "thesis": "Only company selling commercial quantum computers today \u2014 quantum annealing approach solves optimization problems NOW, not years from now. Advantage2 system with 4000+ qubits. Enterprise customers using quantum for logistics, scheduling, and drug discovery optimization. Revenue growing as commercial adoption expands.",
-      "kill_condition": "Annealing approach proven unable to achieve quantum advantage over classical optimization OR annual revenue growth falls below 30% OR key enterprise customers churn >25%",
-      "tags": [
-        "Quantum Annealing",
-        "Optimization",
-        "Commercial Quantum",
-        "Enterprise",
-        "Advantage2"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "DUOL",
-      "name": "Duolingo",
-      "sector": "EdTech / Consumer App",
-      "thesis": "AI-powered language learning app with 100M+ monthly active users. Subscription revenue growing 40%+ YoY with strong conversion from free to paid. AI features (Duolingo Max with GPT-4) increasing engagement and willingness to pay. Expanding into math and music education. Viral product with minimal customer acquisition cost.",
-      "kill_condition": "Subscriber growth falls below 15% YoY OR monthly active user retention drops below 60% OR AI tutoring competitors (ChatGPT, Google) commoditize language learning",
-      "tags": [
-        "EdTech",
-        "Language Learning",
-        "AI Tutoring",
-        "Consumer Subscription",
-        "Viral Growth"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "GRAB",
-      "name": "Grab Holdings",
-      "sector": "Consumer / Southeast Asia Super-App",
-      "thesis": "Southeast Asia's leading super-app \u2014 ride-hailing, food delivery, payments, and digital banking across 8 countries with 700M+ population. Turned GAAP profitable in 2024. GrabFin (digibank + lending) growing rapidly with low-cost distribution through existing user base. Network effects strengthen with scale.",
-      "kill_condition": "On-demand GMV growth falls below 10% OR GrabFin loan losses exceed 5% OR loss of market leadership in 3+ countries to GoTo or competitors",
-      "tags": [
-        "Super-App",
-        "Southeast Asia",
-        "Ride-Hailing",
-        "Digital Banking",
-        "Food Delivery"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "SERV",
-      "name": "Serve Robotics",
-      "sector": "Robotics / Autonomous Delivery",
-      "thesis": "Autonomous sidewalk delivery robots \u2014 Uber Eats partner for last-mile delivery. Revenue nearly tripling with expansion to new cities. Unit economics improving as fleet scales \u2014 cost per delivery approaching human courier parity. First-mover advantage in regulated autonomous delivery space.",
-      "kill_condition": "Unit economics don't reach courier parity by 2027 OR Uber partnership terminated OR regulatory restrictions block autonomous delivery in 3+ major cities",
-      "tags": [
-        "Autonomous Delivery",
-        "Robotics",
-        "Uber Eats",
-        "Last-Mile",
-        "Urban Logistics"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "ps",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "JOBY",
-      "name": "Joby Aviation",
-      "sector": "Air Mobility / eVTOL",
-      "thesis": "Leading electric air taxi company \u2014 closest to FAA certification for commercial eVTOL operations. Toyota partnership provides manufacturing expertise and $894M investment. 150+ mile range at 200mph positions Joby for premium urban air mobility. DoD contracts provide revenue bridge to commercial launch.",
-      "kill_condition": "FAA type certification delayed beyond 2027 OR flight testing reveals safety issues requiring major redesign OR Toyota withdraws support",
-      "tags": [
-        "eVTOL",
-        "Air Taxi",
-        "FAA Certification",
-        "Toyota",
-        "Urban Air Mobility"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "RIVN",
-      "name": "Rivian Automotive",
-      "sector": "EV / Electric Trucks",
-      "thesis": "Premium electric truck/SUV maker with Amazon delivery van contract (100K vehicles). R2 platform (smaller, affordable SUV) launching 2026 targeting mass market. Volkswagen $5.8B joint venture for EV software and architecture validates technology. Improving gross margins approaching breakeven.",
-      "kill_condition": "Gross margin stays negative for 4 more quarters OR Amazon reduces delivery van order by >30% OR R2 launch delayed beyond Q2 2027",
-      "tags": [
-        "Electric Vehicles",
-        "Trucks",
-        "Amazon",
-        "Volkswagen JV",
-        "R2 Platform"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "DDOG",
-      "name": "Datadog",
-      "sector": "Cloud / Observability",
-      "thesis": "Leading cloud observability and security platform \u2014 monitoring, APM, logs, SIEM unified in single platform. AI workload monitoring creating new growth vector. 26 products with strong cross-sell (customers using 6+ products growing fastest). Revenue growth 25%+ with 80%+ gross margins and strong free cash flow.",
-      "kill_condition": "Revenue growth falls below 15% for 2 quarters OR net retention drops below 115% OR major cloud providers (AWS CloudWatch, Azure Monitor) capture >30% of observability market",
-      "tags": [
-        "Observability",
-        "APM",
-        "Cloud Monitoring",
-        "Security",
-        "AI Ops"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "AXON",
-      "name": "Axon Enterprise",
-      "sector": "Public Safety / AI",
-      "thesis": "Public safety technology platform \u2014 TASER devices, body cameras, and Axon Cloud (evidence management, real-time operations). Draft One AI report writing saving officers 2+ hours per shift. 95%+ gross retention with expanding government/enterprise contracts. Only major body camera company with integrated cloud ecosystem.",
-      "kill_condition": "Government/municipal spending on public safety tech declines >15% OR major lawsuit over AI bias in policing OR TASER competitor captures >20% market share",
-      "tags": [
-        "Public Safety",
-        "Body Cameras",
-        "TASER",
-        "AI Reports",
-        "Government SaaS"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
-    },
-    {
-      "ticker": "TMC",
-      "name": "The Metals Company",
-      "sector": "Mining / Deep-Sea Resources",
-      "thesis": "Polymetallic nodule mining from the ocean floor \u2014 nodules contain nickel, cobalt, copper, and manganese critical for EV batteries. Single seafloor deposit contains more nickel than all land reserves combined. ISA exploitation license expected 2025-2026. First-mover advantage in trillion-dollar critical minerals market.",
-      "kill_condition": "ISA denies exploitation license OR environmental regulations prohibit deep-sea mining OR nodule processing costs exceed $15,000/ton making project uneconomic",
-      "tags": [
-        "Deep-Sea Mining",
-        "Critical Minerals",
-        "Nickel",
-        "Cobalt",
-        "EV Battery Metals"
-      ],
-      "target": {
-        "price": null,
-        "timeline_years": 3,
-        "valuation_method": "pe",
-        "notes": "To be generated by model pipeline."
-      },
-      "criteria": []
     }
   ]
 }

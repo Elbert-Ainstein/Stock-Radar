@@ -51,6 +51,44 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
   // Health panel
   const [showHealthPanel, setShowHealthPanel] = useState(false);
 
+  // Bulk select/delete
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
+
+  const toggleCheck = (ticker: string) => {
+    setSelectedTickers(prev => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else next.add(ticker);
+      return next;
+    });
+  };
+  const selectAll = () => setSelectedTickers(new Set(sorted.map(s => s.ticker)));
+  const selectNone = () => setSelectedTickers(new Set());
+
+  const handleBulkDelete = async () => {
+    if (selectedTickers.size === 0) return;
+    const names = [...selectedTickers].join(", ");
+    if (!confirm(`Remove ${selectedTickers.size} stocks?\n\n${names}`)) return;
+    try {
+      const res = await fetch("/api/stocks/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers: [...selectedTickers] }),
+      });
+      if (res.ok) {
+        setLocalStocks(prev => prev.filter(s => !selectedTickers.has(s.ticker)));
+        if (selectedTicker && selectedTickers.has(selectedTicker)) {
+          setSelectedTicker(localStocks.find(s => !selectedTickers.has(s.ticker))?.ticker || null);
+        }
+        setSelectedTickers(new Set());
+        setSelectMode(false);
+      }
+    } catch (err) {
+      console.error("Bulk delete failed:", err);
+    }
+  };
+
   // ─── Poll pipeline status ───
   const startPolling = useCallback(() => {
     if (pollRef.current) return; // already polling
@@ -310,24 +348,24 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
     <div className="min-h-screen">
       {/* Top bar */}
       <header className="border-b border-[var(--border)] bg-[var(--bg)]">
-        <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-6">
+        <div className="max-w-[1400px] mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+          <div className="flex items-center gap-4 sm:gap-6">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-[var(--text)] flex items-center justify-center text-sm font-bold text-[var(--bg)]">SR</div>
               <div>
                 <h1 className="text-lg font-bold">Stock Radar</h1>
-                <p className="text-[10px] text-[var(--muted)]">Multi-AI Agent System</p>
+                <p className="text-[10px] text-[var(--muted)] hidden sm:block">Multi-AI Agent System</p>
               </div>
             </div>
-            <nav className="flex gap-4 text-xs ml-4">
+            <nav className="flex gap-3 sm:gap-4 text-xs ml-2 sm:ml-4">
               <span className="text-amber-500 font-medium">Watchlist</span>
               <a href="/discovery" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Discovery</a>
               <a href="/model" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Models</a>
-              <a href="/ask" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Ask AI</a>
+              <a href="/ask" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors hidden sm:inline">Ask AI</a>
               <a href="/logs" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Logs</a>
             </nav>
           </div>
-          <div className="flex items-center gap-6 text-xs text-[var(--muted)]">
+          <div className="flex items-center gap-3 sm:gap-6 text-xs text-[var(--muted)] overflow-x-auto">
             <button
               onClick={toggleTheme}
               className="text-[var(--muted)] hover:text-[var(--text)] transition-colors p-1.5 rounded-md hover:bg-[var(--hover)]"
@@ -462,7 +500,7 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
         <HealthPanel onClose={() => setShowHealthPanel(false)} />
       )}
 
-      <main className="max-w-[1400px] mx-auto px-6 py-6">
+      <main className="max-w-[1400px] mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {/* Pipeline error banner */}
         {pipelineError && (
           <div className="mb-4 px-4 py-3 rounded-lg border bg-[var(--danger-bg)] border-[var(--danger)]/20 flex items-center justify-between">
@@ -494,7 +532,7 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
         />
 
         {/* Filters */}
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-4">
           <div className="flex items-center gap-2">
             <span className="text-xs text-[var(--muted)]">Sort:</span>
             {(["score", "change", "convergence"] as const).map(s => (
@@ -512,7 +550,7 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2 ml-4">
+          <div className="flex items-center gap-2 sm:ml-4">
             <span className="text-xs text-[var(--muted)]">Sector:</span>
             <select
               value={filterSector}
@@ -524,8 +562,38 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
               ))}
             </select>
           </div>
-          <div className="ml-auto text-[10px] text-[var(--faint)]">
-            Click a stock for detail view
+          <div className="ml-auto flex items-center gap-3">
+            {selectMode ? (
+              <>
+                <button onClick={selectAll} className="text-[10px] text-[var(--muted)] hover:text-[var(--text)] transition-colors">Select all</button>
+                <button onClick={selectNone} className="text-[10px] text-[var(--muted)] hover:text-[var(--text)] transition-colors">Clear</button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={selectedTickers.size === 0}
+                  className={cn(
+                    "text-[11px] font-medium px-3 py-1.5 rounded-md border transition-all",
+                    selectedTickers.size > 0
+                      ? "border-red-500/40 text-red-400 hover:bg-red-500/10"
+                      : "border-[var(--border)] text-[var(--muted)] opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  Delete {selectedTickers.size > 0 ? `(${selectedTickers.size})` : ""}
+                </button>
+                <button
+                  onClick={() => { setSelectMode(false); setSelectedTickers(new Set()); }}
+                  className="text-[10px] text-[var(--muted)] hover:text-[var(--text)] transition-colors"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setSelectMode(true)}
+                className="text-[10px] text-[var(--muted)] hover:text-[var(--text)] transition-colors"
+              >
+                Select
+              </button>
+            )}
           </div>
         </div>
 
@@ -545,8 +613,11 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
               stock={stock}
               isSelected={selectedTicker === stock.ticker}
               onClick={() => setSelectedTicker(selectedTicker === stock.ticker ? null : stock.ticker)}
+              selectMode={selectMode}
+              isChecked={selectedTickers.has(stock.ticker)}
+              onCheck={toggleCheck}
             />
-            {selectedTicker === stock.ticker && <StockDetail stock={stock} onDelete={() => handleDeleteStock(stock.ticker)} />}
+            {selectedTicker === stock.ticker && !selectMode && <StockDetail stock={stock} onDelete={() => handleDeleteStock(stock.ticker)} />}
           </div>
         ))}
 

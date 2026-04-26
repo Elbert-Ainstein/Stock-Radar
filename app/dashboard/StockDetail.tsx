@@ -5,11 +5,11 @@ import { cn, scoreColor, signalBg, signalColor, signalIcon, aiColor } from "./he
 
 export default function StockDetail({ stock, onDelete }: { stock: Stock; onDelete: () => void }) {
   return (
-    <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg p-6 mt-2 mb-4">
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg p-4 sm:p-6 mt-2 mb-4">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold font-mono">{stock.ticker} <span className="text-[var(--muted)] text-lg font-normal">{stock.name}</span></h2>
+          <h2 className="text-xl sm:text-2xl font-bold font-mono">{stock.ticker} <span className="text-[var(--muted)] text-base sm:text-lg font-normal">{stock.name}</span></h2>
           <div className="flex gap-2 mt-2">
             {stock.tags.map(t => (
               <span key={t} className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--hover)] text-[var(--accent-muted)] border border-[var(--border)]">{t}</span>

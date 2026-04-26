@@ -282,10 +282,19 @@ def research_financials(ticker: str, name: str, sector: str) -> str:
         f"{sector} industry supply demand cycle outlook {fy_current} {fy_next} pricing trends capacity expansion risks competitors",
     ]
 
-    research_parts = []
     query_labels = ["guidance/consensus", "moat/TAM", "bull-bear/catalysts", "industry cycle"]
-    for i, q in enumerate(queries):
-        label = query_labels[i] if i < len(query_labels) else f"query {i+1}"
+    system_msg = (
+        "You are an equity research analyst. Provide factual, data-rich responses "
+        "with specific numbers, percentages, and dollar amounts. "
+        "Focus on FORWARD estimates, guidance, catalysts, and industry dynamics. "
+        "Do NOT repeat basic financial data like current revenue or margins — "
+        "those are already available from another source. "
+        "No disclaimers."
+    )
+
+    def _fetch_query(args):
+        idx, query = args
+        label = query_labels[idx] if idx < len(query_labels) else f"query {idx+1}"
         try:
             resp = requests.post(
                 "https://api.perplexity.ai/chat/completions",
@@ -296,18 +305,8 @@ def research_financials(ticker: str, name: str, sector: str) -> str:
                 json={
                     "model": "sonar",
                     "messages": [
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are an equity research analyst. Provide factual, data-rich responses "
-                                "with specific numbers, percentages, and dollar amounts. "
-                                "Focus on FORWARD estimates, guidance, catalysts, and industry dynamics. "
-                                "Do NOT repeat basic financial data like current revenue or margins — "
-                                "those are already available from another source. "
-                                "No disclaimers."
-                            ),
-                        },
-                        {"role": "user", "content": q},
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": query},
                     ],
                     "max_tokens": 800,
                     "temperature": 0.1,
@@ -317,17 +316,24 @@ def research_financials(ticker: str, name: str, sector: str) -> str:
             )
             resp.raise_for_status()
             content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-            research_parts.append(content)
             print(f"    ✓ {label} ({len(content)} chars)")
+            return idx, content
         except requests.exceptions.Timeout:
             print(f"    ✗ {label} — TIMEOUT (Perplexity took >30s)")
+            return idx, None
         except Exception as e:
-            err_msg = str(e)
-            if len(err_msg) > 100:
-                err_msg = err_msg[:100] + "..."
+            err_msg = str(e)[:100]
             print(f"    ✗ {label} — {err_msg}")
-        time.sleep(1.5)
+            return idx, None
 
+    # Run all 4 Perplexity queries concurrently (was sequential with 1.5s sleep)
+    results = [None] * len(queries)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for idx, content in pool.map(_fetch_query, enumerate(queries)):
+            if content:
+                results[idx] = content
+
+    research_parts = [r for r in results if r]
     success = len(research_parts)
     total = len(queries)
     if success < total:
@@ -1215,8 +1221,8 @@ def main():
         print("    python generate_model.py --all")
         return
 
-    # Parallelism: --parallel N (default 3 for --all, 1 for single ticker)
-    max_workers = 1 if specific_ticker else 3
+    # Parallelism: --parallel N (default 5 for --all, 1 for single ticker)
+    max_workers = 1 if specific_ticker else 5
     for i, arg in enumerate(sys.argv):
         if arg == "--parallel" and i + 1 < len(sys.argv):
             max_workers = max(1, min(6, int(sys.argv[i + 1])))
