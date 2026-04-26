@@ -4,7 +4,7 @@ All notable changes made to the project are documented here, with reasoning and 
 
 ---
 
-## [2026-04-26] Session: Pipeline Efficiency & Bug Fixes
+## [2026-04-26] Session: Pipeline Efficiency & Bug Fixes & Rerouting
 
 ### 16. Skip rebuild when scouts gather no new data (`scripts/run_pipeline.py`)
 - **What:** Pipeline now detects when all scouts skipped (freshness window not expired) and short-circuits the analyst + model generation stages.
