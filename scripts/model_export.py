@@ -290,7 +290,6 @@ def _build_assumptions(wb: Workbook, fin: FinancialData, t: TargetResult) -> dic
         ("fcf_sbc_margin_delta",  "FCF-SBC margin delta (pp)",  FMT_PCT),
         ("ev_ebitda_multiple_mult", "EV/EBITDA mult (vs base)",   FMT_MULT),
         ("ev_fcf_sbc_multiple_mult", "EV/(FCF-SBC) mult (vs base)", FMT_MULT),
-        ("discount_rate",         "WACC (scenario-specific)",    FMT_PCT),
     ]
     scen_refs: dict[str, dict[str, str]] = {s: {} for s in ("downside", "base", "upside")}
     for key, label, fmt in scenario_keys:
