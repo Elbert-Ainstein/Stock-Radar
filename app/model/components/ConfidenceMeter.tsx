@@ -3,12 +3,16 @@
 import { cn, WEIGHT_MULTIPLIER } from "../helpers";
 import type { Criterion } from "../types";
 
+const defaultFmt = (price: number) => `$${Math.round(price).toLocaleString()}`;
+
 export default function ConfidenceMeter({
   criteria,
   targetPrice,
+  fmt = defaultFmt,
 }: {
   criteria: (Criterion & { met: boolean })[];
   targetPrice: number;
+  fmt?: (price: number) => string;
 }) {
   if (!criteria.length) return null;
 
@@ -96,7 +100,7 @@ export default function ConfidenceMeter({
             "text-2xl font-mono font-bold",
             adjustedPct > 0 ? "text-emerald-400" : adjustedPct < 0 ? "text-rose-400" : "text-[var(--secondary)]"
           )}>
-            ${adjustedTarget.toLocaleString()}
+            {fmt(adjustedTarget)}
           </span>
           <span className={cn(
             "text-sm font-mono",
@@ -104,7 +108,7 @@ export default function ConfidenceMeter({
           )}>
             {adjustedPct >= 0 ? "+" : ""}{adjustedPct.toFixed(1)}%
           </span>
-          <span className="text-xs text-[var(--faint)]">from ${targetPrice.toLocaleString()} base</span>
+          <span className="text-xs text-[var(--faint)]">from {fmt(targetPrice)} base</span>
         </div>
         <div className="flex gap-4 mt-2 text-[10px]">
           <span className="text-emerald-400/70">Upside pool: +{totalUpside}%</span>

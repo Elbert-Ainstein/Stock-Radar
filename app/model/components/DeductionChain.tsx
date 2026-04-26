@@ -3,6 +3,10 @@
 import { cn } from "../helpers";
 import type { ValuationMethod } from "../types";
 
+const defaultFmt = (price: number) => `$${Math.round(price).toLocaleString()}`;
+const defaultFmtB = (priceB: number) => `$${priceB.toFixed(1)}B`;
+const defaultFmt2 = (price: number) => `$${price.toFixed(2)}`;
+
 export default function DeductionChain({
   revenueB,
   opMargin,
@@ -12,6 +16,9 @@ export default function DeductionChain({
   targetPrice,
   method,
   netDebtB = 0,
+  fmt = defaultFmt,
+  fmtB = defaultFmtB,
+  fmt2 = defaultFmt2,
 }: {
   revenueB: number;
   opMargin: number;
@@ -21,6 +28,9 @@ export default function DeductionChain({
   targetPrice: number;
   method: ValuationMethod;
   netDebtB?: number;
+  fmt?: (price: number) => string;
+  fmtB?: (priceB: number) => string;
+  fmt2?: (price: number) => string;
 }) {
   const marketCapB = (targetPrice * sharesM) / 1000;
 
@@ -30,30 +40,30 @@ export default function DeductionChain({
     const evB = normalizedEbitB * multiple;
     const equityB = evB - netDebtB;
     steps = [
-      { label: "Revenue", value: `$${revenueB.toFixed(1)}B` },
-      { label: `\u00D7 ${(opMargin * 100).toFixed(0)}% EBIT margin`, value: `$${normalizedEbitB.toFixed(2)}B` },
-      { label: `\u00D7 ${multiple.toFixed(0)}\u00D7 EV/EBIT`, value: `EV $${evB.toFixed(1)}B` },
-      { label: `\u2212 Net debt`, value: `$${equityB.toFixed(1)}B` },
-      { label: "Price/share", value: `$${targetPrice.toFixed(0)}` },
+      { label: "Revenue", value: fmtB(revenueB) },
+      { label: `× ${(opMargin * 100).toFixed(0)}% EBIT margin`, value: `${fmtB(normalizedEbitB).replace(/B$/, '')}B` },
+      { label: `× ${multiple.toFixed(0)}× EV/EBIT`, value: `EV ${fmtB(evB)}` },
+      { label: `− Net debt`, value: fmtB(equityB) },
+      { label: "Price/share", value: fmt(targetPrice) },
     ];
   } else if (method === "ps") {
     const rps = sharesM > 0 ? (revenueB * 1000) / sharesM : 0;
     steps = [
-      { label: "Revenue", value: `$${revenueB.toFixed(1)}B` },
-      { label: "Rev/share", value: `$${rps.toFixed(2)}` },
-      { label: `\u00D7 ${multiple.toFixed(0)}\u00D7 P/S`, value: `$${targetPrice.toFixed(0)}` },
-      { label: "Market cap", value: `$${marketCapB.toFixed(0)}B` },
+      { label: "Revenue", value: fmtB(revenueB) },
+      { label: "Rev/share", value: fmt2(rps) },
+      { label: `× ${multiple.toFixed(0)}× P/S`, value: fmt(targetPrice) },
+      { label: "Market cap", value: fmtB(marketCapB) },
     ];
   } else {
     const opIncomeB = revenueB * opMargin;
     const netIncomeB = opIncomeB * (1 - taxRate);
     const eps = sharesM > 0 ? (netIncomeB * 1000) / sharesM : 0;
     steps = [
-      { label: "Revenue", value: `$${revenueB.toFixed(1)}B` },
-      { label: "Operating income", value: `$${opIncomeB.toFixed(2)}B` },
-      { label: "Net income", value: `$${netIncomeB.toFixed(2)}B` },
-      { label: "EPS", value: `$${eps.toFixed(2)}` },
-      { label: "Market cap", value: `$${marketCapB.toFixed(0)}B` },
+      { label: "Revenue", value: fmtB(revenueB) },
+      { label: "Operating income", value: `${fmtB(opIncomeB).replace(/B$/, '')}B` },
+      { label: "Net income", value: `${fmtB(netIncomeB).replace(/B$/, '')}B` },
+      { label: "EPS", value: fmt2(eps) },
+      { label: "Market cap", value: fmtB(marketCapB) },
     ];
   }
 

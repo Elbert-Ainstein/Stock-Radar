@@ -3,6 +3,8 @@
 import { cn } from "../helpers";
 import type { ValuationMethod } from "../types";
 
+const defaultFmt = (price: number) => `$${Math.round(price).toLocaleString()}`;
+
 export default function SensitivityTable({
   revenues,
   multiples,
@@ -16,6 +18,7 @@ export default function SensitivityTable({
   sharesM,
   method,
   multipleLabel,
+  fmt = defaultFmt,
 }: {
   revenues: number[];
   multiples: number[];
@@ -29,6 +32,7 @@ export default function SensitivityTable({
   sharesM: number;
   method: ValuationMethod;
   multipleLabel: string;
+  fmt?: (price: number) => string;
 }) {
   function cellBg(price: number, isBase: boolean): string {
     if (price >= targetPrice * 1.05) return "bg-[#1a3a2a]"; // green -- above target
@@ -48,10 +52,10 @@ export default function SensitivityTable({
 
   const isCyclical = method === "cyclical";
   const subtitle = isCyclical
-    ? `Sensitivity — target price at varying EBIT margin \u00D7 EV/EBIT (${sharesM.toFixed(0)}M shares)`
+    ? `Sensitivity — target price at varying EBIT margin × EV/EBIT (${sharesM.toFixed(0)}M shares)`
     : method === "ps"
-    ? `Sensitivity — target price at varying revenue \u00D7 P/S (${sharesM.toFixed(0)}M shares)`
-    : `Sensitivity — target price at varying revenue \u00D7 P/E (${(opMargin * 100).toFixed(0)}% op margin, ${(taxRate * 100).toFixed(0)}% tax, ${sharesM.toFixed(0)}M shares)`;
+    ? `Sensitivity — target price at varying revenue × P/S (${sharesM.toFixed(0)}M shares)`
+    : `Sensitivity — target price at varying revenue × P/E (${(opMargin * 100).toFixed(0)}% op margin, ${(taxRate * 100).toFixed(0)}% tax, ${sharesM.toFixed(0)}M shares)`;
 
   const rowLabel = isCyclical ? "EBIT Margin" : "Revenue";
 
@@ -96,7 +100,7 @@ export default function SensitivityTable({
                       isBase && "font-bold ring-1 ring-[#60a5fa]/40"
                     )}
                   >
-                    ${Math.round(price).toLocaleString()}
+                    {fmt(price)}
                   </td>
                 );
               })}

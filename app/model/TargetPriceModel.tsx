@@ -25,6 +25,8 @@ import GordonModel from "./components/GordonModel";
 import CriteriaChecklist from "./components/CriteriaChecklist";
 import ConfidenceMeter from "./components/ConfidenceMeter";
 import EventImpactsPanel from "./components/EventImpactsPanel";
+import CurrencyToggle from "./components/CurrencyToggle";
+import { useCurrency } from "./hooks/useCurrency";
 
 // ─── Implied Target Box (kept in orchestrator — small, tightly coupled to state) ───
 // Shows event-weighted target as headline when merge_enabled=True (authoritative).
@@ -39,6 +41,7 @@ function ImpliedTargetBox({
   mergeEnabled = false,
   engineConfidence,
   engineConfidenceLabel,
+  fmt,
 }: {
   impliedPrice: number;
   eventWeightedPrice?: number;
@@ -49,6 +52,7 @@ function ImpliedTargetBox({
   mergeEnabled?: boolean;
   engineConfidence?: number;
   engineConfidenceLabel?: string;
+  fmt: (price: number, opts?: { decimals?: number; compact?: boolean }) => string;
 }) {
   // Use event-weighted price as headline when events are merged
   const headlinePrice = mergeEnabled && eventWeightedPrice && eventWeightedPrice > 0
@@ -63,8 +67,8 @@ function ImpliedTargetBox({
       ? "border-emerald-500/50"
       : "border-amber-500/30";
   const statusText = meetsTarget
-    ? `$${thesisTarget.toLocaleString()} target met or exceeded`
-    : `Below $${thesisTarget.toLocaleString()} target`;
+    ? `${fmt(thesisTarget)} target met or exceeded`
+    : `Below ${fmt(thesisTarget)} target`;
   const statusColor = meetsTarget ? "text-emerald-500" : "text-amber-500";
 
   const upsidePct = currentPrice > 0 ? ((headlinePrice / currentPrice - 1) * 100) : 0;
@@ -100,11 +104,11 @@ function ImpliedTargetBox({
         "text-5xl font-mono font-bold mb-3",
         meetsTarget ? "text-emerald-400" : "text-amber-400"
       )}>
-        ${headlinePrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+        {fmt(headlinePrice)}
       </div>
       {hasEvents ? (
         <div className="text-sm text-[var(--secondary)] mb-2">
-          <span className="font-mono">${impliedPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          <span className="font-mono">{fmt(impliedPrice)}</span>
           <span className="text-[var(--muted)]"> criteria </span>
           <span className={cn("font-mono", (eventDelta ?? 0) >= 0 ? "text-emerald-400" : "text-red-400")}>
             {(eventDelta ?? 0) >= 0 ? "+" : ""}{"\u200A"}${Math.abs(eventDelta ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -113,12 +117,12 @@ function ImpliedTargetBox({
         </div>
       ) : (
         <div className="text-sm text-[var(--secondary)] mb-2">
-          vs ${thesisTarget.toLocaleString()} target
+          vs {fmt(thesisTarget)} target
         </div>
       )}
       <div className="flex items-center justify-center gap-3">
         <span className={cn("text-sm font-mono", upsideColor)}>
-          {upsidePct >= 0 ? "+" : ""}{upsidePct.toFixed(0)}% from ${currentPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          {upsidePct >= 0 ? "+" : ""}{upsidePct.toFixed(0)}% from {fmt(currentPrice)}
         </span>
         <span className="text-[var(--faint)]">{"\u00B7"}</span>
         <span className={cn("text-sm", statusColor)}>
@@ -257,9 +261,12 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
     setMultiple,
   );
 
+  // Currency state — only shows conversion toggle for non-USD stocks
+  const cx = useCurrency(enginePayload?.currency);
+
   // Final valuation method: engine may confirm/override cyclical mode
   const valMethodInfo = useMemo(() => {
-    if (enginePayload?.target?.valuation_method === "cyclical_normalized" && stock) {
+    if (enginePayload?.target?.valuation_method === "cyclical" && stock) {
       return cyclicalMethodInfo(stock.ticker);
     }
     return baseValMethodInfo;
@@ -469,6 +476,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
           ))}
           <div className="ml-auto flex items-center gap-2 text-xs text-[var(--muted)]">
             {stock.name} &middot; {stock.sector}
+            <CurrencyToggle cx={cx} />
             {/* Archetype badge — from Supabase (set by generate_model.py) or engine payload */}
             {(stock.archetype?.primary || enginePayload?.archetype?.primary) && (() => {
               const arch = stock.archetype?.primary || enginePayload?.archetype?.primary || "";
@@ -495,7 +503,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
             {/* Valuation method badge from engine */}
             {enginePayload?.target?.valuation_method && enginePayload.target.valuation_method !== "ev_ebitda" && (
               <span className="px-2 py-0.5 rounded-full border text-[10px] font-medium bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
-                {enginePayload.target.valuation_method === "cyclical_normalized" ? "Cyclical Engine"
+                {enginePayload.target.valuation_method === "cyclical" ? "Cyclical Engine"
                   : enginePayload.target.valuation_method === "revenue_multiple" ? "P/S Mode"
                   : enginePayload.target.valuation_method}
               </span>
@@ -535,7 +543,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
                 <>
                   {" "}· Quant price at generation:{" "}
                   <span className="font-mono text-[var(--secondary)]">
-                    ${stock.researchCache.quant_snapshot.price.toFixed(2)}
+                    {cx.fmt(stock.researchCache.quant_snapshot.price, { decimals: 2 })}
                   </span>
                 </>
               )}
@@ -634,7 +642,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
               <span>📊</span>
               <span>Detailed Model</span>
               {enginePayload && (
-                <span className="font-mono opacity-70">· base ${Math.round(enginePayload.target.base)}</span>
+                <span className="font-mono opacity-70">· base {cx.fmt(enginePayload.target.base)}</span>
               )}
               <span>→</span>
             </a>
@@ -817,6 +825,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
                 mergeEnabled={ei?.merge_enabled ?? false}
                 engineConfidence={enginePayload?.target?.confidence_score}
                 engineConfidenceLabel={enginePayload?.target?.confidence_label}
+                fmt={cx.fmt}
               />
             );
           })()}
@@ -836,6 +845,9 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
             targetPrice={targetPrice}
             method={valMethodInfo.method}
             netDebtB={netDebtB}
+            fmt={(p) => cx.fmt(p)}
+            fmtB={(p) => cx.fmtB(p)}
+            fmt2={(p) => cx.fmt(p, { decimals: 2 })}
           />
         </div>
 
@@ -854,6 +866,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
             sharesM={sharesM}
             method={valMethodInfo.method}
             multipleLabel={valMethodInfo.multipleLabel}
+            fmt={(p) => cx.fmt(p)}
           />
         </div>
 
@@ -890,7 +903,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
               </div>
             </div>
           </div>
-          <TimePathChart path={timePath} currentPrice={stock.currentPrice} targetPrice={configTargetPrice || targetPrice} multipleLabel={valMethodInfo.multipleLabel} />
+          <TimePathChart path={timePath} currentPrice={stock.currentPrice} targetPrice={configTargetPrice || targetPrice} multipleLabel={valMethodInfo.multipleLabel} fmt={(p) => cx.fmt(p)} />
           <div className="mt-3 text-[10px] text-[var(--muted)]">
             Revenue compounds at {(growthRate * 100).toFixed(0)}% CAGR. {valMethodInfo.multipleLabel} {startMultiple > endMultiple ? "compresses" : "expands"} {startMultiple}× → {endMultiple}× over {timeline}yr.
           </div>
@@ -907,6 +920,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
             bullProb={bullProb}
             bearPrice={bearPrice}
             bullPrice={bullPrice}
+            fmt={(p) => cx.fmt(p)}
           />
         </div>
 
@@ -943,7 +957,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
                 />
               </div>
               <div className="col-span-5">
-                <ConfidenceMeter criteria={enrichedCriteria} targetPrice={targetPrice} />
+                <ConfidenceMeter criteria={enrichedCriteria} targetPrice={targetPrice} fmt={(p) => cx.fmt(p)} />
               </div>
             </div>
           </div>
@@ -984,7 +998,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
                     <span className="text-lg font-mono font-bold text-[var(--text)]">{tier.tier}</span>
                     <span className="text-[10px] text-[var(--muted)] font-mono">{tier.feasibility}</span>
                   </div>
-                  <div className="text-base font-mono text-[var(--secondary)]">${tier.target_price?.toLocaleString()}</div>
+                  <div className="text-base font-mono text-[var(--secondary)]">{cx.fmt(tier.target_price || 0)}</div>
                   <div className="text-[10px] text-[var(--muted)] mt-1">
                     {tier.required_cagr_pct}% CAGR
                     {tier.required_revenue_b && ` \u2192 $${tier.required_revenue_b}B`}

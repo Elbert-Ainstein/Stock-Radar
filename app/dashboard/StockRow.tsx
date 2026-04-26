@@ -1,6 +1,7 @@
 import type { Stock } from "@/lib/data";
 import { cn, scoreColor, scoreBg } from "./helpers";
 import Sparkline from "./Sparkline";
+import { CurrencyBadge } from "../model/components/CurrencyToggle";
 
 // ─── Stock Card (Collapsed) ───
 
@@ -57,7 +58,7 @@ export default function StockRow({
 
         {/* Price */}
         <div className="min-w-[80px] sm:min-w-[90px] text-right">
-          <div className="font-mono font-semibold">${stock.price.toFixed(2)}</div>
+          <div className="font-mono font-semibold">${stock.price.toFixed(2)}<CurrencyBadge currency={stock.currency} /></div>
           <div className={cn("text-xs font-mono", stock.change >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]")}>
             {stock.change >= 0 ? "+" : ""}{stock.change.toFixed(2)} ({stock.changePct >= 0 ? "+" : ""}{stock.changePct.toFixed(2)}%)
           </div>

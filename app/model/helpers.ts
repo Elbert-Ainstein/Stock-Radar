@@ -123,7 +123,7 @@ export function detectValuationMethod(stock: StockData): ValuationMethodInfo {
 
 /**
  * Build ValuationMethodInfo for cyclical mode.
- * Used when the engine returns valuation_method = "cyclical_normalized".
+ * Used when the engine returns valuation_method = "cyclical".
  */
 export function cyclicalMethodInfo(ticker: string): ValuationMethodInfo {
   return {

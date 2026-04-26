@@ -1,6 +1,21 @@
 import { supabase } from "./supabase";
 import { SCOUT_REGISTRY } from "./registries";
 
+// ─── Currency inference from ticker suffix ───
+const EXCHANGE_CURRENCY: Record<string, string> = {
+  HK: "HKD", T: "JPY", TW: "TWD", L: "GBP", PA: "EUR", DE: "EUR",
+  AS: "EUR", MI: "EUR", MC: "EUR", SW: "CHF", ST: "SEK", OL: "NOK",
+  CO: "DKK", TO: "CAD", AX: "AUD", SI: "SGD", KS: "KRW", SA: "BRL",
+  TA: "ILS",
+};
+
+export function inferCurrency(ticker: string): string {
+  const dot = ticker.indexOf(".");
+  if (dot < 0) return "USD"; // bare ticker = US-listed
+  const suffix = ticker.slice(dot + 1);
+  return EXCHANGE_CURRENCY[suffix] || "USD";
+}
+
 // ─── Interfaces ───
 export interface ScoutSignal {
   scout: string;
@@ -23,6 +38,7 @@ export interface Stock {
   ticker: string;
   name: string;
   sector: string;
+  currency: string;  // "USD", "EUR", "HKD", etc. — inferred from ticker suffix
   price: number;
   change: number;
   changePct: number;
@@ -159,6 +175,7 @@ export async function loadStocks(): Promise<Stock[]> {
       ticker,
       name: row.name || ticker,
       sector: row.sector || "",
+      currency: inferCurrency(ticker),
       price,
       change,
       changePct,

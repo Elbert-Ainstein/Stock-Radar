@@ -1,5 +1,7 @@
 "use client";
 
+const defaultFmt = (price: number) => `$${Math.round(price).toLocaleString()}`;
+
 export default function TimePathChart({
   path,
   currentPrice,
@@ -7,6 +9,7 @@ export default function TimePathChart({
   multipleLabel,
   width = 700,
   height = 260,
+  fmt = defaultFmt,
 }: {
   path: { year: number; price: number; multiple: number }[];
   currentPrice: number;
@@ -14,6 +17,7 @@ export default function TimePathChart({
   multipleLabel: string;
   width?: number;
   height?: number;
+  fmt?: (price: number) => string;
 }) {
   if (path.length < 2) return null;
 
@@ -53,7 +57,7 @@ export default function TimePathChart({
           <g key={f}>
             <line x1={pad.left} y1={yPos} x2={width - pad.right} y2={yPos} stroke="#1e1e2e" strokeWidth="1" />
             <text x={pad.left - 8} y={yPos + 4} textAnchor="end" fill="#555" fontSize="10" fontFamily="monospace">
-              ${Math.round(price).toLocaleString()}
+              {fmt(price)}
             </text>
           </g>
         );
@@ -70,14 +74,14 @@ export default function TimePathChart({
       <line x1={pad.left} y1={y(currentPrice)} x2={width - pad.right} y2={y(currentPrice)}
         stroke="#38bdf8" strokeWidth="1" strokeDasharray="6 3" opacity="0.4" />
       <text x={width - pad.right + 6} y={y(currentPrice) + 4} fill="#38bdf8" fontSize="9" fontFamily="monospace">
-        Now ${Math.round(currentPrice)}
+        Now {fmt(currentPrice)}
       </text>
 
       {/* Target price line */}
       <line x1={pad.left} y1={y(targetPrice)} x2={width - pad.right} y2={y(targetPrice)}
         stroke="#34d399" strokeWidth="1" strokeDasharray="6 3" opacity="0.4" />
       <text x={width - pad.right + 6} y={y(targetPrice) + 4} fill="#34d399" fontSize="9" fontFamily="monospace">
-        Target ${Math.round(targetPrice)}
+        Target {fmt(targetPrice)}
       </text>
 
       {/* Area fill */}
@@ -91,10 +95,10 @@ export default function TimePathChart({
         <g key={p.year}>
           <circle cx={x(p.year)} cy={y(p.price)} r="4" fill="#a78bfa" />
           <text x={x(p.year)} y={y(p.price) - 12} textAnchor="middle" fill="#a78bfa" fontSize="9" fontFamily="monospace" fontWeight="bold">
-            {p.multiple}\u00D7 {multipleLabel}
+            {p.multiple}× {multipleLabel}
           </text>
           <text x={x(p.year)} y={y(p.price) + 16} textAnchor="middle" fill="#888" fontSize="9" fontFamily="monospace">
-            ${Math.round(p.price)}
+            {fmt(p.price)}
           </text>
         </g>
       ))}

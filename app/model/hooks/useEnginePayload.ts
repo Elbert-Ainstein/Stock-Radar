@@ -93,7 +93,7 @@ export function useEnginePayload(
       return;
     }
 
-    const isCyclical = eng.valuation_method === "cyclical_normalized";
+    const isCyclical = eng.valuation_method === "cyclical";
     const y3 = eng.forecast_annual?.[2];
     const isPS = valMethodInfo.method === "ps";
 

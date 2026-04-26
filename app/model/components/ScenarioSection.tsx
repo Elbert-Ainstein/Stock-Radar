@@ -2,6 +2,8 @@
 
 import { cn, pct } from "../helpers";
 
+const defaultFmt = (price: number) => `$${Math.round(price).toLocaleString()}`;
+
 export default function ScenarioSection({
   targetPrice,
   currentPrice,
@@ -10,6 +12,7 @@ export default function ScenarioSection({
   bullProb,
   bearPrice,
   bullPrice,
+  fmt = defaultFmt,
 }: {
   targetPrice: number;
   currentPrice: number;
@@ -18,6 +21,7 @@ export default function ScenarioSection({
   bullProb: number;
   bearPrice: number;
   bullPrice: number;
+  fmt?: (price: number) => string;
 }) {
   const scenarios = [
     { name: "Bear", prob: bearProb, price: bearPrice, color: "text-rose-400", bg: "bg-rose-400" },
@@ -36,7 +40,7 @@ export default function ScenarioSection({
               <span className={cn("text-xs font-semibold uppercase", s.color)}>{s.name}</span>
               <span className="text-xs text-[var(--muted)] font-mono">{(s.prob * 100).toFixed(0)}%</span>
             </div>
-            <div className="text-2xl font-mono font-bold text-[var(--text)]">${Math.round(s.price).toLocaleString()}</div>
+            <div className="text-2xl font-mono font-bold text-[var(--text)]">{fmt(s.price)}</div>
             <div className="mt-2 h-1.5 rounded-full bg-[var(--border)] overflow-hidden">
               <div className={cn("h-full rounded-full", s.bg)} style={{ width: `${s.prob * 100}%`, opacity: 0.7 }} />
             </div>
@@ -48,9 +52,9 @@ export default function ScenarioSection({
         upside > 20 ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"
       )}>
         <div className="text-xs text-[var(--secondary)] mb-1">Probability-weighted expected value</div>
-        <div className="text-3xl font-mono font-bold text-[var(--text)]">${Math.round(ev).toLocaleString()}</div>
+        <div className="text-3xl font-mono font-bold text-[var(--text)]">{fmt(ev)}</div>
         <div className={cn("text-sm font-mono mt-1", upside > 20 ? "text-emerald-400" : "text-amber-400")}>
-          {pct(upside)} risk-adjusted return {upside > 20 ? "\u2014 attractive" : "\u2014 below 20% threshold"}
+          {pct(upside)} risk-adjusted return {upside > 20 ? "— attractive" : "— below 20% threshold"}
         </div>
       </div>
     </div>

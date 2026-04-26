@@ -81,6 +81,23 @@ All notable changes made to the project are documented here, with reasoning and 
 - **Why:** NOK model output Bear $2.8 / Base $4.5 / Bull $6.2 vs engine $11 and current price $10.46. Claude miscalculated per-share prices for a company with 5,600M shares. The prompt didn't include an explicit formula, leaving Claude to freestyle the math.
 - **Impact:** Reduces per-share calculation errors, especially for high share-count stocks (NOK, NOK-class companies).
 
+### 31. Fix cyclical valuation displaying wrong prices on dashboard (`app/model/hooks/useEnginePayload.ts`, `app/model/TargetPriceModel.tsx`, `app/model/helpers.ts`)
+- **What:** Replaced all occurrences of `"cyclical_normalized"` with `"cyclical"` across three frontend files. The engine returns `valuation_method: "cyclical"` but the frontend was checking for `"cyclical_normalized"`, causing cyclical stocks to fall into the P/E code path.
+- **Why:** LITE showed $2 and SNDK showed $6 on the model page instead of ~$461 and ~$395. The string mismatch meant sliders were populated with P/E-derived values (wrong revenue, wrong margin, wrong multiple) for cyclical stocks, producing garbage target prices. Sliders also appeared unresponsive because the values were nonsensical.
+- **Impact:** Cyclical stocks (LITE, SNDK, NOK) now correctly use Revenue × EBIT Margin × EV/EBIT valuation, displaying proper prices and functional sliders.
+
+### 32. Create prediction_outcomes table migration (`supabase/2026-04-26_prediction_outcomes.sql`)
+- **What:** Created standalone SQL migration for the `prediction_outcomes` table with proper schema, foreign key to prediction_log, unique constraint on (prediction_id, days_elapsed), indexes, and RLS policy.
+- **Why:** calibration.py's `compute_target_convergence()` reads from this table but it didn't exist in the live database. Error: "Could not find the table 'public.prediction_outcomes'".
+- **Impact:** Run in Supabase SQL Editor to enable target convergence tracking and calibration feedback loop.
+
+### 33. Add currency display and USD conversion toggle across all price views
+- **What:** Added currency-aware price formatting throughout the frontend. Non-USD stocks show a currency badge and a toggle to convert all prices to USD using live exchange rates.
+- **Files:** `app/api/fx/route.ts` (new FX API), `app/model/hooks/useCurrency.ts` (new currency hook), `app/model/components/CurrencyToggle.tsx` (new toggle/badge), `app/model/types.ts`, `app/model/TargetPriceModel.tsx`, `app/model/components/DeductionChain.tsx`, `app/model/components/SensitivityTable.tsx`, `app/model/components/ScenarioSection.tsx`, `app/model/components/TimePathChart.tsx`, `app/model/components/ConfidenceMeter.tsx`, `app/dashboard/StockRow.tsx`, `app/dashboard/Dashboard.tsx`, `lib/data.ts`
+- **Why:** Non-US tickers (e.g. 6082.HK, NOK) have prices in their native currency (HKD, EUR). Without labels, users can't tell what currency a price is in. USD toggle enables comparison across currencies.
+- **Design:** Currency detected from engine payload (`fin.currency`) on model page, and inferred from ticker suffix (`.HK` → HKD) on dashboard. USD stocks show no badge or toggle (no USD→USD noise). FX rates fetched from free API with 1-hour cache and multi-provider fallback. All `$` prefix formatting replaced with `fmt()` function that respects currency and conversion state.
+- **Impact:** Ready for international stocks. Current US-only watchlist sees no visual change (by design).
+
 ---
 
 ## [2026-04-25] Session: Watchlist Trim & Pipeline Optimization

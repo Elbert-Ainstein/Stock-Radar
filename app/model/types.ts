@@ -23,6 +23,7 @@ export interface ArchetypeInfo {
 
 export interface EnginePayload {
   ticker: string;
+  currency?: string;  // native currency code (e.g. "USD", "EUR", "HKD")
   archetype?: ArchetypeInfo | null;
   target: {
     current_price: number;

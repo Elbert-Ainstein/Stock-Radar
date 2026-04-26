@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Stock } from "@/lib/data";
+import { inferCurrency } from "@/lib/data";
 import type { PipelineProgress, ScoutInfo } from "./types";
 import { cn, scoreColor, formatTime } from "./helpers";
 import PipelineProgressBar from "./PipelineProgressBar";
@@ -285,6 +286,7 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
       ticker,
       name,
       sector,
+      currency: inferCurrency(ticker),
       price: 0,
       change: 0,
       changePct: 0,
