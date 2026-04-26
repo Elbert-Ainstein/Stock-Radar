@@ -490,6 +490,17 @@ class FinancialData:
             return None
         return sum(revs)
 
+    def ttm_gross_margin(self) -> float | None:
+        """TTM gross profit / TTM revenue, or None if data missing."""
+        rev = self.ttm_revenue()
+        if not rev or rev <= 0:
+            return None
+        gps = [p.get("Gross Profit") for p in self.quarterly_income[-4:]]
+        gps = [g for g in gps if g is not None]
+        if len(gps) < 4:
+            return None
+        return sum(gps) / rev
+
     def ttm_operating_income(self) -> float | None:
         vals = [p.get("Operating Income") for p in self.quarterly_income[-4:]]
         vals = [v for v in vals if v is not None]
@@ -830,6 +841,15 @@ class EODHDProvider(DataProvider):
         a_cf = self._map_periods(cash_flow, self.CF_MAP, "annual")
         q_bs = self._map_periods(balance_sheet, self.BS_MAP, "quarterly")
         a_bs = self._map_periods(balance_sheet, self.BS_MAP, "annual")
+
+        # If EODHD returned valid JSON but no actual financial periods,
+        # treat it as a coverage gap so the yfinance fallback can retry.
+        # Common for non-US tickers (e.g. .HK, .T) not covered by EODHD.
+        if not q_inc and not a_inc:
+            raise EarningsFetchError(
+                f"{ticker}: EODHD returned empty financials (0 income statement "
+                f"periods). Ticker may not be covered by EODHD."
+            )
 
         # Derive FCF if not directly available
         self._derive_fcf(q_cf)

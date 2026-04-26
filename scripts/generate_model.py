@@ -569,6 +569,15 @@ BOTTOM-UP DERIVATION RULE (CRITICAL):
   Each deviation from the base rate requires explicit justification.
   The target price EMERGES from the inputs — it is not predetermined.
 
+  PER-SHARE PRICE FORMULA (use this exact chain for each scenario):
+    If method = "pe":
+      Net Income = Revenue × op_margin × (1 − tax_rate)
+      Price = Net Income × pe_multiple ÷ (shares_m / 1000)
+    If method = "ps":
+      Price = Revenue × ps_multiple ÷ (shares_m / 1000)
+    ⚠️ shares_m is in MILLIONS. Divide by 1000 to convert to billions before dividing.
+    Cross-check: does your scenario price × shares_m ≈ implied market cap? If not, fix it.
+
 INDUSTRY & CYCLE AWARENESS (CRITICAL):
   Many stocks are driven by industry cycles, not just company execution.
   You MUST consider:

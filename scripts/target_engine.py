@@ -1647,6 +1647,21 @@ def _compute_terminal_ps(
 
     decayed_market_ps = current_ps * growth_retention * (1 - scale_discount)
 
+    # --- Gross margin penalty ---
+    # Revenue multiples should reflect unit economics: a company growing 77%
+    # at 9% gross margin (CRCL) has far less operating leverage than one
+    # growing 77% at 70% gross margin (ALAB). Without this, the engine
+    # treats both identically and produces extreme targets for low-margin
+    # growers. Penalty kicks in below 40% gross margin (sector median for tech).
+    gross_margin = d.get("gross_margin", None)
+    if gross_margin is None:
+        gross_margin = fin.ttm_gross_margin() if hasattr(fin, "ttm_gross_margin") else None
+    if gross_margin is not None and gross_margin < 0.40:
+        # Linear penalty: 40% margin → 1.0x, 20% → 0.7x, 0% → 0.4x
+        margin_penalty = max(0.4, 0.4 + 0.6 * (gross_margin / 0.40))
+        growth_anchor *= margin_penalty
+        decayed_market_ps *= margin_penalty
+
     # --- Blend: 40% growth-anchor + 60% decayed market P/S ---
     # The anchor provides a floor based on growth fundamentals.
     # The decayed market P/S captures the market's willingness to pay.

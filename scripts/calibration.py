@@ -102,6 +102,11 @@ def calibrate_event_magnitudes(
     cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
 
     try:
+        # Only calibrate active stocks — inactive/delisted tickers (e.g. CFLT)
+        # cause yfinance "possibly delisted" warnings when fetching prices.
+        active_resp = sb.table("stocks").select("ticker").eq("active", True).execute()
+        active_tickers = {r["ticker"] for r in (active_resp.data or [])}
+
         # Load analysis rows with event impacts
         resp = (
             sb.table("analysis")
@@ -111,7 +116,8 @@ def calibrate_event_magnitudes(
             .order("created_at", desc=True)
             .execute()
         )
-        rows = resp.data or []
+        all_rows = resp.data or []
+        rows = [r for r in all_rows if r.get("ticker") in active_tickers]
     except Exception as e:
         print(f"  [calibration] Failed to load analysis rows: {e}", file=sys.stderr)
         return {"by_event_type": {}, "overall": {}, "evaluated": 0, "skipped": 0}

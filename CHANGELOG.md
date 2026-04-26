@@ -56,6 +56,31 @@ All notable changes made to the project are documented here, with reasoning and 
 - **Why:** Fixed 1-hour gap was wasteful with 6 stocks (~18 min rebuild) and would be insufficient with 50+ stocks.
 - **Impact:** Rebuild starts immediately after scouts finish. Estimated duration logged per-run.
 
+### 26. Filter calibration to active stocks only (`scripts/calibration.py`)
+- **What:** `calibrate_event_magnitudes()` now queries active tickers and filters analysis rows before calling yfinance for price lookups.
+- **Why:** Last remaining source of CFLT "possibly delisted" ghost queries. Calibration was calling `yf.Ticker()` for every ticker in the analysis table, including inactive ones.
+- **Impact:** Eliminates the final CFLT ghost query from rebuild logs.
+
+### 27. Fix 6082.HK engine failure — EODHD empty financials fallback (`scripts/finance_data.py`)
+- **What:** Added check after EODHD returns: if income statement periods are empty (0 quarterly + 0 annual), raise `EarningsFetchError` to trigger yfinance fallback.
+- **Why:** EODHD returns valid JSON with empty `Financials` for non-US tickers (.HK, .T). The code accepted this as valid data, so the yfinance fallback never triggered. Only the price-only fallback worked.
+- **Impact:** 6082.HK and other non-US tickers will now fall back to yfinance for full financial data instead of failing with "revenue is None/NaN".
+
+### 28. Add gross margin penalty to terminal P/S computation (`scripts/target_engine.py`)
+- **What:** `_compute_terminal_ps()` now applies a margin penalty below 40% gross margin. Linear scale: 40% → 1.0x, 20% → 0.7x, 0% → 0.4x.
+- **Why:** CRCL (77% growth, 9% gross margin) got the same P/S treatment as ALAB (92% growth, 76% gross margin). Engine produced $477 target (4.8x current price) for a company with almost no operating leverage.
+- **Impact:** Low-margin growers get appropriately compressed P/S multiples. CRCL-type extreme targets should be significantly reduced.
+
+### 29. Add `ttm_gross_margin()` to FinancialData (`scripts/finance_data.py`)
+- **What:** New method computes TTM gross profit / TTM revenue from the last 4 quarterly income statements.
+- **Why:** Required by the gross margin penalty in `_compute_terminal_ps()`. No TTM gross margin accessor existed previously.
+- **Impact:** Enables margin-aware P/S valuation across all stocks.
+
+### 30. Add explicit per-share price formula to model generation prompt (`scripts/generate_model.py`)
+- **What:** Added explicit PE and PS per-share formulas to the BOTTOM-UP DERIVATION RULE, including cross-check: "does price × shares_m ≈ implied market cap?"
+- **Why:** NOK model output Bear $2.8 / Base $4.5 / Bull $6.2 vs engine $11 and current price $10.46. Claude miscalculated per-share prices for a company with 5,600M shares. The prompt didn't include an explicit formula, leaving Claude to freestyle the math.
+- **Impact:** Reduces per-share calculation errors, especially for high share-count stocks (NOK, NOK-class companies).
+
 ---
 
 ## [2026-04-25] Session: Watchlist Trim & Pipeline Optimization
