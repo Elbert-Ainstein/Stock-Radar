@@ -133,6 +133,12 @@ def get_fresh_tickers(scout_name: str, max_age_hours: int | None = None) -> set[
     try:
         from datetime import datetime, timezone, timedelta
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+
+        # Only consider active stocks — inactive/delisted tickers (e.g. CFLT)
+        # should not inflate the "Skipping N stocks" count.
+        active_resp = sb.table("stocks").select("ticker").eq("active", True).execute()
+        active_tickers = {r["ticker"] for r in (active_resp.data or [])}
+
         resp = (
             sb.table("signals")
             .select("ticker")
@@ -140,7 +146,7 @@ def get_fresh_tickers(scout_name: str, max_age_hours: int | None = None) -> set[
             .gte("created_at", cutoff)
             .execute()
         )
-        return {r["ticker"] for r in (resp.data or [])}
+        return {r["ticker"] for r in (resp.data or []) if r["ticker"] in active_tickers}
     except Exception:
         return set()
 

@@ -1,15 +1,19 @@
 # Analyst Rebuild — expensive phase (uses Claude + Perplexity tokens)
-# Runs once daily at 7am UTC (after the morning scout refresh).
+# Triggers automatically after Scout Refresh completes, or on manual dispatch.
 # Aggregates all existing signals, generates composite scores, and
-# rebuilds target price models for all 50 watchlist stocks.
+# rebuilds target price models for all watchlist stocks.
+#
+# Timing: ~3 minutes per stock (6 stocks ≈ 18 min, 15 stocks ≈ 45 min).
+# The timeout scales dynamically based on active stock count.
 #
 # Manual trigger: Actions tab → "Analyst Rebuild" → "Run workflow"
 
 name: Analyst Rebuild
 
 on:
-  schedule:
-    - cron: "0 7 * * *"       # 7am UTC daily (1 hour after scout refresh)
+  workflow_run:
+    workflows: ["Scout Refresh"]
+    types: [completed]         # fires after scout refresh finishes
   workflow_dispatch:           # manual trigger button
 
 concurrency:
@@ -19,7 +23,13 @@ concurrency:
 jobs:
   rebuild:
     runs-on: ubuntu-latest
-    timeout-minutes: 120       # model generation for 50 stocks can take a while
+    # Dynamic timeout: 3 min/stock × stock count + 15 min buffer.
+    # With 6 stocks: 33 min. With 15 stocks: 60 min. Cap at 120 min.
+    timeout-minutes: 120
+    # Only run after successful scout refresh (skip if scouts failed)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
 
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +41,34 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Compute dynamic timeout
+        id: timeout
+        working-directory: scripts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          # Count active stocks and compute expected duration
+          STOCK_COUNT=$(python -c "
+          import json, os, sys
+          sys.path.insert(0, '.')
+          try:
+              from utils import load_env; load_env()
+              from supabase_helper import get_client
+              sb = get_client()
+              resp = sb.table('stocks').select('ticker').eq('active', True).execute()
+              print(len(resp.data or []))
+          except Exception:
+              # Fallback to watchlist.json
+              cfg = json.load(open('../config/watchlist.json'))
+              stocks = cfg.get('watchlist', cfg.get('stocks', []))
+              print(len(stocks))
+          ")
+          EXPECTED_MINUTES=$(( STOCK_COUNT * 3 + 15 ))
+          echo "stock_count=$STOCK_COUNT" >> "$GITHUB_OUTPUT"
+          echo "expected_minutes=$EXPECTED_MINUTES" >> "$GITHUB_OUTPUT"
+          echo "Rebuild for $STOCK_COUNT stocks — estimated ${EXPECTED_MINUTES}m"
 
       - name: Run analyst rebuild
         working-directory: scripts

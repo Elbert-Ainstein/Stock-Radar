@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS prediction_log (
     sigmoid_params      jsonb DEFAULT '{}'::jsonb,
     context_inputs      jsonb DEFAULT '{}'::jsonb,
     scenario_probabilities jsonb DEFAULT '{}'::jsonb,
-    created_at  timestamptz DEFAULT now()
+    created_at  timestamptz DEFAULT now(),
+    UNIQUE (ticker, run_id)
 );
 
 -- Index for calibration lookups (ticker + time range)
@@ -35,5 +36,18 @@ BEGIN
         WHERE tablename = 'prediction_log' AND policyname = 'prediction_log_all'
     ) THEN
         CREATE POLICY prediction_log_all ON prediction_log FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $$;
+
+-- If table already exists without the unique constraint, add it:
+-- (safe to run — will no-op if constraint already exists from CREATE TABLE above)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'prediction_log_ticker_run_id_key'
+    ) THEN
+        ALTER TABLE prediction_log
+            ADD CONSTRAINT prediction_log_ticker_run_id_key UNIQUE (ticker, run_id);
     END IF;
 END $$;

@@ -139,7 +139,11 @@ def evaluate_outcomes() -> dict:
     stats = {"evaluated": 0, "skipped": 0, "errors": 0}
     now = datetime.now(timezone.utc)
 
-    # Load all signals that have directional calls
+    # Load active tickers to filter out delisted/removed stocks (e.g. CFLT)
+    active_resp = sb.table("stocks").select("ticker").eq("active", True).execute()
+    active_tickers = {r["ticker"] for r in (active_resp.data or [])}
+
+    # Load directional signals for active stocks only
     resp = sb.table("signals") \
         .select("id, ticker, scout, signal, data, created_at") \
         .in_("signal", ["bullish", "bearish"]) \
@@ -147,7 +151,8 @@ def evaluate_outcomes() -> dict:
         .limit(2000) \
         .execute()
 
-    signals = resp.data or []
+    all_signals = resp.data or []
+    signals = [s for s in all_signals if s.get("ticker") in active_tickers]
     if not signals:
         print("[feedback] No directional signals found")
         return stats

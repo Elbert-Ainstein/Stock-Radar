@@ -36,6 +36,26 @@ All notable changes made to the project are documented here, with reasoning and 
 - **Why:** `discount_rate` was intentionally removed from `SCENARIO_OFFSETS` (constant WACC across scenarios) but the export still referenced it.
 - **Impact:** Fixes crash when exporting models to Excel.
 
+### 22. Add unique constraint to prediction_log for upserts (`supabase/2026-04-26_prediction_log.sql`)
+- **What:** Added `UNIQUE (ticker, run_id)` to table definition + idempotent ALTER TABLE for existing tables.
+- **Why:** `prediction_logger.py` uses `on_conflict="ticker,run_id"` upsert, which fails without a matching unique constraint.
+- **Impact:** Fixes "no unique or exclusion constraint matching the ON CONFLICT specification" error. Run updated migration in Supabase SQL Editor.
+
+### 23. Filter feedback loop to active stocks only (`scripts/feedback_loop.py`)
+- **What:** `evaluate_outcomes()` now queries active tickers from the stocks table and filters signals to only process active stocks.
+- **Why:** CFLT (delisted/removed) signals were causing 6x "possibly delisted" warnings from yfinance price lookups.
+- **Impact:** Eliminates ghost queries for inactive stocks, cleaner feedback loop logs.
+
+### 24. Filter get_fresh_tickers() to active stocks only (`scripts/utils.py`)
+- **What:** `get_fresh_tickers()` now queries active stocks and filters signal results to only return active tickers.
+- **Why:** Was returning 51 tickers (including old/inactive ones like CFLT), causing misleading "Skipping 51 stocks" messages in insider/social/quant scouts.
+- **Impact:** Accurate skip counts reflecting only active watchlist stocks.
+
+### 25. Dynamic rebuild timing via workflow_run trigger (`.github/workflows/analyst-rebuild.yml`)
+- **What:** Rebuild workflow now triggers automatically after Scout Refresh completes (via `workflow_run`) instead of a fixed 7am UTC cron. Added stock count detection step for dynamic timeout estimation (~3 min/stock + 15 min buffer). Only runs after successful scout refresh.
+- **Why:** Fixed 1-hour gap was wasteful with 6 stocks (~18 min rebuild) and would be insufficient with 50+ stocks.
+- **Impact:** Rebuild starts immediately after scouts finish. Estimated duration logged per-run.
+
 ---
 
 ## [2026-04-25] Session: Watchlist Trim & Pipeline Optimization
