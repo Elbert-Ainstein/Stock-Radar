@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Stock Radar — Wireframes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="wireframe.css" />
+<style>
+  html, body { margin: 0; padding: 0; background: #e8e3d6; height: 100%; overflow: hidden; }
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  [data-theme="dark"] body, body[data-theme="dark"] { background: #14120f; }
+</style>
+</head>
+<body data-theme="light" data-default-theme="light">
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="wf-atoms.jsx"></script>
+<script type="text/babel" src="wf-watchlist.jsx"></script>
+<script type="text/babel" src="wf-detail.jsx"></script>
+<script type="text/babel" src="wf-model.jsx"></script>
+<script type="text/babel" src="wf-other.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  React.useEffect(() => {
+    document.body.dataset.theme = tweaks.theme;
+  }, [tweaks.theme]);
+
+  return (
+    <>
+      <DesignCanvas>
+        <DCSection id="watchlist" title="Watchlist · A · Bloomberg-tight" subtitle="locked-in direction">
+          <DCArtboard id="wA" label="Watchlist · 28px rows" width={1180} height={760}><WatchlistA /></DCArtboard>
+        </DCSection>
+
+        <DCSection id="detail" title="Stock Detail · B · Full-page route" subtitle="scouts → header dropdown · price ladder fills freed strip">
+          <DCArtboard id="dB" label="Stock detail · /stock/[ticker]" width={1180} height={780}><DetailB /></DCArtboard>
+        </DCSection>
+
+        <DCSection id="model" title="Model Detail · A · Anchor strip + DCF below" subtitle="locked-in direction">
+          <DCArtboard id="mA" label="Model detail · Thesis tab" width={1180} height={780}><ModelA /></DCArtboard>
+        </DCSection>
+
+        <DCSection id="drift" title="Thesis vs DCF — drift treatments" subtitle="3 mini variants · pick one for the model page">
+          <DCArtboard id="dr1" label="1 · Text label" width={460} height={220}><Drift1 /></DCArtboard>
+          <DCArtboard id="dr2" label="2 · Drift gauge" width={460} height={220}><Drift2 /></DCArtboard>
+          <DCArtboard id="dr3" label="3 · Price ladder" width={460} height={220}><Drift3 /></DCArtboard>
+        </DCSection>
+
+        <DCSection id="components" title="Components" subtitle="ConvictionBadge · MoneyValue · RunButton · NoteEditor + atoms">
+          <DCArtboard id="cs" label="Component sheet" width={1180} height={760}><ComponentSheet /></DCArtboard>
+        </DCSection>
+
+        <DCSection id="lighter" title="Lighter views" subtitle="Discovery · Ask AI · Logs · Model picker">
+          <DCArtboard id="disc" label="Discovery feed" width={1180} height={760}><DiscoveryA /></DCArtboard>
+          <DCArtboard id="ask" label="Ask AI" width={1180} height={760}><AskA /></DCArtboard>
+          <DCArtboard id="logs" label="Logs" width={1180} height={760}><LogsA /></DCArtboard>
+          <DCArtboard id="picker" label="Model picker" width={1180} height={760}><ModelPickerA /></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Theme" />
+        <TweakRadio
+          label="Mode"
+          value={tweaks.theme}
+          options={['light', 'dark']}
+          onChange={(v) => setTweak('theme', v)}
+        />
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -111,46 +111,14 @@ export default function AskPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="border-b border-[var(--border)] bg-[var(--bg)]">
-        <div className="max-w-[900px] mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <a href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                <div className="w-8 h-8 rounded-lg bg-[var(--text)] flex items-center justify-center text-sm font-bold text-[var(--bg)]">SR</div>
-                <div>
-                  <h1 className="text-lg font-bold">Stock Radar</h1>
-                  <p className="text-[10px] text-[var(--muted)]">Multi-AI Agent System</p>
-                </div>
-              </a>
-            </div>
-            <nav className="flex gap-4 text-xs ml-4">
-              <a href="/" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Watchlist</a>
-              <a href="/discovery" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Discovery</a>
-              <a href="/model" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Models</a>
-              <span className="text-amber-500 font-medium">Ask AI</span>
-            </nav>
-          </div>
-          <button
-            onClick={toggleTheme}
-            className="text-[var(--muted)] hover:text-[var(--text)] transition-colors p-1.5 rounded-md hover:bg-[var(--hover)]"
-          >
-            {theme === "dark" ? (
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.4 3.4l.7.7M11.9 11.9l.7.7M3.4 12.6l.7-.7M11.9 4.1l.7-.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 9.2A5.5 5.5 0 016.8 2.5a6 6 0 106.7 6.7z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            )}
-          </button>
-        </div>
-      </header>
+    <div className="flex-1 flex flex-col min-h-0">
 
       {/* Chat area */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-[900px] mx-auto px-6 py-6">
           {messages.length === 0 ? (
             /* Empty state with suggestions */
-            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center justify-center" style={{ flex: "1 1 auto", paddingTop: 24, paddingBottom: 24 }}>
               <div className="text-center mb-8">
                 <div className="w-16 h-16 rounded-2xl bg-[var(--hover)] flex items-center justify-center mx-auto mb-4">
                   <svg width="32" height="32" viewBox="0 0 32 32" fill="none">

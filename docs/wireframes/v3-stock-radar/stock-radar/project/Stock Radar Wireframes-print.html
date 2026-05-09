@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Stock Radar — Wireframes (print)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="wireframe.css" />
+<style>
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body { font-family: 'Inter', system-ui, sans-serif; color: #14120f; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  .print-page {
+    width: 1240px;
+    margin: 0 auto;
+    padding: 36px 30px 28px;
+    box-sizing: border-box;
+    page-break-after: always;
+    break-after: page;
+    background: #ffffff;
+  }
+  .print-page:last-child { page-break-after: auto; break-after: auto; }
+
+  .ph-eyebrow {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #6f6a5e;
+    margin-bottom: 6px;
+  }
+  .ph-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: #14120f;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .ph-sub {
+    font-size: 13px;
+    color: #6f6a5e;
+    margin: 0 0 18px;
+  }
+  .ph-rule {
+    border: 0;
+    border-top: 1px solid #d9d3c2;
+    margin: 0 0 22px;
+  }
+  .ph-frame {
+    border: 1px solid #d9d3c2;
+    border-radius: 6px;
+    background: #faf7ec;
+    padding: 14px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .ph-frame-label {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #6f6a5e;
+    margin-bottom: 10px;
+  }
+  .ph-artboard {
+    background: #ffffff;
+    border: 1px solid #d9d3c2;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0 auto;
+  }
+
+  .print-cover {
+    height: 1640px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .cover-top { padding-top: 40px; }
+  .cover-eyebrow {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #6f6a5e;
+  }
+  .cover-h1 {
+    font-size: 64px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    margin: 22px 0 14px;
+  }
+  .cover-lede {
+    font-size: 20px;
+    line-height: 1.45;
+    color: #3a362d;
+    max-width: 820px;
+  }
+  .cover-toc {
+    margin-top: 60px;
+    border-top: 1px solid #d9d3c2;
+    padding-top: 22px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 32px;
+    font-size: 14px;
+  }
+  .cover-toc div {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px dotted #d9d3c2;
+    padding: 8px 0;
+  }
+  .cover-toc div span:first-child {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: #6f6a5e;
+    text-transform: uppercase;
+  }
+  .cover-foot {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px;
+    color: #6f6a5e;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    border-top: 1px solid #d9d3c2;
+    padding-top: 14px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* mini-row layouts for the small artboards on a single page */
+  .mini-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+  .mini-row .ph-frame { padding: 12px; }
+  .mini-row .ph-artboard { border: 1px solid #d9d3c2; }
+
+  @page {
+    size: 1300px 1700px;
+    margin: 0;
+  }
+  @media print {
+    html, body { background: #ffffff; }
+    .print-page { margin: 0 auto; box-shadow: none; }
+  }
+  /* on-screen visual gap between pages while reviewing */
+  @media screen {
+    body { background: #e8e3d6; padding: 24px 0; }
+    .print-page { box-shadow: 0 4px 24px rgba(0,0,0,0.08); margin-bottom: 24px; }
+  }
+</style>
+</head>
+<body data-theme="light">
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="wf-atoms.jsx"></script>
+<script type="text/babel" src="wf-watchlist.jsx"></script>
+<script type="text/babel" src="wf-detail.jsx"></script>
+<script type="text/babel" src="wf-model.jsx"></script>
+<script type="text/babel" src="wf-other.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+function Page({ idx, total, eyebrow, title, sub, children }) {
+  return (
+    <div className="print-page">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <div className="ph-eyebrow">{eyebrow}</div>
+        <div className="ph-eyebrow">{String(idx).padStart(2, '0')} / {String(total).padStart(2, '0')}</div>
+      </div>
+      <h2 className="ph-title">{title}</h2>
+      {sub && <p className="ph-sub">{sub}</p>}
+      <hr className="ph-rule" />
+      {children}
+    </div>
+  );
+}
+
+function Artboard({ label, width, height, children }) {
+  return (
+    <div className="ph-frame">
+      <div className="ph-frame-label">{label} · {width}×{height}</div>
+      <div className="ph-artboard" style={{ width, height }}>
+        <div style={{ width, height, position: 'relative' }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Cover() {
+  return (
+    <div className="print-page print-cover">
+      <div className="cover-top">
+        <div className="cover-eyebrow">Stock Radar · Internal · Wireframes v1</div>
+        <h1 className="cover-h1">Wireframes for an opinionated stock-picking workspace.</h1>
+        <p className="cover-lede">
+          Locked directions across watchlist, stock detail and model detail — with supporting
+          drift treatments, component atoms, and lighter views. Thesis is the headline; DCF is the floor.
+        </p>
+        <div className="cover-toc">
+          <div><span>01</span><span>Cover</span></div>
+          <div><span>02</span><span>Watchlist · Bloomberg-tight</span></div>
+          <div><span>03</span><span>Stock Detail · Full-page route</span></div>
+          <div><span>04</span><span>Model Detail · Anchor strip + DCF</span></div>
+          <div><span>05</span><span>Drift treatments · 3 variants</span></div>
+          <div><span>06</span><span>Components</span></div>
+          <div><span>07</span><span>Discovery feed</span></div>
+          <div><span>08</span><span>Ask AI</span></div>
+          <div><span>09</span><span>Logs</span></div>
+          <div><span>10</span><span>Model picker</span></div>
+        </div>
+      </div>
+      <div className="cover-foot">
+        <span>Stock Radar / Wireframes</span>
+        <span>Light · Print export</span>
+      </div>
+    </div>
+  );
+}
+
+const TOTAL = 10;
+
+function App() {
+  return (
+    <>
+      <Cover />
+
+      <Page idx={2} total={TOTAL} eyebrow="Watchlist · A" title="Bloomberg-tight rows" sub="Locked-in direction · 28px row height · 12+ data points per row">
+        <Artboard label="Watchlist" width={1180} height={760}><WatchlistA /></Artboard>
+      </Page>
+
+      <Page idx={3} total={TOTAL} eyebrow="Stock Detail · B" title="Full-page route" sub="/stock/[ticker] · scouts in header dropdown · horizontal price ladder">
+        <Artboard label="Stock detail" width={1180} height={780}><DetailB /></Artboard>
+      </Page>
+
+      <Page idx={4} total={TOTAL} eyebrow="Model Detail · A" title="Anchor strip + DCF below" sub="Thesis tab · DCF visibly secondary in muted chrome">
+        <Artboard label="Model detail · Thesis tab" width={1180} height={780}><ModelA /></Artboard>
+      </Page>
+
+      <Page idx={5} total={TOTAL} eyebrow="Thesis vs DCF" title="Drift treatments — 3 variants" sub="Pick one for the model page · text label · drift gauge · price ladder">
+        <div className="mini-row">
+          <Artboard label="1 · Text label" width={460} height={220}><Drift1 /></Artboard>
+          <Artboard label="2 · Drift gauge" width={460} height={220}><Drift2 /></Artboard>
+          <Artboard label="3 · Price ladder" width={460} height={220}><Drift3 /></Artboard>
+        </div>
+      </Page>
+
+      <Page idx={6} total={TOTAL} eyebrow="Cross-cutting" title="Components" sub="ConvictionBadge · MoneyValue · RunButton · NoteEditor + atoms">
+        <Artboard label="Component sheet" width={1180} height={760}><ComponentSheet /></Artboard>
+      </Page>
+
+      <Page idx={7} total={TOTAL} eyebrow="Lighter views" title="Discovery feed" sub="Recent signals · candidates surfaced for review">
+        <Artboard label="Discovery" width={1180} height={760}><DiscoveryA /></Artboard>
+      </Page>
+
+      <Page idx={8} total={TOTAL} eyebrow="Lighter views" title="Ask AI" sub="Conversational query against the workspace">
+        <Artboard label="Ask AI" width={1180} height={760}><AskA /></Artboard>
+      </Page>
+
+      <Page idx={9} total={TOTAL} eyebrow="Lighter views" title="Logs" sub="Run history · model executions · error trail">
+        <Artboard label="Logs" width={1180} height={760}><LogsA /></Artboard>
+      </Page>
+
+      <Page idx={10} total={TOTAL} eyebrow="Lighter views" title="Model picker" sub="Pick the analytical model used for a given run">
+        <Artboard label="Model picker" width={1180} height={760}><ModelPickerA /></Artboard>
+      </Page>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+// Auto-print once everything is ready
+(async () => {
+  try {
+    if (document.fonts && document.fonts.ready) {
+      await document.fonts.ready;
+    }
+  } catch (e) {}
+  // Allow React render + layout to settle
+  await new Promise(r => setTimeout(r, 800));
+  window.print();
+})();
+</script>
+</body>
+</html>

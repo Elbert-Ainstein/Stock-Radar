@@ -1,3 +1,5 @@
+"use client";
+
 import { useRef, useEffect, useCallback } from "react";
 import * as THREE from "three";
 import type { GlobeCandidate } from "./geo-data";

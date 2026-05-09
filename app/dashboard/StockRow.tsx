@@ -1,133 +1,282 @@
+import { useState } from "react";
 import type { Stock } from "@/lib/data";
-import { cn, scoreColor, scoreBg } from "./helpers";
+import { cn, scoreColor } from "./helpers";
 import Sparkline from "./Sparkline";
-import { CurrencyBadge } from "../model/components/CurrencyToggle";
 
-// ─── Stock Card (Collapsed) ───
+// ─── SR Production Watchlist Row ─────────────────────────────────────────
+// CSS-grid based (not <table>) to avoid Tailwind v4 preflight quirks.
+// Source: docs/wireframes/v2-production/extracted_cf1ed42f_watchlist.jsx
+// 14 columns × 28px row, alternating row backgrounds, mono numerics.
+
+const CCY: Record<string, string> = {
+  USD: "$", HKD: "HK$", EUR: "€", GBP: "£", JPY: "¥",
+};
+
+const fmtMoney = (v: number | null | undefined, ccy = "USD") => {
+  if (v == null || !isFinite(v)) return "—";
+  const sym = CCY[ccy] || "$";
+  const abs = Math.abs(v);
+  const f = abs >= 1000 ? abs.toLocaleString(undefined, { maximumFractionDigits: 2 }) : abs.toFixed(2);
+  return `${v < 0 ? "−" : ""}${sym}${f}`;
+};
+
+const fmtChg = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}`;
+const fmtPct = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}%`;
+
+const CONV: Record<string, { fg: string; bg: string }> = {
+  HIGH:   { fg: "var(--sr-conv-strong)", bg: "var(--sr-conv-strong-bg)" },
+  MEDIUM: { fg: "var(--sr-conv-good)",   bg: "var(--sr-conv-good-bg)"   },
+  LOW:    { fg: "var(--sr-conv-watch)",  bg: "var(--sr-conv-watch-bg)"  },
+  BROKEN: { fg: "var(--sr-conv-broken)", bg: "var(--sr-conv-broken-bg)" },
+};
+
+function ConvictionPill({ tier }: { tier?: string | null }) {
+  const t = (tier || "").toUpperCase();
+  const sty = CONV[t];
+  if (!sty) return <span style={{ color: "var(--sr-ink-3)", fontSize: 10.5 }} className="sr-mono">—</span>;
+  return (
+    <span className="sr-mono" style={{
+      display: "inline-flex", alignItems: "center", height: 17, padding: "0 6px",
+      fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em",
+      color: sty.fg, background: sty.bg, border: `1px solid ${sty.fg}`,
+      borderRadius: 3, whiteSpace: "nowrap",
+    }}>{t}</span>
+  );
+}
+
+// Grid columns (px). Match SRWatchlistHeader exactly.
+export const SR_GRID = "76px 150px 86px 70px 64px 90px 96px 86px 66px 60px 120px 110px 90px 40px";
+
+export function SRWatchlistHeader() {
+  const labels: Array<[string, string]> = [
+    ["TICKER", "left"], ["NAME", "left"], ["LAST", "right"], ["CHG", "right"], ["%", "right"],
+    ["30D", "left"], ["CONVICTION", "left"], ["THESIS", "right"], ["UPSIDE", "right"], ["SCORE", "right"],
+    ["DRIFT", "left"], ["SETUP", "left"], ["LAST RUN", "left"], ["", "right"],
+  ];
+  return (
+    <div
+      className="sr-mono"
+      style={{
+        display: "grid", gridTemplateColumns: SR_GRID,
+        height: 26, padding: "0 4px",
+        background: "var(--sr-paper-1)",
+        borderBottom: "1px solid var(--sr-rule-strong)", boxShadow: "inset 0 -1px 0 var(--sr-rule-strong)",
+        fontSize: 9.5, fontWeight: 500, letterSpacing: "0.1em",
+        color: "var(--sr-ink-3)", textTransform: "uppercase",
+      }}
+    >
+      {labels.map(([l, a], i) => (
+        <div key={i} style={{ padding: "0 10px", display: "flex", alignItems: "center", justifyContent: a === "right" ? "flex-end" : "flex-start" }}>
+          {l}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const relTime = (iso?: string) => {
+  if (!iso) return "—";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!isFinite(ms) || ms < 0) return "—";
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m`;
+  const hr = Math.round(min / 60);
+  if (hr < 48) return `${hr}h`;
+  return `${Math.round(hr / 24)}d`;
+};
+
+const setupSummary = (filters?: Record<string, { pass: boolean }>) => {
+  if (!filters) return "—";
+  const total = Object.keys(filters).length;
+  const passing = Object.values(filters).filter((f) => f?.pass).length;
+  return `${passing}/${total} pass`;
+};
+
+function RunThesisCell({ ticker }: { ticker: string }) {
+  // Three-state button: idle (lightning) → queued (spinner-ish) → done/error.
+  // Uses POST /api/thesis/[ticker]/rerun. stopPropagation prevents the parent
+  // row's onClick (navigate to /stock/[ticker]) from firing.
+  const [phase, setPhase] = useState<"idle" | "queuing" | "queued" | "error">("idle");
+  const onClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (phase === "queuing" || phase === "queued") return;
+    setPhase("queuing");
+    try {
+      const res = await fetch(`/api/thesis/${encodeURIComponent(ticker)}/rerun`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trigger_reason: "manual" }),
+      });
+      if (!res.ok) {
+        setPhase("error");
+        setTimeout(() => setPhase("idle"), 4000);
+        return;
+      }
+      setPhase("queued");
+      setTimeout(() => setPhase("idle"), 6000);
+    } catch {
+      setPhase("error");
+      setTimeout(() => setPhase("idle"), 4000);
+    }
+  };
+  const fg = phase === "queued" ? "var(--sr-conv-strong)"
+           : phase === "error"  ? "var(--sr-neg)"
+           : phase === "queuing"? "var(--sr-ink-2)"
+           : "var(--sr-ink-3)";
+  const label = phase === "queued" ? "✓"
+              : phase === "error"  ? "!"
+              : phase === "queuing"? "…"
+              : "⚡";
+  const title = phase === "queued" ? `Thesis run queued for ${ticker}`
+              : phase === "error"  ? `Failed to queue ${ticker} — click to retry`
+              : phase === "queuing"? `Queueing ${ticker}…`
+              : `Run thesis for ${ticker} (~$3-5 Opus)`;
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      style={{
+        background: "transparent",
+        border: "none",
+        color: fg,
+        fontSize: 13,
+        cursor: phase === "queuing" || phase === "queued" ? "default" : "pointer",
+        padding: 0,
+        width: 22,
+        height: 22,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 3,
+        fontFamily: "var(--sr-font-mono)",
+        lineHeight: 1,
+      }}
+      onMouseEnter={(e) => { if (phase === "idle") (e.currentTarget as HTMLElement).style.background = "var(--sr-paper-2)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+    >{label}</button>
+  );
+}
+
 
 export default function StockRow({
-  stock,
-  isSelected,
-  onClick,
-  selectMode = false,
-  isChecked = false,
-  onCheck,
+  stock, isSelected, onClick, selectMode = false, isChecked = false, onCheck, rowIndex = 0,
 }: {
-  stock: Stock;
-  isSelected: boolean;
-  onClick: () => void;
-  selectMode?: boolean;
-  isChecked?: boolean;
-  onCheck?: (ticker: string) => void;
+  stock: Stock; isSelected: boolean; onClick: () => void;
+  selectMode?: boolean; isChecked?: boolean; onCheck?: (t: string) => void;
+  rowIndex?: number;
 }) {
-  const bullishCount = stock.signals.filter(s => s.signal === "bullish").length;
-  const totalScouts = stock.signals.length;
+  const t = stock.thesisRun;
+  const tgt = t?.thesis_target ?? null;
+  const upside = tgt != null && stock.price > 0 ? ((tgt - stock.price) / stock.price) * 100 : null;
+  const driftAbove = tgt != null && stock.price > 0 ? tgt > stock.price : null;
+  const driftPct = tgt != null && stock.price > 0 ? ((tgt - stock.price) / stock.price) * 100 : null;
+
+  const click = () => {
+    if (selectMode) { onCheck?.(stock.ticker); return; }
+    if (typeof window !== "undefined") window.location.href = `/stock/${encodeURIComponent(stock.ticker)}`;
+    onClick(); // legacy noop — kept for compat
+  };
+
+  const rowBg = isSelected
+    ? "var(--sr-paper-2)"
+    : selectMode && isChecked
+    ? "var(--sr-err-bg)"
+    : rowIndex % 2 === 1
+    ? "var(--sr-paper-2)"
+    : "var(--sr-paper)";
+
+  const cellLeft: React.CSSProperties = { padding: "0 10px", display: "flex", alignItems: "center", justifyContent: "flex-start", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 };
+  const cellRight: React.CSSProperties = { ...cellLeft, justifyContent: "flex-end" };
+  const numStyle: React.CSSProperties = { fontFamily: "var(--sr-font-mono)", fontVariantNumeric: "tabular-nums slashed-zero" };
+
+  const chgColor = stock.change > 0 ? "var(--sr-pos)" : stock.change < 0 ? "var(--sr-neg)" : "var(--sr-neutral)";
+  const pctColor = stock.changePct > 0 ? "var(--sr-pos)" : stock.changePct < 0 ? "var(--sr-neg)" : "var(--sr-neutral)";
+  const upColor = upside == null ? "var(--sr-ink-3)" : upside > 0 ? "var(--sr-pos)" : "var(--sr-neg)";
 
   return (
     <div
-      onClick={selectMode ? () => onCheck?.(stock.ticker) : onClick}
-      className={cn(
-        "stock-card cursor-pointer border rounded-lg p-3 sm:p-4 mb-2",
-        isSelected && !selectMode ? "bg-[var(--card)] border-[var(--accent-muted)]" : "bg-[var(--bg-elevated)] border-[var(--border)]",
-        selectMode && isChecked && "border-red-500/40 bg-red-500/5"
-      )}
+      onClick={click}
+      role="row"
+      aria-selected={isSelected}
+      className="cursor-pointer"
+      style={{
+        display: "grid",
+        gridTemplateColumns: SR_GRID,
+        height: 28,
+        background: rowBg,
+        borderBottom: "1px solid var(--sr-rule-strong)", boxShadow: "inset 0 -1px 0 var(--sr-rule-strong)",
+        borderLeft: isSelected ? "3px solid var(--sr-ink-1)" : "3px solid transparent",
+        fontSize: 12,
+        color: "var(--sr-ink-1)",
+      }}
     >
-      <div className="flex items-center gap-2 sm:gap-4 flex-wrap sm:flex-nowrap">
-        {/* Checkbox (select mode) */}
+      {/* TICKER */}
+      <div style={{ ...cellLeft, fontFamily: "var(--sr-font-mono)", fontWeight: 600, color: "var(--sr-ink)", letterSpacing: "0.02em", gap: 6 }}>
         {selectMode && (
-          <div className="flex-shrink-0" onClick={e => { e.stopPropagation(); onCheck?.(stock.ticker); }}>
-            <div className={cn(
-              "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
-              isChecked ? "bg-red-500 border-red-500" : "border-[var(--border)] hover:border-[var(--muted)]"
-            )}>
-              {isChecked && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            </div>
-          </div>
-        )}
-
-        {/* Ticker + Name */}
-        <div className="min-w-[100px] sm:min-w-[140px]">
-          <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-lg">{stock.ticker}</span>
-            {stock.scoreDelta > 0.5 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/10 text-emerald-400 border border-emerald-400/20">NEW ↑</span>
+          <span
+            onClick={(e) => { e.stopPropagation(); onCheck?.(stock.ticker); }}
+            className={cn(
+              "inline-flex items-center justify-center rounded-sm flex-shrink-0",
+              isChecked ? "bg-red-500" : "border border-[var(--sr-rule-strong)]"
             )}
-          </div>
-          <div className="text-xs text-[var(--muted)] mt-0.5">{stock.name}</div>
-        </div>
-
-        {/* Price */}
-        <div className="min-w-[80px] sm:min-w-[90px] text-right">
-          <div className="font-mono font-semibold">${stock.price.toFixed(2)}<CurrencyBadge currency={stock.currency} /></div>
-          <div className={cn("text-xs font-mono", stock.change >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]")}>
-            {stock.change >= 0 ? "+" : ""}{stock.change.toFixed(2)} ({stock.changePct >= 0 ? "+" : ""}{stock.changePct.toFixed(2)}%)
-          </div>
-        </div>
-
-        {/* Score */}
-        <div className="min-w-[80px] text-center">
-          <div className={cn("font-mono text-2xl font-bold", scoreColor(stock.score))}>{stock.score.toFixed(1)}</div>
-          <div className="text-[10px] text-[var(--muted)]">
-            {stock.scoreDelta > 0 && <span className="text-[var(--success)]">↑{stock.scoreDelta.toFixed(1)}</span>}
-            {stock.scoreDelta < 0 && <span className="text-[var(--danger)]">↓{Math.abs(stock.scoreDelta).toFixed(1)}</span>}
-            {stock.scoreDelta === 0 && <span className="text-[var(--muted)]">—</span>}
-          </div>
-        </div>
-
-        {/* Score bar */}
-        <div className="hidden md:block flex-1 min-w-[100px] max-w-[200px]">
-          <div className="w-full h-2 bg-[var(--border)] rounded-full overflow-hidden">
-            <div className={cn("h-full rounded-full score-bar", scoreBg(stock.score))} style={{ width: `${stock.score * 10}%`, opacity: 0.7 }} />
-          </div>
-          <div className="flex justify-between text-[10px] text-[var(--faint)] mt-1">
-            <span>0</span>
-            <span>10</span>
-          </div>
-        </div>
-
-        {/* Scout convergence + data completeness */}
-        <div className="hidden lg:block min-w-[80px] text-center">
-          <div className="text-sm">
-            <span className="text-[var(--success)] font-mono font-semibold">{bullishCount}</span>
-            <span className="text-[var(--muted)]">/{totalScouts}</span>
-          </div>
-          <div className="text-[10px] text-[var(--muted)]">scouts bullish</div>
-          {stock.dataQuality && (
-            <div
-              className={cn(
-                "text-[10px] font-mono mt-0.5 px-1 py-0.5 rounded",
-                stock.dataQuality.confidence === "high"
-                  ? "text-emerald-400 bg-emerald-400/10"
-                  : stock.dataQuality.confidence === "medium"
-                  ? "text-yellow-400 bg-yellow-400/10"
-                  : "text-amber-400 bg-amber-400/10"
-              )}
-              title={[
-                stock.dataQuality.confidence_score
-                  ? `Confidence: ${(stock.dataQuality.confidence_score * 100).toFixed(0)}%`
-                  : null,
-                ...(stock.dataQuality.warnings || []),
-              ].filter(Boolean).join("\n") || "Full scout coverage"}
-            >
-              {stock.dataQuality.scouts_scored}/{stock.dataQuality.scouts_total} data
-              {stock.dataQuality.confidence_score > 0 && (
-                <span className="ml-1 opacity-70">
-                  {(stock.dataQuality.confidence_score * 100).toFixed(0)}%
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Sparkline */}
-        <div className="hidden lg:block min-w-[120px]">
-          <Sparkline data={stock.scoreHistory} color={stock.scoreDelta >= 0 ? "#34d399" : "#f43f5e"} />
-        </div>
-
-        {/* Sector tag */}
-        <div className="hidden sm:block min-w-[80px] lg:min-w-[120px] text-right">
-          <span className="text-[10px] px-2 py-1 rounded-full bg-[var(--border)] text-[var(--secondary)]">{stock.sector}</span>
-        </div>
+            style={{ width: 14, height: 14 }}
+          >
+            {isChecked && <span className="text-white text-[8px] leading-none">✓</span>}
+          </span>
+        )}
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{stock.ticker}</span>
+      </div>
+      {/* NAME */}
+      <div style={{ ...cellLeft, color: "var(--sr-ink-2)" }}>{stock.name}</div>
+      {/* LAST */}
+      <div style={{ ...cellRight, ...numStyle, color: "var(--sr-ink)", fontWeight: 500 }}>{fmtMoney(stock.price, stock.currency)}</div>
+      {/* CHG */}
+      <div style={{ ...cellRight, ...numStyle, color: chgColor }}>{fmtChg(stock.change)}</div>
+      {/* % */}
+      <div style={{ ...cellRight, ...numStyle, fontSize: 11.5, color: pctColor }}>{fmtPct(stock.changePct)}</div>
+      {/* 30D Sparkline */}
+      <div style={{ ...cellLeft, padding: "0 8px" }}>
+        {stock.scoreHistory && stock.scoreHistory.length >= 2 ? (
+          <Sparkline data={stock.scoreHistory} color={stock.scoreDelta >= 0 ? "var(--sr-pos)" : "var(--sr-neg)"} width={74} height={20} />
+        ) : (
+          <span style={{ color: "var(--sr-ink-4)", fontSize: 10 }}>—</span>
+        )}
+      </div>
+      {/* CONVICTION */}
+      <div style={cellLeft}><ConvictionPill tier={t?.conviction} /></div>
+      {/* THESIS */}
+      <div style={{ ...cellRight, ...numStyle, fontWeight: 600, color: "var(--sr-ink)" }}>
+        {tgt != null ? fmtMoney(tgt, stock.currency) : <span style={{ color: "var(--sr-ink-3)" }}>—</span>}
+      </div>
+      {/* UPSIDE */}
+      <div style={{ ...cellRight, ...numStyle, fontSize: 11.5, color: upColor }}>
+        {upside == null ? "—" : `${upside > 0 ? "+" : "−"}${Math.abs(upside).toFixed(0)}%`}
+      </div>
+      {/* SCORE */}
+      <div style={{ ...cellRight, ...numStyle, fontWeight: 600 }}>
+        <span className={cn("sr-mono", scoreColor(stock.score))}>{stock.score.toFixed(1)}</span>
+      </div>
+      {/* DRIFT */}
+      <div style={{ ...cellLeft, fontSize: 10.5, fontFamily: "var(--sr-font-mono)" }}>
+        {driftPct == null || driftAbove == null ? null : (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: driftAbove ? "var(--sr-conv-strong)" : "var(--sr-conv-fade)" }}>
+            <span style={{ fontSize: 11 }}>{driftAbove ? "↑" : "↓"}</span>
+            {driftAbove ? "above" : "below"} {Math.abs(driftPct).toFixed(0)}%
+          </span>
+        )}
+      </div>
+      {/* SETUP */}
+      <div style={{ ...cellLeft, fontSize: 11, color: "var(--sr-ink-2)", fontStyle: "italic" }}>{setupSummary(t?.filters)}</div>
+      {/* LAST RUN */}
+      <div style={{ ...cellLeft, fontSize: 11, color: "var(--sr-ink-3)", fontFamily: "var(--sr-font-mono)" }}>
+        {t?.run_at ? `${relTime(t.run_at)} ago` : <span style={{ fontStyle: "italic" }}>never</span>}
+      </div>
+      {/* Run-Thesis button (replaces former chevron) */}
+      <div style={{ ...cellRight, padding: "0 6px" }}>
+        <RunThesisCell ticker={stock.ticker} />
       </div>
     </div>
   );

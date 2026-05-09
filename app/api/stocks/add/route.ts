@@ -50,7 +50,12 @@ function safeQueueTicker(ticker: string): void {
 
 export async function POST(request: Request) {
   try {
-    const { ticker, name, sector } = await request.json();
+    const body = await request.json();
+    const { ticker, name, sector } = body;
+    // Auto-thesis after the mini-pipeline finishes. Default true — the user
+    // explicitly added this ticker, so they want the full analysis. Bulk
+    // imports can opt out with auto_thesis:false.
+    const autoThesis = body.auto_thesis !== false;
 
     if (!ticker || !name) {
       return NextResponse.json({ error: "ticker and name required" }, { status: 400 });
@@ -116,7 +121,8 @@ export async function POST(request: Request) {
         success: true,
         ticker,
         pipelineStatus: "queued",
-        message: `${ticker} added. Pipeline is running — ${ticker} will be analyzed when it finishes.`,
+        message: `${ticker} added. Pipeline is running — ${ticker} will be analyzed${autoThesis ? " and thesis-run automatically" : ""} when it finishes.`,
+        auto_thesis: autoThesis,
       });
     }
 
@@ -124,7 +130,9 @@ export async function POST(request: Request) {
     try {
       const scriptPath = path.join(SCRIPTS_DIR, "run_pipeline.py");
 
-      execFile("python", [scriptPath, "--ticker", ticker], { cwd: process.cwd(), timeout: 120000 }, (error) => {
+      const pipeArgs = [scriptPath, "--ticker", ticker];
+      if (autoThesis) pipeArgs.push("--auto-thesis-after");
+      execFile("python", pipeArgs, { cwd: process.cwd(), timeout: 120000 }, (error) => {
         if (error) console.error(`Mini-pipeline error for ${ticker}:`, error.message);
         else console.log(`Mini-pipeline completed for ${ticker}`);
         try { fs.unlinkSync(LOCK_FILE); } catch {}
@@ -134,7 +142,8 @@ export async function POST(request: Request) {
         success: true,
         ticker,
         pipelineStatus: "running",
-        message: `${ticker} added. Running quant scout + analyst + model generation...`,
+        message: `${ticker} added. Running quant scout + analyst + model${autoThesis ? " + auto-thesis" : ""} generation...`,
+        auto_thesis: autoThesis,
       });
     } catch {
       // Release lock if we couldn't start the process

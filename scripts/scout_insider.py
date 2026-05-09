@@ -188,12 +188,43 @@ def analyze_insider_activity(ticker: str, transactions: list[dict]) -> dict:
     }
 
 
+def _load_tickers_from_discovery() -> list[dict]:
+    """Read US tickers from discovery_universe (statuses: exploring/promising/qualified/watchlisted).
+    Form-4 is SEC-only, so we filter out non-US tickers (those with a `.` exchange suffix
+    like 6082.HK, 002714.SZ, etc.)."""
+    from supabase_helper import get_client
+    sb = get_client()
+    rows = sb.table("discovery_universe").select(
+        "ticker,company_name,market"
+    ).in_("status", ["exploring", "promising", "qualified", "watchlisted"]).execute().data or []
+    us = [r for r in rows if "." not in r["ticker"]]
+    return [{"ticker": r["ticker"], "name": r.get("company_name") or r["ticker"]} for r in us]
+
+
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--source",
+        choices=["watchlist", "discovery"],
+        default="watchlist",
+        help=(
+            "Where to read tickers from. 'watchlist' (default) preserves legacy "
+            "behavior (~52 tickers). 'discovery' reads the broader discovery_universe "
+            "(~155 US tickers including 13F-surfaced candidates) — use this to enable "
+            "cross-type convergence in Module 11."
+        ),
+    )
+    args = parser.parse_args()
+
     print("=" * 50)
-    print("SCOUT 6: INSIDER TRACKER")
+    print(f"SCOUT 6: INSIDER TRACKER (source={args.source})")
     print("=" * 50)
 
-    watchlist = get_watchlist()
+    if args.source == "discovery":
+        watchlist = _load_tickers_from_discovery()
+    else:
+        watchlist = get_watchlist()
 
     # Skip stocks with recent signals
     from utils import get_fresh_tickers

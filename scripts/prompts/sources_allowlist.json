@@ -1,0 +1,26 @@
+{
+  "_meta": {
+    "purpose": "Restrict web_search to high-signal domains accessible to Anthropic's crawler.",
+    "last_updated": "2026-05-02",
+    "policy": "Tight allowlist; expand only against observed gaps in cited_domains.",
+    "verified_blocked_2026_05": ["ft.com", "barrons.com", "reuters.com", "wsj.com", "marketwatch.com"],
+    "verified_accessible_2026_05": ["sec.gov", "hkexnews.hk", "bloomberg.com", "asia.nikkei.com", "cnbc.com", "prnewswire.com", "businesswire.com", "globenewswire.com", "stockanalysis.com", "fool.com", "seekingalpha.com", "investor.gov", "federalreserve.gov", "bls.gov", "macrotrends.net"]
+  },
+  "tier_1_filings": [
+    "sec.gov",
+    "hkexnews.hk"
+  ],
+  "tier_2_press": [
+    "bloomberg.com",
+    "asia.nikkei.com",
+    "cnbc.com"
+  ],
+  "tier_3_newswires": [
+    "prnewswire.com",
+    "businesswire.com",
+    "globenewswire.com"
+  ],
+  "tier_4_data": [
+    "stockanalysis.com"
+  ]
+}

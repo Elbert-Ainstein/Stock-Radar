@@ -33,12 +33,15 @@ export function fmtStep(s: DeductionStep): string {
 }
 
 export function tabLabel(t: Tab): string {
-  return {
-    summary: "P&L Summary",
-    income: "Income Stmt",
-    cashflow: "Cash Flow",
-    valuation: "Valuation",
-    formulas: "\u0192x Formulas",
-    whatif: "What-if",
-  }[t];
+  const labels: Record<Tab, string> = {
+    thesis: "Thesis",
+    setup: "Setup",
+    risks: "Risks & Catalysts",
+    floor: "Floor (DCF)",
+    income: "Income",
+    cashflow: "Cash",
+    formulas: "Formulas",
+    whatif: "WhatIf",
+  };
+  return labels[t] || t;
 }

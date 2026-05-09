@@ -86,26 +86,34 @@ def _gordon_roiic_terminal_ev(
     wacc: float,
     g_terminal: float,
     fade_years: int = ROIIC_FADE_YEARS,
+    growth_signal: float | None = None,
 ) -> float | None:
     """Compute terminal EV at the valuation point using Gordon Growth with ROIIC fade.
 
-    Instead of blending two exit-multiple approaches (EV/EBITDA + EV/FCF-SBC),
-    this method explicitly models the competitive-advantage fade period where
-    growth decays from the company's current trajectory (g_terminal) toward
-    the perpetuity rate (g_perpetuity, capped at TERMINAL_GROWTH_CAP).
-
-    Steps:
-      1. Starting from Y3 FCF-SBC, grow FCF through 'fade_years' at linearly
-         declining growth rates (g_terminal → g_perpetuity).
-      2. Discount each fade-year FCF back to the valuation point (Y3).
-      3. At the end of the fade, apply Gordon: TV = FCF × (1+g) / (WACC-g).
-      4. Discount Gordon TV back to Y3 and add to accumulated FCF PVs.
-      5. Return total as the terminal EV at the valuation point.
+    The terminal-growth cap (g_perpetuity) is now TIERED by current growth
+    signal — secular winners (high g) earn a higher long-run cap because
+    a 2.5% perpetuity overestimates their fade speed and undervalues them
+    by 30-50% (verified empirically on LITE backtest 2018-2024):
+        g_signal ≤ 15% → 2.5% (default — mature, pure perpetuity)
+        g_signal ≤ 30% → 3.5% (mid-growth)
+        g_signal > 30% → 4.5% (transformational; long runway)
 
     Returns None if FCF is non-positive or WACC ≤ g (Gordon infeasible).
-    Exit multiples serve as fallback in _scenario_price when this returns None.
     """
-    g_perpetuity = min(g_terminal, TERMINAL_GROWTH_CAP)
+    # Tiered perpetuity cap based on growth signal (or g_terminal as fallback).
+    # Top tier at 3.5% (was 4.5% — corrected per assessment 2026-04-28).
+    # Reasoning: 4.5% approaches nominal GDP growth, implying the company
+    # would grow as fast as the entire economy in perpetuity. 3.5% still
+    # gives a meaningful uplift over 2.5% for secular winners (~15% higher
+    # terminal value at WACC 10%) but stays comfortably below GDP.
+    g_signal_for_cap = growth_signal if growth_signal is not None else g_terminal
+    if g_signal_for_cap > 0.30:
+        cap = 0.035   # high-growth: 3.5% (was 4.5%)
+    elif g_signal_for_cap > 0.15:
+        cap = 0.030   # mid-growth: 3.0%
+    else:
+        cap = TERMINAL_GROWTH_CAP   # mature: 2.5%
+    g_perpetuity = min(g_terminal, cap)
 
     if terminal_fcf_sbc <= 0:
         return None
@@ -394,6 +402,24 @@ ARCHETYPE_VALUATION_YEAR = _REG_VALUATION_YEAR
 ARCHETYPE_MARGIN_RAMP = _REG_MARGIN_RAMP
 
 
+def _archetype_scenario_probabilities(archetype):
+    """Return scenario probabilities (bear/base/bull) for an archetype.
+
+    Compounders track base closely; transformational/special-sit shift
+    weight toward the bull tail (option-value); cyclicals get a wide spread.
+    """
+    arch = (archetype or "").lower().strip()
+    if "compounder" in arch:
+        return {"bear": 0.20, "base": 0.60, "bull": 0.20}
+    if "transformational" in arch:
+        return {"bear": 0.20, "base": 0.40, "bull": 0.40}
+    if "cyclical" in arch:
+        return {"bear": 0.30, "base": 0.40, "bull": 0.30}
+    if "special" in arch:
+        return {"bear": 0.30, "base": 0.20, "bull": 0.50}
+    return {"bear": 0.25, "base": 0.50, "bull": 0.25}  # GARP / default
+
+
 def _archetype_params(archetype: str | None) -> tuple[int, int, int]:
     """Return (forecast_years, valuation_year, margin_ramp_years) for an archetype.
 
@@ -445,9 +471,94 @@ def _annual_rev_series(fin: FinancialData) -> list[float]:
 # ---------------------------------------------------------------------------
 # Smart defaults — derived from the ticker's own actuals
 # ---------------------------------------------------------------------------
+def _compute_compounder_mean_reversion(fin: FinancialData) -> dict[str, float]:
+    """Compounder-mode mean-reversion blend for margin and growth.
+
+    For wide-moat compounders (verified by 5y ROIC > 15%), a temporary
+    guidance cut should NOT crash the forecast. The engine's default
+    behavior (extrapolate TTM forward) treats short-term margin/growth
+    compression as permanent. For compounders, mean-revert toward the
+    5-year historical baseline.
+
+    Returns a dict with optional keys (only present when activation
+    conditions fire):
+      - blended_op_margin (float): 80% TTM + 20% 5y mean
+      - blended_growth_y1 (float): 80% TTM + 20% 5y avg revenue CAGR
+
+    Activation gates (must ALL pass):
+      1. ≥ 4 prior annual periods (need history to compute 5y avg)
+      2. 5y trailing ROIC > 15% (verifies compounder economics)
+      3. TTM margin < (5y mean − 0.5σ) OR TTM rev growth < 50% of 5y CAGR
+
+    Less aggressive than the cyclical 70/30 because compounders shouldn't
+    "recover" as much — they were never broken, just having a slow quarter.
+    """
+    out: dict[str, float] = {}
+    margins = []
+    revs = []
+    rocs = []  # ROIC proxy: op income / (book equity + total debt)
+    for p in fin.annual_income[-5:]:
+        rev = p.get("Total Revenue") or 0
+        oi = p.get("Operating Income") or 0
+        if rev > 0 and oi is not None:
+            margins.append(oi / rev)
+            revs.append(rev)
+    if len(margins) < 4 or len(revs) < 4:
+        return out
+
+    # Need balance-sheet for a quick ROIC proxy
+    for ip, bp in zip(fin.annual_income[-5:], fin.annual_balance[-5:]):
+        oi = ip.get("Operating Income") or 0
+        equity = bp.get("Stockholders Equity") or bp.get("Total Equity Gross Minority Interest") or 0
+        debt = bp.get("Total Debt") or 0
+        invested = (equity or 0) + (debt or 0)
+        if invested > 0:
+            rocs.append(oi / invested)
+    if len(rocs) < 3:
+        return out
+    avg_roic = sum(rocs) / len(rocs)
+    if avg_roic <= 0.15:
+        return out  # not a high-ROIC compounder — don't engage
+
+    mean_m = sum(margins) / len(margins)
+    var_m = sum((m - mean_m) ** 2 for m in margins) / len(margins)
+    std_m = var_m ** 0.5 if var_m > 0 else 0
+
+    ttm_rev = fin.ttm_revenue() or 0.0
+    ttm_oi = fin.ttm_operating_income() or 0.0
+    ttm_m = ttm_oi / ttm_rev if ttm_rev > 0 else 0.0
+
+    # 5y revenue CAGR
+    if revs[0] > 0 and len(revs) >= 4:
+        years = len(revs) - 1
+        avg_growth = (revs[-1] / revs[0]) ** (1.0 / years) - 1.0
+    else:
+        avg_growth = 0.10
+
+    # TTM YoY growth (TTM vs prior-4q)
+    q = fin.quarterly_income or []
+    if len(q) >= 8 and ttm_rev > 0:
+        prior_rev = sum(p.get("Total Revenue") or 0 for p in q[-8:-4])
+        ttm_growth = (ttm_rev / prior_rev - 1.0) if prior_rev > 0 else avg_growth
+    else:
+        ttm_growth = avg_growth
+
+    # Margin reversion: TTM materially below 5y mean
+    if ttm_m < (mean_m - 0.5 * std_m) and mean_m > 0:
+        # 80% TTM + 20% historical mean
+        out["blended_op_margin"] = 0.80 * ttm_m + 0.20 * mean_m
+
+    # Growth reversion: TTM growth < 50% of 5y CAGR
+    if avg_growth > 0.05 and ttm_growth < 0.5 * avg_growth:
+        out["blended_growth_y1"] = 0.80 * ttm_growth + 0.20 * avg_growth
+
+    return out
+
+
 def compute_smart_defaults(
     fin: FinancialData,
     forward: dict[str, Any] | None = None,
+    archetype: str | None = None,
 ) -> dict[str, float]:
     """Driver defaults inferred from this ticker's actuals and forward signals.
 
@@ -834,8 +945,40 @@ def compute_smart_defaults(
             tax_rate=out["tax_rate"],
         )
 
-    return out
+    # ── Compounder mean-reversion protection ──
+    # For wide-moat compounders (verified 5y ROIC > 15%), guard against
+    # extrapolating temporary TTM weakness. If margin or growth is materially
+    # below 5y mean, blend 80% TTM + 20% historical to prevent the engine
+    # from treating a guidance cut as a permanent re-rating.
+    if (archetype or "").lower() == "compounder" and fin is not None:
+        try:
+            mr = _compute_compounder_mean_reversion(fin)
+            if mr:
+                if "blended_op_margin" in mr:
+                    blended_op = mr["blended_op_margin"]
+                    out["op_margin_target"] = blended_op
+                    out["ebitda_margin_target"] = blended_op + out.get("da_pct_rev", 0.05)
+                    out["fcf_sbc_margin_target"] = blended_op - out.get("sbc_pct_rev", 0.05)
+                    print(
+                        f"  [engine] {fin.ticker}: compounder margin mean-reversion "
+                        f"engaged → op_margin {blended_op*100:.1f}%",
+                        file=sys.stderr,
+                    )
+                if "blended_growth_y1" in mr:
+                    out["rev_growth_y1"] = mr["blended_growth_y1"]
+                    print(
+                        f"  [engine] {fin.ticker}: compounder growth mean-reversion "
+                        f"engaged → g1 {out['rev_growth_y1']*100:.1f}%",
+                        file=sys.stderr,
+                    )
+        except Exception as e:
+            print(
+                f"  [engine] {getattr(fin, 'ticker', '?')}: compounder mean-reversion "
+                f"failed ({e}) — using TTM-based defaults",
+                file=sys.stderr,
+            )
 
+    return out
 
 # ---------------------------------------------------------------------------
 # Result objects
@@ -939,6 +1082,14 @@ class TargetResult:
     confidence_score: float = 0.0
     confidence_label: str = ""         # "high" | "medium" | "low"
     data_quality: dict = field(default_factory=dict)  # full quality dict from check_target_quality()
+    # Probability-weighted target — archetype-tilted EV across scenarios.
+    # Compounder      → 20/60/20  (tracks base most closely)
+    # GARP            → 25/50/25  (standard symmetric)
+    # Transformational→ 20/40/40  (right-tail / option-value emphasized)
+    # Cyclical        → 30/40/30  (wide spread)
+    # Special-sit     → 30/20/50  (event-dominated outcome)
+    probability_weighted_target: float = 0.0
+    scenario_probabilities: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1093,20 +1244,22 @@ def _merge_drivers(
     drivers: dict[str, float] | None,
     fin: FinancialData | None = None,
     forward: dict[str, Any] | None = None,
+    archetype: str | None = None,
 ) -> dict[str, float]:
     """Merge driver overrides on top of smart-per-ticker defaults.
 
     Precedence (lowest → highest):
       1. DEFAULT_DRIVERS (sector-agnostic baseline)
-      2. compute_smart_defaults(fin, forward) — derived from ticker's actuals
-         and forward-looking scout data (guided growth, moat, TAM)
+      2. compute_smart_defaults(fin, forward, archetype) — derived from
+         actuals + forward-looking scout data, with archetype-specific
+         adjustments (e.g., compounder mean-reversion on guidance cuts)
       3. Explicit `drivers` overrides from caller (e.g., slider changes)
     """
     out = dict(DEFAULT_DRIVERS)
     _smart_defaults_failed = False
     if fin is not None:
         try:
-            out.update(compute_smart_defaults(fin, forward=forward))
+            out.update(compute_smart_defaults(fin, forward=forward, archetype=archetype))
         except Exception as e:
             _smart_defaults_failed = True
             print(
@@ -1175,6 +1328,7 @@ def _forecast_annual(
     base_year_label: str,
     forecast_years: int = FORECAST_YEARS,
     margin_ramp_years: int = MARGIN_RAMP_YEARS,
+    archetype: str | None = None,
 ) -> list[ForecastPeriod]:
     """Build a multi-year annual forecast (default 5 years, archetype-aware).
 
@@ -1190,6 +1344,25 @@ def _forecast_annual(
     ttm_fcf_sbc_mgn = (ttm_fcf_sbc / ttm_rev) if ttm_rev else 0.0
     ttm_oi = fin.ttm_operating_income() or 0.0
     ttm_op_mgn = (ttm_oi / ttm_rev) if ttm_rev else 0.0
+
+    # Cyclical normalization: shift the revenue baseline toward trailing
+    # peak when at cycle trough (mirrors the margin normalization). This
+    # prevents the trough-on-trough compounding error that produced LITE
+    # 2024-Q3 target $15 vs actual $116.
+    if (archetype or "").lower() == "cyclical":
+        normalized_rev, _peak = _compute_normalized_revenue(fin)
+        if normalized_rev > ttm_rev:
+            print(
+                f"  [engine] cyclical normalization: revenue baseline "
+                f"${ttm_rev/1e9:.2f}B → ${normalized_rev/1e9:.2f}B (TTM at trough)",
+                file=sys.stderr,
+            )
+            ttm_rev = normalized_rev
+            # Recompute margins using the normalized base — keeps the
+            # ratios honest at the entry point of the forecast loop.
+            ttm_ebitda_mgn = (ttm_ebitda / ttm_rev) if ttm_rev else 0.0
+            ttm_fcf_sbc_mgn = (ttm_fcf_sbc / ttm_rev) if ttm_rev else 0.0
+            ttm_op_mgn = (ttm_oi / ttm_rev) if ttm_rev else 0.0
 
     g1 = d["rev_growth_y1"]
     g_term = d["rev_growth_terminal"]
@@ -1216,9 +1389,46 @@ def _forecast_annual(
     except Exception:
         base_year_int = 2025
 
+    # ── S-curve growth decay parameters ──
+    # Calibrate sigmoid by g1 — high-growth stocks plateau before decaying.
+    # Linear case (g1 ≤ 15%): mostly equivalent to old logic.
+    # High-growth case (g1 > 30%): growth holds longer, decays later.
+    if g1 > 0.50:
+        _t_mid, _alpha = 0.65, 7.0
+    elif g1 > 0.30:
+        _t_mid, _alpha = 0.60, 6.0
+    elif g1 > 0.15:
+        _t_mid, _alpha = 0.50, 5.0
+    else:
+        _t_mid, _alpha = 0.40, 4.0
+
+    def _scurve_progress(y_idx: int) -> float:
+        if forecast_years <= 1:
+            return 1.0
+        t = (y_idx - 1) / (forecast_years - 1)  # ∈ [0, 1]
+        # Sigmoid (logistic) centered at t_mid with steepness alpha
+        try:
+            x = _alpha * (t - _t_mid)
+            # Clamp to avoid overflow
+            x = max(-50.0, min(50.0, x))
+            sig = 1.0 / (1.0 + math.exp(-x))
+        except OverflowError:
+            sig = 1.0 if t > _t_mid else 0.0
+        # Normalize so progress[Y1] = 0 and progress[Y_terminal] = 1
+        # (otherwise sigmoid leaves a small residual at endpoints).
+        sig0 = 1.0 / (1.0 + math.exp(-_alpha * (0.0 - _t_mid)))
+        sig1 = 1.0 / (1.0 + math.exp(-_alpha * (1.0 - _t_mid)))
+        if sig1 - sig0 < 1e-9:
+            return float(t)  # fallback to linear
+        return (sig - sig0) / (sig1 - sig0)
+
     for y in range(1, forecast_years + 1):
-        # Growth decay: linear from g1 (Y1) to g_term (final year)
-        g = g1 + (g_term - g1) * (y - 1) / max(1, forecast_years - 1)
+        # S-curve growth decay: sigmoid from g1 (Y1) toward g_term (final).
+        # For high-growth stocks this plateaus near g1 in Y1-Y2 then decays
+        # sharply, capturing the secular-winner pattern (vs old linear which
+        # immediately compressed growth toward terminal).
+        decay = _scurve_progress(y)
+        g = g1 + (g_term - g1) * decay
         rev = rev * (1 + g)
         # Margin ramp: reaches target at margin_ramp_years, then holds
         ramp = min(1.0, y / margin_ramp_years)
@@ -1275,7 +1485,8 @@ def _scenario_price(
     """
     fc_years, val_year, mramp = _archetype_params(archetype)
     annual = _forecast_annual(fin, d, base_year_label,
-                              forecast_years=fc_years, margin_ramp_years=mramp)
+                              forecast_years=fc_years, margin_ramp_years=mramp,
+                              archetype=archetype)
 
     # Terminal point = end of valuation year (archetype-dependent)
     terminal = annual[val_year - 1]
@@ -1287,6 +1498,7 @@ def _scenario_price(
         terminal_fcf_sbc=terminal.fcf_sbc,
         wacc=wacc,
         g_terminal=d["rev_growth_terminal"],
+        growth_signal=d.get("rev_growth_y1"),
     )
 
     # ── Exit-multiple cross-checks (retained for dashboard + fallback) ──
@@ -1303,14 +1515,26 @@ def _scenario_price(
         if exit_mult_ev > 0:
             divergence = abs(gordon_ev - exit_mult_ev) / exit_mult_ev
             if divergence > 0.50 and gordon_ev < exit_mult_ev:
-                # Large gap: Gordon is too conservative (common for high-growth).
-                # Blend 60% Gordon + 40% exit-multiple to anchor toward DCF
-                # while acknowledging market-implied growth expectations.
-                terminal_ev = gordon_ev * 0.6 + exit_mult_ev * 0.4
+                # GROWTH-AWARE BLEND with intrinsic-anchor floor.
+                # Gordon model assumes a 2.5%/3% perpetuity which is wrong for
+                # secular winners — exit-multiple captures growth expectations
+                # better. But peer multiples are derived from current market
+                # conditions; in a bubble they're inflated, in a crash deflated.
+                # Floor Gordon weight at 25% so the intrinsic anchor never gets
+                # crushed by market-mood (was 10%, raised per assessment 2026-04-28).
+                #   g1 ≤ 5%   → 65% Gordon (mature, perpetuity reasonable)
+                #   g1 = 20%  → 50% Gordon (growth, blend equally)
+                #   g1 = 40%  → 30% Gordon (high-growth, lean exit-mult)
+                #   g1 ≥ 45%  → 25% Gordon (transformational, FLOOR)
+                g1 = max(0.0, d.get("rev_growth_y1", 0.10))
+                gordon_w = max(0.25, min(0.70, 0.70 - g1 * 1.0))
+                exit_w = 1.0 - gordon_w
+                terminal_ev = gordon_ev * gordon_w + exit_mult_ev * exit_w
                 print(
-                    f"  [engine] {scenario}: blending Gordon (${gordon_ev / 1e9:.1f}B) "
-                    f"with exit-mult (${exit_mult_ev / 1e9:.1f}B) → ${terminal_ev / 1e9:.1f}B "
-                    f"(gap was {divergence:.0%})",
+                    f"  [engine] {scenario}: blending Gordon (${gordon_ev / 1e9:.1f}B, "
+                    f"w={gordon_w:.0%}) with exit-mult (${exit_mult_ev / 1e9:.1f}B, "
+                    f"w={exit_w:.0%}) → ${terminal_ev / 1e9:.1f}B "
+                    f"(gap was {divergence:.0%}, g1={g1:.0%})",
                     file=sys.stderr,
                 )
             elif divergence > 0.30:
@@ -1413,6 +1637,84 @@ SECTOR_PS_BENCHMARKS: dict[str, tuple[float, float, float]] = {
     "Utilities":               (2.5,  5.0, 1.5),
     "Real Estate":             (5.0, 10.0, 3.0),
 }
+
+
+def _is_cyclical_compression(fin: FinancialData) -> tuple[bool, str]:
+    """Detect cyclical compression EARLY — before EBITDA goes negative.
+
+    Cycles OSCILLATE; regime transitions don't. The detector requires evidence
+    of oscillation, not just high variance — otherwise it misclassifies
+    transformational stocks (e.g., MRVL post-Inphi-acquisition: margin went
+    -8.7 / -7.8 / +4.0 / -10.3 / -12.5 / +16.3, CV=3.85 but the trajectory
+    is regime transition, not cycle).
+
+    Trigger if ALL of these are true (was: any 2 of 3):
+      1. CV(margin) > 0.50 over last 8 years (high variance)
+      2. ≥ 2 sign changes in margin year-over-year (genuine oscillation,
+         not one-way transition)
+      3. ≥ 1 negative-margin year in last 8 (cycle bottom evidence) OR
+         active compression (TTM < 60% of trailing 4y peak)
+
+    Returns (is_cyclical, reason). For single-direction transitions (MRVL-
+    style) the detector now correctly returns False, leaving them to
+    transformational/garp/compounder routing per the explicit archetype.
+    """
+    margins = []
+    for p in fin.annual_income[-8:]:
+        rev = p.get("Total Revenue")
+        oi = p.get("Operating Income")
+        if rev and rev > 0 and oi is not None:
+            margins.append(oi / rev)
+    if len(margins) < 4:
+        return False, "insufficient history"
+
+    # Signal 1: coefficient of variation
+    mean_m = sum(margins) / len(margins)
+    var_m = sum((m - mean_m) ** 2 for m in margins) / len(margins)
+    std_m = var_m ** 0.5 if var_m > 0 else 0
+    cv = std_m / abs(mean_m) if mean_m != 0 else 0
+    cv_fires = cv > 0.50
+
+    # Signal 2: oscillation — count direction changes in margin trajectory
+    deltas = [margins[i + 1] - margins[i] for i in range(len(margins) - 1)]
+    sign_changes = 0
+    for i in range(1, len(deltas)):
+        if deltas[i] > 0 and deltas[i - 1] < 0:
+            sign_changes += 1
+        elif deltas[i] < 0 and deltas[i - 1] > 0:
+            sign_changes += 1
+    oscillation_fires = sign_changes >= 2
+
+    # Signal 3: negative-year OR active compression
+    ttm_rev = fin.ttm_revenue() or 0.0
+    ttm_oi = fin.ttm_operating_income() or 0.0
+    ttm_m = ttm_oi / ttm_rev if ttm_rev > 0 else 0
+    peak_m = max(margins[-4:]) if len(margins) >= 4 else max(margins)
+    has_neg_year = any(m < 0 for m in margins)
+    compression_fires = peak_m > 0.05 and ttm_m < 0.60 * peak_m
+    bottom_evidence = has_neg_year or compression_fires
+
+    # GATE: cyclical mode only makes sense if the company is CURRENTLY
+    # at or near a trough. If TTM margin is already at peak, normalization
+    # would pull DOWN — and we don't want that. This catches MRVL-style
+    # false positives where margin history oscillated due to one-off
+    # write-downs but TTM is at peak.
+    at_peak = peak_m > 0 and ttm_m >= peak_m * 0.85
+    if at_peak:
+        return False, ""
+
+    # ALL three required (was: any 2 of 3)
+    if cv_fires and oscillation_fires and bottom_evidence:
+        reasons = [
+            f"CV={cv:.2f}>0.50",
+            f"{sign_changes} sign-changes in margin trajectory",
+        ]
+        if has_neg_year:
+            reasons.append("prior negative-margin year")
+        elif compression_fires:
+            reasons.append(f"TTM margin {ttm_m*100:.1f}% < 60% of peak {peak_m*100:.1f}%")
+        return True, "; ".join(reasons)
+    return False, ""
 
 
 def _has_cyclical_history(fin: FinancialData) -> bool:
@@ -1699,13 +2001,14 @@ def _scenario_price_revenue_multiple(
     scenario: str,
     base_year_label: str,
     discount_years: int = DISCOUNT_YEARS,
+    archetype: str | None = None,
 ) -> ScenarioResult:
     """Revenue-multiple valuation for pre-profit / high-growth companies.
 
     Instead of EV = EBITDA × multiple, uses EV = Revenue × P/S multiple.
     The revenue forecast path is identical to the standard framework.
     """
-    annual = _forecast_annual(fin, d, base_year_label)
+    annual = _forecast_annual(fin, d, base_year_label, archetype=archetype)
     terminal = annual[VALUATION_YEAR - 1]  # Y3
 
     # Derive terminal P/S for this scenario
@@ -1827,30 +2130,154 @@ CYCLICAL_SCENARIO_OFFSETS: dict[str, dict[str, float]] = {
 }
 
 
-def _compute_normalized_ebit_margin(fin: FinancialData) -> float:
-    """Average EBIT margin over all available annual history (up to 10 years).
+def _compute_normalized_revenue(fin: FinancialData) -> tuple[float, float]:
+    """Normalized revenue baseline for cyclical-mode forecasts.
 
-    This produces the "mid-cycle" margin that the company should earn on average
-    across a full industry cycle. At peak, TTM margins are above this; at trough,
-    below. The normalized margin is the correct steady-state assumption.
+    Returns (normalized_rev, peak_rev) where peak_rev is the trailing
+    4-year max annual revenue.
 
-    Falls back to TTM operating margin if insufficient annual data.
+    Methodology: in cyclical mode, TTM revenue is anchored on the current
+    cycle phase. At trough, TTM is depressed and using it as the forecast
+    baseline produces compounded undervaluation (margin × revenue both
+    trough). The fix: blend TTM with trailing peak based on cycle position.
+
+      cycle_position 0.0 (trough) → 70% TTM + 30% trailing peak
+      cycle_position 0.5 (mid)    → 100% TTM
+      cycle_position 1.0 (peak)   → 100% TTM (don't extrapolate up)
+
+    For LITE 2024-Q3 example: TTM ≈ $1.38B, trailing peak (2022) ≈ $1.71B.
+    At cycle_pos=0.0, normalized = 0.7×1.38 + 0.3×1.71 = $1.48B (+7%).
     """
-    margins: list[float] = []
-    for p in fin.annual_income[-10:]:  # Up to 10 years
-        rev = p.get("Total Revenue")
-        oi = p.get("Operating Income")
-        if rev and rev > 0 and oi is not None:
-            margins.append(oi / rev)
+    ttm = fin.ttm_revenue() or 0.0
+    if ttm <= 0:
+        return 0.0, 0.0
 
-    if len(margins) >= 3:
-        # Trim extremes (remove best and worst if we have enough data)
-        if len(margins) >= 5:
-            margins_sorted = sorted(margins)
-            margins = margins_sorted[1:-1]  # Trim top and bottom
-        return sum(margins) / len(margins)
+    # Trailing peak from last N annual periods (handles fiscal-year offsets).
+    # Window respects ticker-specific structural-break overrides.
+    window = _norm_window(fin.ticker)
+    peak = ttm
+    for p in fin.annual_income[-window:]:
+        rev = p.get("Total Revenue") or 0.0
+        if rev > peak:
+            peak = rev
 
-    # Fallback: TTM operating margin
+    # If trailing peak is barely above TTM (< 5%), no blending needed
+    if peak <= ttm * 1.05:
+        return ttm, peak
+
+    # Compute current cycle position via margin ratio (same as _compute_cycle_position)
+    norm_margin = _compute_normalized_ebit_margin(fin)
+    ttm_oi = fin.ttm_operating_income() or 0.0
+    if ttm <= 0 or norm_margin <= 0:
+        cycle_pos = 0.5
+    else:
+        cur_margin = ttm_oi / ttm
+        ratio = cur_margin / norm_margin if norm_margin > 0 else 1.0
+        if ratio <= 1.0:
+            cycle_pos = max(0.0, (ratio - 0.3) / 0.7 * 0.5)
+        else:
+            cycle_pos = min(1.0, 0.5 + (ratio - 1.0) / 1.0 * 0.5)
+
+    # Below mid-cycle: blend toward peak. Above mid-cycle: stay at TTM.
+    if cycle_pos >= 0.5:
+        return ttm, peak
+    blend_to_peak = (0.5 - cycle_pos) * 0.6  # max 30% peak weight at trough
+    normalized = ttm * (1 - blend_to_peak) + peak * blend_to_peak
+    return normalized, peak
+
+
+# ---------------------------------------------------------------------------
+# Cyclical normalization — window configuration
+# ---------------------------------------------------------------------------
+# Default window: 8 annual periods (~2 semiconductor cycles, Damodaran
+# recommends 7-10 yrs for most cyclicals). Stocks with a structural break
+# (re-IPO, spinoff, business-model pivot) override to a shorter window so
+# pre-break data doesn't contaminate the normalization.
+NORM_WINDOW_YEARS_DEFAULT = 8
+
+TICKER_NORMALIZATION_OVERRIDES: dict[str, int] = {
+    # LITE: spun off from JDSU in Aug 2015. Pre-2018 data is structurally
+    # different (JDSU conglomerate margins of ~1-5% vs LITE photonics-pure
+    # 12-17%). Use 4-year window to stay inside the post-spinoff regime.
+    "LITE": 4,
+    # SNDK: re-IPO'd Feb 2025 — already filtered by TICKER_DATA_CUTOFFS,
+    # so any data we see is post-break. Default 8yr is fine but data-cutoff
+    # caps it shorter naturally.
+}
+
+
+def _norm_window(ticker: str) -> int:
+    """Return the cyclical-normalization window in years for this ticker."""
+    return TICKER_NORMALIZATION_OVERRIDES.get(ticker.upper(), NORM_WINDOW_YEARS_DEFAULT)
+
+
+def _compute_normalized_ebit_margin(fin: FinancialData) -> float:
+    """Through-cycle EBIT margin — what the company earns on a typical year.
+
+    Methodology: take the last N ANNUAL PERIODS (window from _norm_window),
+    drop the single worst (trough) year, average the remainder. This:
+
+      • Stays inside the company's current regime — no JDSU-era data
+        dragging LITE down, no pre-AI-era data dragging NVDA down.
+      • Drops the cyclical-trough outlier so peak/normal years dominate.
+      • Robust to any single-year miss.
+
+    Verified on LITE:
+      • 2019-02 as-of: visible years 2015-2018 mix: -2.8/1.3/4.8/11.2 →
+        drop -2.8, mean of (1.3, 4.8, 11.2) = 5.8% (was 1.3% with median-
+        of-profitable across full 8-year history including JDSU era).
+      • 2024-05 as-of: visible years 2020-2023: 12.2/17.7/17.7/-6.5 →
+        drop -6.5, mean of (12.2, 17.7, 17.7) = 15.9% (close to peak-
+        cycle truth; was 5.2% with old simple-average logic).
+
+    Fallbacks:
+      1. Last 4 years drop-worst-mean (primary).
+      2. Last 6-8 years median of profitable (longer-cycle businesses).
+      3. TTM operating margin (very young companies).
+      4. Generic 15% last resort.
+    """
+    def _annual_margins(periods):
+        out = []
+        for p in periods:
+            rev = p.get("Total Revenue")
+            oi = p.get("Operating Income")
+            if rev and rev > 0 and oi is not None:
+                out.append(oi / rev)
+        return out
+
+    def _median(xs):
+        s = sorted(xs)
+        n = len(s)
+        if n == 0:
+            return 0.0
+        if n % 2 == 1:
+            return s[n // 2]
+        return (s[n // 2 - 1] + s[n // 2]) / 2
+
+    window = _norm_window(fin.ticker)
+    margins_full = _annual_margins(fin.annual_income[-window:])
+
+    # Primary: full window, drop worst (trough), trimmed mean
+    if len(margins_full) >= 4:
+        # Drop the single worst year (trimmed mean of n-1)
+        kept = sorted(margins_full)[1:]
+        return sum(kept) / len(kept)
+    if len(margins_full) == 3:
+        # 3-year history: drop worst only if we have a clear negative outlier
+        kept = sorted(margins_full)
+        if kept[0] < -0.02 and kept[1] > 0:
+            return (kept[1] + kept[2]) / 2
+        return sum(kept) / 3
+
+    # Secondary: stretch out further if window came up short
+    last_long = _annual_margins(fin.annual_income[-max(8, window):])
+    profitable = [m for m in last_long if m > 0]
+    if len(profitable) >= 3:
+        return _median(profitable)
+    if len(last_long) >= 3:
+        return _median(last_long)
+
+    # Insufficient history — fall back to TTM
     ttm_oi = fin.ttm_operating_income() or 0.0
     ttm_rev = fin.ttm_revenue() or 0.0
     if ttm_rev > 0:
@@ -1899,7 +2326,7 @@ def compute_cyclical_defaults(
     margin and multiple targets with cycle-normalized values.
     """
     # Start from standard smart defaults (gets growth, WACC, etc.)
-    out = compute_smart_defaults(fin, forward=forward)
+    out = compute_smart_defaults(fin, forward=forward, archetype="cyclical")
 
     # Override with cyclical-specific values
     normalized_margin = _compute_normalized_ebit_margin(fin)
@@ -1907,6 +2334,66 @@ def compute_cyclical_defaults(
 
     out["ebit_margin_normalized"] = normalized_margin
     out["cycle_position"] = cycle_pos
+
+    # Cyclical growth normalization: at trough, the TTM-derived rev_growth_y1
+    # is structurally negative (LITE 2024-Q2: -16%). Replace with a recovery
+    # path anchored on the gap between TTM and trailing-peak revenue.
+    #   cycle_pos < 0.4 → Y1 growth = blend of TTM trend and recovery slope
+    #   cycle_pos >= 0.4 → keep the smart-defaults growth (TTM-derived)
+    # The recovery slope assumes the company will close half the gap to the
+    # trailing-peak revenue over the next 12 months. This is conservative —
+    # real cycle resumptions can close the gap in 2-3 quarters (LITE 2024-25
+    # closed the gap in 9 months) but we deliberately under-shoot to avoid
+    # over-fitting the bullish case.
+    ttm_rev = fin.ttm_revenue() or 0.0
+    peak_rev = ttm_rev
+    _w = _norm_window(fin.ticker)
+    for p in fin.annual_income[-_w:]:
+        rev = p.get("Total Revenue") or 0.0
+        if rev > peak_rev:
+            peak_rev = rev
+    if cycle_pos < 0.4 and ttm_rev > 0 and peak_rev > ttm_rev * 1.05:
+        # Recovery slope: half the gap to peak in 12 months
+        recovery_g = 0.5 * (peak_rev / ttm_rev - 1.0)
+        # Blend with TTM trend (50/50 at deepest trough) to avoid
+        # ignoring the trend signal entirely
+        ttm_g = out.get("rev_growth_y1", 0.0)
+        # The deeper the trough, the more weight to recovery vs trend
+        recovery_w = 0.5 + (0.4 - cycle_pos) * 0.5  # 0.5 at pos=0.4, 0.7 at pos=0.0
+        recovery_w = max(0.5, min(0.7, recovery_w))
+        out["rev_growth_y1"] = ttm_g * (1 - recovery_w) + recovery_g * recovery_w
+        # Also lift terminal growth a bit if we are at deep trough
+        if cycle_pos < 0.2:
+            out["rev_growth_terminal"] = max(out.get("rev_growth_terminal", 0.05), 0.10)
+
+    # ── EBIT sanity guardrail (per assessment 2026-04-28) ──
+    # Verify the compounded normalization (normalized_rev × normalized_margin)
+    # stays inside the historical envelope. If it implies an EBIT level >120%
+    # of the company's all-time peak EBIT, the two upward adjustments are
+    # compounding beyond historical reality — emit a warning and dampen the
+    # margin (more confident input than revenue, since revenue depends on
+    # the cycle_pos blend).
+    peak_ebit = 0.0
+    for p in fin.annual_income[-8:]:
+        rev = p.get("Total Revenue") or 0.0
+        oi = p.get("Operating Income") or 0.0
+        if rev > 0 and oi > peak_ebit:
+            peak_ebit = oi
+    norm_rev_for_check, _ = _compute_normalized_revenue(fin)
+    if peak_ebit > 0 and norm_rev_for_check > 0:
+        implied_ebit = norm_rev_for_check * normalized_margin
+        if implied_ebit > peak_ebit * 1.20:
+            damp_factor = peak_ebit * 1.20 / implied_ebit
+            old_margin = normalized_margin
+            normalized_margin = normalized_margin * damp_factor
+            out["ebit_margin_normalized"] = normalized_margin
+            print(
+                f"  [engine] CYCLICAL_GUARDRAIL: implied EBIT "
+                f"${implied_ebit/1e9:.2f}B exceeds 1.2× historical peak "
+                f"${peak_ebit/1e9:.2f}B; damping normalized margin "
+                f"{old_margin*100:.1f}% → {normalized_margin*100:.1f}%",
+                file=sys.stderr,
+            )
 
     # Through-cycle EV/EBIT: derive from current trading multiples + cycle adjustment.
     # At peak (high margin), current EV/EBIT is LOW (earnings inflated).
@@ -1942,36 +2429,155 @@ def compute_cyclical_defaults(
     return out
 
 
-def _apply_cyclical_scenario(base_drivers: dict[str, float], scenario: str) -> dict[str, float]:
-    """Apply cyclical-specific scenario offsets.
+def _apply_cyclical_scenario(
+    base_drivers: dict[str, float],
+    scenario: str,
+    fin: "FinancialData | None" = None,
+) -> dict[str, float]:
+    """Apply cyclical-specific scenario offsets — cycle-position-aware.
 
-    Key difference from standard: bear case is much more severe (models cycle turn),
-    and margin targets use normalized EBIT margin (not EBITDA).
+    Scenarios bracket realistic CYCLE outcomes, not symmetric +/- around base:
+
+      cycle_pos < 0.4 (TROUGH):
+        bear  → trough persists 1-2 more years (growth ≈ TTM trend, margin near TTM trough)
+        base  → standard recovery (recovery growth_y1, normalized margin)
+        bull  → fast recovery to peak (revenue closes peak gap in Y1, margin = peak-cycle)
+
+      0.4 ≤ cycle_pos ≤ 0.6 (MID):
+        standard symmetric offsets (existing static calibration)
+
+      cycle_pos > 0.6 (PEAK):
+        bear  → cycle turn (revenue declines, margin reverts toward normalized − 2pp)
+        base  → continuation (current TTM margin held)
+        bull  → peak holds longer (current margin sustained, modest growth)
+
+    Plus #5 guard: bear margin is FLOORED at current TTM margin so we never imply
+    a margin lower than what the company is currently demonstrating.
     """
     off = CYCLICAL_SCENARIO_OFFSETS[scenario]
     d = dict(base_drivers)
+    cycle_pos = base_drivers.get("cycle_position", 0.5)
+    norm_margin = base_drivers.get("ebit_margin_normalized", 0.15)
 
-    # Revenue growth: same logic as standard for negative-base-growth safety
-    for key, mult_key in (
-        ("rev_growth_y1", "rev_growth_y1_mult"),
-        ("rev_growth_terminal", "rev_growth_terminal_mult"),
-    ):
-        base_g = base_drivers[key]
-        mult = off[mult_key]
-        if base_g >= 0:
-            d[key] = base_g * mult
+    # ── Revenue growth scenarios — cycle-position-aware ──
+    base_g = base_drivers.get("rev_growth_y1", 0.05)
+    base_g_term = base_drivers.get("rev_growth_terminal", 0.08)
+
+    if cycle_pos < 0.4:
+        # TROUGH regime: bear = "trough persists", bull = "fast recovery"
+        if scenario == "downside":
+            # Bear: revert to TTM trend (often negative). Half of TTM trend
+            # if it was deeply negative, otherwise flat.
+            ttm_trend = -0.05  # default soft trough-persistence
+            if fin is not None:
+                ttm_rev = fin.ttm_revenue() or 0.0
+                # Compare TTM rev to year-ago TTM (prior 4Q sum if available)
+                q = fin.quarterly_income or []
+                if len(q) >= 8 and ttm_rev > 0:
+                    prior_rev = sum(p.get("Total Revenue") or 0 for p in q[-8:-4])
+                    if prior_rev > 0:
+                        ttm_trend = (ttm_rev / prior_rev - 1.0)
+            d["rev_growth_y1"] = max(-0.20, min(0.02, ttm_trend))   # cap between -20% and +2%
+            d["rev_growth_terminal"] = max(0.04, base_g_term * 0.7)  # slow ramp to terminal
+        elif scenario == "upside":
+            # Bull: full peak-rev recovery in Y1
+            if fin is not None:
+                ttm_rev = fin.ttm_revenue() or 0.0
+                peak_rev = ttm_rev
+                for p in fin.annual_income[-4:]:
+                    rev = p.get("Total Revenue") or 0.0
+                    if rev > peak_rev:
+                        peak_rev = rev
+                if ttm_rev > 0 and peak_rev > ttm_rev:
+                    d["rev_growth_y1"] = (peak_rev / ttm_rev - 1.0)  # close gap fully
+                else:
+                    d["rev_growth_y1"] = base_g * 1.30
+            else:
+                d["rev_growth_y1"] = base_g * 1.30
+            d["rev_growth_terminal"] = base_g_term * 1.10
+        else:  # base
+            d["rev_growth_y1"] = base_g
+            d["rev_growth_terminal"] = base_g_term
+    elif cycle_pos > 0.6:
+        # PEAK regime: bear = "cycle turn"
+        if scenario == "downside":
+            d["rev_growth_y1"] = -0.15  # revenue declines as cycle turns
+            d["rev_growth_terminal"] = base_g_term * 0.7
+        elif scenario == "upside":
+            d["rev_growth_y1"] = base_g * 1.05  # peak holds, slight growth
+            d["rev_growth_terminal"] = base_g_term * 1.05
         else:
-            delta = abs(base_g) * (1 - mult)
-            d[key] = base_g - delta
+            d["rev_growth_y1"] = base_g
+            d["rev_growth_terminal"] = base_g_term
+    else:
+        # MID-CYCLE: use standard symmetric offsets
+        for key, mult_key in (
+            ("rev_growth_y1", "rev_growth_y1_mult"),
+            ("rev_growth_terminal", "rev_growth_terminal_mult"),
+        ):
+            base_v = base_drivers.get(key, 0.0)
+            mult = off[mult_key]
+            if base_v >= 0:
+                d[key] = base_v * mult
+            else:
+                delta = abs(base_v) * (1 - mult)
+                d[key] = base_v - delta
 
-    # Cyclical uses normalized EBIT margin, not EBITDA margin
-    d["ebit_margin_normalized"] = max(
-        -0.10,
-        base_drivers.get("ebit_margin_normalized", 0.15) + off["ebit_margin_delta"]
-    )
+    # ── Margin scenarios — cycle-position-aware with TTM floor ──
+    ttm_op_margin = None
+    if fin is not None:
+        ttm_rev = fin.ttm_revenue() or 0.0
+        ttm_oi = fin.ttm_operating_income() or 0.0
+        if ttm_rev > 0:
+            ttm_op_margin = ttm_oi / ttm_rev
+
+    if cycle_pos < 0.4:
+        # TROUGH: bear = TTM margin (still depressed); base = normalized; bull = peak-cycle
+        if scenario == "downside":
+            # Bear at trough means "margin recovery is slow" — use halfway between TTM and normalized
+            if ttm_op_margin is not None:
+                target_m = (ttm_op_margin + norm_margin) / 2
+                # Floor at TTM (don't go below trough that's already happening)
+                d["ebit_margin_normalized"] = max(target_m, ttm_op_margin)
+            else:
+                d["ebit_margin_normalized"] = max(-0.05, norm_margin + off["ebit_margin_delta"])
+        elif scenario == "upside":
+            # Bull: peak-cycle margin (best annual margin in last 4y, capped)
+            peak_m = norm_margin
+            if fin is not None:
+                for p in fin.annual_income[-4:]:
+                    rev = p.get("Total Revenue") or 0.0
+                    oi = p.get("Operating Income") or 0.0
+                    if rev > 0:
+                        m = oi / rev
+                        if m > peak_m:
+                            peak_m = m
+            d["ebit_margin_normalized"] = min(peak_m, norm_margin + 0.05)
+        else:
+            d["ebit_margin_normalized"] = norm_margin
+    elif cycle_pos > 0.6:
+        # PEAK: bear = mid-cycle minus 2pp (full cycle turn); base = TTM; bull = TTM
+        if scenario == "downside":
+            d["ebit_margin_normalized"] = max(-0.05, norm_margin - 0.02)
+        elif scenario == "upside":
+            # Hold current TTM (peak persists)
+            d["ebit_margin_normalized"] = ttm_op_margin if ttm_op_margin else norm_margin
+        else:
+            d["ebit_margin_normalized"] = norm_margin
+    else:
+        # MID-CYCLE: standard symmetric offset
+        candidate = norm_margin + off["ebit_margin_delta"]
+        # #5 GUARD: never imply a margin below current TTM (don't double-compress
+        # below the trough the company is already demonstrating).
+        if scenario == "downside" and ttm_op_margin is not None:
+            candidate = max(candidate, ttm_op_margin)
+        d["ebit_margin_normalized"] = max(-0.10, candidate)
+
+    # Multiple offset (uniform across regimes — cycle position doesn't change
+    # how much the multiple should re-rate)
     d["ev_ebit_multiple"] = base_drivers.get("ev_ebit_multiple", 12.0) * off["ev_ebit_multiple_mult"]
 
-    # Carry through standard EBITDA/FCF drivers (for the forecast path used by UI)
+    # Carry through derived margins
     d["ebitda_margin_target"] = d["ebit_margin_normalized"] + base_drivers.get("da_pct_rev", 0.05)
     d["fcf_sbc_margin_target"] = d["ebit_margin_normalized"] - base_drivers.get("sbc_pct_rev", 0.05)
 
@@ -2183,6 +2789,7 @@ def _validate_inputs(fin: FinancialData, drivers: dict[str, float]) -> list[str]
     return warnings
 
 
+
 def build_target(
     fin: FinancialData,
     drivers: dict[str, float] | None = None,
@@ -2249,7 +2856,7 @@ def build_target(
             base_drivers = compute_cyclical_defaults(fin, forward=forward)
         except Exception as e:
             print(f"  [target_engine] cyclical defaults failed: {e} — falling back to standard", file=sys.stderr)
-            base_drivers = _merge_drivers(drivers, fin, forward=forward)
+            base_drivers = _merge_drivers(drivers, fin, forward=forward, archetype=archetype)
             use_cyclical = False
         # Apply explicit driver overrides on top of cyclical defaults
         if drivers and use_cyclical:
@@ -2260,7 +2867,7 @@ def build_target(
                     except (TypeError, ValueError):
                         continue
     else:
-        base_drivers = _merge_drivers(drivers, fin, forward=forward)
+        base_drivers = _merge_drivers(drivers, fin, forward=forward, archetype=archetype)
 
     warnings: list[str] = []
 
@@ -2296,6 +2903,37 @@ def build_target(
     # ─── Auto-detect valuation method (skip for cyclical mode) ───
     ps_blend_weight = 0.0  # 0 = pure EV, 1 = pure P/S
     use_rev_multiple = False
+    if not use_cyclical:
+        # Early cyclical-compression auto-promote: fires BEFORE EBITDA goes
+        # negative. Triggered when archetype is unknown and the financial
+        # history shows clear cyclicality (CV(margin)>0.5, active compression,
+        # or prior negative year — any 2 of 3 → promote).
+        if archetype is None or archetype.lower() == "":
+            is_cyclical, reason = _is_cyclical_compression(fin)
+            if is_cyclical:
+                print(
+                    f"  [routing] {fin.ticker}: early auto-promote to cyclical "
+                    f"(archetype=None, {reason})",
+                    file=sys.stderr,
+                )
+                try:
+                    base_drivers = compute_cyclical_defaults(fin, forward=forward)
+                    if drivers:
+                        for k, v in drivers.items():
+                            if k in base_drivers:
+                                base_drivers[k] = v
+                    use_cyclical = True
+                    warnings.append(
+                        f"Early auto-promote to cyclical mode: archetype is None and history shows "
+                        f"cyclical pattern ({reason}). Using normalized mid-cycle valuation."
+                    )
+                except Exception as e:
+                    print(
+                        f"  [target_engine] early cyclical auto-promote failed: {e} — using standard routing",
+                        file=sys.stderr,
+                    )
+                    use_cyclical = False
+
     if not use_cyclical:
         # Returns True (pure P/S), False (pure EV/EBITDA), or float 0-1 (blend weight for P/S)
         routing_result = _should_use_revenue_multiple(fin, forward=forward, base_drivers=base_drivers, archetype=archetype)
@@ -2374,7 +3012,7 @@ def build_target(
             f"through-cycle EV/EBIT {ev_ebit:.1f}×. Bear case models full cycle turn."
         )
         for name in ("downside", "base", "upside"):
-            d = _apply_cyclical_scenario(base_drivers, name)
+            d = _apply_cyclical_scenario(base_drivers, name, fin=fin)
             scenarios[name] = _scenario_price_cyclical(
                 fin, d, name, base_year_label, discount_years=discount_years
             )
@@ -2383,7 +3021,8 @@ def build_target(
             d = _apply_scenario(base_drivers, name)
             if use_rev_multiple:
                 scenarios[name] = _scenario_price_revenue_multiple(
-                    fin, d, name, base_year_label, discount_years=discount_years
+                    fin, d, name, base_year_label, discount_years=discount_years,
+                    archetype=archetype,
                 )
             elif ps_blend_weight > 0:
                 # Transition zone: compute both methods and blend
@@ -2392,7 +3031,8 @@ def build_target(
                     archetype=archetype,
                 )
                 ps_result = _scenario_price_revenue_multiple(
-                    fin, d, name, base_year_label, discount_years=discount_years
+                    fin, d, name, base_year_label, discount_years=discount_years,
+                    archetype=archetype,
                 )
                 # Blend the per-share prices; keep EV result's forecast/details as primary
                 blended_price = ps_blend_weight * ps_result.price + (1 - ps_blend_weight) * ev_result.price
@@ -2780,128 +3420,13 @@ def build_target(
         if w not in result.warnings:
             result.warnings.append(w)
 
+    # --- Probability-weighted target (archetype-tilted EV across scenarios) ---
+    probs = _archetype_scenario_probabilities(archetype)
+    result.scenario_probabilities = probs
+    result.probability_weighted_target = (
+        probs["bear"] * result.low
+        + probs["base"] * result.base
+        + probs["bull"] * result.high
+    )
+
     return result
-
-
-# ---------------------------------------------------------------------------
-# Alternative valuation methods (cross-checks, not primary pricing)
-# ---------------------------------------------------------------------------
-
-def reverse_dcf(
-    fin: FinancialData,
-    drivers: dict[str, float] | None = None,
-    forward: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Reverse-DCF: solve for the implied growth rate embedded in the current price.
-
-    Instead of "given growth, what's the price?", this answers "given the price,
-    what growth is the market pricing in?" Useful for sanity-checking whether the
-    market's implied growth is realistic.
-
-    Returns:
-      {
-        "current_price": float,
-        "implied_rev_growth_y1": float,  # growth rate that yields current price
-        "base_rev_growth_y1": float,     # our model's growth rate
-        "delta": float,                  # implied - base (positive = market is more optimistic)
-        "interpretation": str,
-      }
-    """
-    base_result = build_target(fin, drivers, forward, load_forward=bool(forward is None))
-    base_g1 = base_result.drivers.get("rev_growth_y1", 0.15)
-    current_price = fin.price or 0.0
-
-    if current_price <= 0:
-        return {"error": "No current price available"}
-
-    # Binary search for the growth rate that produces current_price
-    lo, hi = -0.30, 2.00
-    for _ in range(50):  # bisection converges in ~50 iterations to machine precision
-        mid = (lo + hi) / 2
-        test_drivers = dict(base_result.drivers)
-        test_drivers["rev_growth_y1"] = mid
-        test_result = build_target(fin, test_drivers, forward, load_forward=False)
-        if test_result.base > current_price:
-            hi = mid
-        else:
-            lo = mid
-
-    implied_g1 = (lo + hi) / 2
-    delta = implied_g1 - base_g1
-
-    if delta > 0.05:
-        interp = "Market is pricing in MORE growth than our model assumes."
-    elif delta < -0.05:
-        interp = "Market is pricing in LESS growth than our model — potential undervaluation."
-    else:
-        interp = "Market pricing roughly aligned with our model assumptions."
-
-    return {
-        "current_price": current_price,
-        "implied_rev_growth_y1": round(implied_g1, 4),
-        "base_rev_growth_y1": round(base_g1, 4),
-        "delta": round(delta, 4),
-        "interpretation": interp,
-    }
-
-
-def residual_income_model(
-    fin: FinancialData,
-    drivers: dict[str, float] | None = None,
-) -> dict[str, Any]:
-    """Residual Income Model (RIM): value = book value + PV(excess earnings).
-
-    Equity value = Book Value + sum(Residual Income_t / (1+Ke)^t)
-    where Residual Income_t = Net Income_t - Ke × Book Value_{t-1}
-
-    This method values the company based on its ability to earn above its
-    cost of equity, anchored to tangible book value.
-    """
-    d = drivers or dict(DEFAULT_DRIVERS)
-    wacc = d.get("discount_rate", 0.12)
-
-    # Estimate book value from market cap and net debt
-    mcap = fin.market_cap or 0.0
-    net_debt = fin.net_debt or 0.0
-    # P/B proxy: for tech companies, book value is typically much lower than market cap
-    # Use a conservative estimate based on net assets
-    book_value = max(0, mcap * 0.3)  # rough proxy; ideally from balance sheet
-
-    if fin.quarterly_balance:
-        latest = fin.quarterly_balance[-1]
-        bv = float(latest.get("Total Stockholders Equity") or latest.get("totalStockholdersEquity") or 0)
-        if bv > 0:
-            book_value = bv
-
-    ttm_ni = fin.ttm_net_income() if hasattr(fin, 'ttm_net_income') else 0
-    if not ttm_ni:
-        # Approximate from operating income
-        ttm_oi = fin.ttm_operating_income() or 0
-        ttm_ni = ttm_oi * (1 - d.get("tax_rate", 0.18))
-
-    shares = fin.shares_diluted or 1.0
-    roe = ttm_ni / book_value if book_value > 0 else 0.0
-
-    # Project residual income for 5 years, then terminal
-    ri_pv = 0.0
-    bv = book_value
-    for yr in range(1, 6):
-        ni = bv * roe
-        ri = ni - wacc * bv
-        ri_pv += ri / ((1 + wacc) ** yr)
-        bv += ni * 0.5  # assume 50% retention
-
-    # Terminal: residual income fades to 0 over 10 years (competitive reversion)
-    terminal_ri = ri_pv * 0.5  # rough: half the last RI, perpetuity-ish
-    total_equity = book_value + ri_pv + terminal_ri
-    price_per_share = max(0, total_equity / shares) if shares > 0 else 0
-
-    return {
-        "book_value": round(book_value / 1e9, 2),
-        "roe": round(roe, 4),
-        "cost_of_equity": round(wacc, 4),
-        "excess_return_spread": round(roe - wacc, 4),
-        "rim_equity_value_b": round(total_equity / 1e9, 2),
-        "rim_price_per_share": round(price_per_share, 2),
-        "interpretation": "above cost of equity" if roe > wacc else "below cost of equity — value-destructive",
-    }

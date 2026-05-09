@@ -9,7 +9,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # ─── Fix Windows console encoding for emoji/unicode ───
-if sys.platform == "win32":
+# Skip when running under pytest — pytest replaces sys.stdout/stderr with its
+# capture files, and rewrapping them disconnects pytest's snapshot machinery.
+# That cascades into "ValueError: I/O operation on closed file" on every
+# subsequent test once the GC closes the original capture file. Guard added
+# 2026-05-09 after pre-commit hook started failing with 35 cascading errors.
+_UNDER_PYTEST = ("pytest" in sys.modules) or bool(os.environ.get("PYTEST_CURRENT_TEST"))
+if sys.platform == "win32" and not _UNDER_PYTEST:
     try:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")

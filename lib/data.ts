@@ -34,6 +34,84 @@ export interface DataQuality {
   warnings: string[];
 }
 
+export interface ThesisFilter {
+  pass: boolean;
+  evidence: string;
+}
+
+export interface ThesisRisk {
+  name: string;
+  probability: number | null | undefined;
+  price_impact: number | null | undefined;
+  early_signal: string;
+}
+
+export interface ThesisCatalyst {
+  name: string;
+  probability: number | null | undefined;
+  price_impact: number | null | undefined;
+  confirming_signal: string;
+}
+
+export interface ThesisRun {
+  ticker: string;
+  run_at: string;
+  prompt_version: string;
+  thesis_target: number | null;
+  breakout_price: number | null;
+  risk_adj_target: number | null;
+  conviction: "HIGH" | "MEDIUM" | "LOW" | "BROKEN" | string | null;
+  position_size_pct: number | null;
+  buy_below: number | null;
+  trim_above: number | null;
+  filters: Record<string, ThesisFilter>;
+  top_risks: ThesisRisk[];
+  top_catalysts: ThesisCatalyst[];
+  kill_triggers: string[];
+  spot_at_run: number | null;
+  trigger_reason: string | null;
+  markdown_path: string | null;
+  coverage_quality: "HIGH" | "MEDIUM" | "LOW" | string | null;
+  cited_domains: string[];
+}
+
+// ─── Discovery universe (self-evolving multi-market candidate registry) ───
+// Mirrors supabase/2026-05-04_discovery_universe.sql.
+// Distinct from the legacy `discovery_candidates` table (per-run scout outputs):
+// `discovery_universe` is the persistent upstream pool that scouts read from.
+export type DiscoveryMarket = "US" | "HK" | "TW" | "JP" | "KR";
+export type DiscoveryStatus =
+  | "exploring"
+  | "promising"
+  | "promoted"
+  | "dropped"
+  | "watchlisted";
+
+export interface DiscoveryScanEntry {
+  ts: string;
+  score: number | null;
+  verdict: string | null;
+  model: string | null;
+  version: string | null;
+}
+
+export interface DiscoveryUniverseRow {
+  ticker: string;
+  market: DiscoveryMarket | string;
+  company_name: string | null;
+  sector: string | null;
+  first_seen: string;
+  last_scanned: string | null;
+  source: string;
+  cheap_score: number | null;
+  cheap_verdict: string | null;
+  full_score: number | null;
+  status: DiscoveryStatus | string;
+  scan_history: DiscoveryScanEntry[];
+  market_cap_usd: number | null;
+  currency: string | null;
+}
+
 export interface Stock {
   ticker: string;
   name: string;
@@ -45,7 +123,7 @@ export interface Stock {
   marketCap: string;
   score: number;
   scoreDelta: number;
-  thesis: string;
+  watchlistThesis: string;
   killCondition: string;
   killConditionEval?: {
     status: "safe" | "warning" | "triggered";
@@ -60,6 +138,7 @@ export interface Stock {
   tags: string[];
   overallSignal: string;
   convergence: { bullish: number; bearish: number; neutral: number; total: number };
+  thesisRun?: ThesisRun | null;
   dataQuality?: DataQuality | null;
 }
 
@@ -105,6 +184,36 @@ export async function loadStocks(): Promise<Stock[]> {
   const analysisMap: Record<string, any> = {};
   for (const a of analysisRows || []) {
     analysisMap[a.ticker] = a;
+  }
+
+  // ENRICH: latest thesis row per stock from `theses` table (v2 dashboard headline source).
+  // The table has multiple rows per ticker (one per run); we want the most recent.
+  // Explicit columns (skip raw_response_blocks ~50-100KB/row).
+  // LIMIT 200 bounds payload as event-triggered runs accumulate (session 5+).
+  const THESIS_FIELDS = [
+    "ticker","run_at","prompt_version",
+    "thesis_target","breakout_price","risk_adj_target",
+    "conviction","position_size_pct","buy_below","trim_above",
+    "filters","top_risks","top_catalysts","kill_triggers",
+    "spot_at_run","trigger_reason","markdown_path",
+    "coverage_quality","cited_domains",
+  ].join(",");
+  const { data: thesesRows } = await supabase
+    .from("theses")
+    .select(THESIS_FIELDS)
+    .order("run_at", { ascending: false })
+    // LIMIT 1000 gives ~14 years of runway at monthly cadence on 6 tickers.
+    // BEFORE session 5 (event-triggered runs) deploys, replace this with a
+    // Postgres view `latest_thesis_per_ticker` to guarantee per-ticker
+    // coverage regardless of run distribution.
+    .limit(1000);
+
+  const thesesMap: Record<string, ThesisRun> = {};
+  for (const t of thesesRows || []) {
+    if (!thesesMap[t.ticker]) {
+      // First (most recent) row per ticker, since query is ordered DESC
+      thesesMap[t.ticker] = t as ThesisRun;
+    }
   }
 
   // ENRICH: latest signals per stock per scout
@@ -182,7 +291,7 @@ export async function loadStocks(): Promise<Stock[]> {
       marketCap: formatMarketCap(marketCapB),
       score,
       scoreDelta: 0,
-      thesis: row.thesis || "",
+      watchlistThesis: row.thesis || "",
       killCondition: row.kill_condition || "",
       signals,
       scoreHistory: score > 0 ? [score, score] : [0],
@@ -190,6 +299,7 @@ export async function loadStocks(): Promise<Stock[]> {
       tags: row.tags || [],
       overallSignal: analysis?.overall_signal || "neutral",
       convergence,
+      thesisRun: thesesMap[ticker] || null,
       dataQuality,
     };
   });
@@ -298,6 +408,23 @@ export async function loadStocksForModel(): Promise<any[]> {
     return [];
   }
 
+  // Enrich with latest thesis row per ticker (v2: anchor for the model page)
+  const THESIS_FIELDS_M = [
+    "ticker","run_at","prompt_version",
+    "thesis_target","breakout_price","risk_adj_target",
+    "conviction","position_size_pct","buy_below","trim_above",
+  ].join(",");
+  const { data: thesesRowsM } = await supabase
+    .from("theses")
+    .select(THESIS_FIELDS_M)
+    .order("run_at", { ascending: false })
+    .limit(1000);
+  const thesesMapM: Record<string, ThesisRun> = {};
+  for (const t of thesesRowsM || []) {
+    if (!thesesMapM[t.ticker]) thesesMapM[t.ticker] = t as ThesisRun;
+  }
+
+
   // Load latest analysis
   const { data: analysisRows } = await supabase
     .from("latest_analysis")
@@ -348,7 +475,8 @@ export async function loadStocksForModel(): Promise<any[]> {
       ticker: w.ticker,
       name: w.name,
       sector: w.sector,
-      thesis: w.thesis,
+      watchlistThesis: w.thesis,
+      thesisRun: thesesMapM[w.ticker] || null,
       killCondition: w.kill_condition,
       archetype: w.archetype || null,
       target,
@@ -363,7 +491,6 @@ export async function loadStocksForModel(): Promise<any[]> {
       operatingMarginPct: quant.operating_margin_pct || 0,
       grossMarginPct: quant.gross_margin_pct || 0,
       compositeScore: a.composite_score || 0,
-      valuation: a.valuation || {},
       autoTiers: a.auto_tiers || [],
       // Event impacts — passes through untouched from analyst.
       // Shape: { events: [...], summary: {...}, merge_enabled, proposed_target_with_events, reasoner_available }

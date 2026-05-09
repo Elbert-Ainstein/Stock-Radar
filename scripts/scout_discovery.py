@@ -66,6 +66,39 @@ DEFAULT_AI_TOP_N = 10          # validate top N candidates with AI
 PERPLEXITY_KEY = os.environ.get("PERPLEXITY_API_KEY", "")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
+# ─── Market detection ───
+# Suffixes for the markets we currently support. Bare tickers (no dot) are US.
+# Keep this list in sync with downstream consumers (lib/data.ts inferCurrency,
+# discovery migrations).
+_MARKET_SUFFIXES: dict[str, str] = {
+    "HK": "HK",     # Hong Kong (e.g. 0700.HK, 6082.HK)
+    "T": "JP",      # Tokyo Stock Exchange (e.g. 7203.T)
+    "TW": "TW",     # Taiwan Stock Exchange (e.g. 2330.TW)
+    "TWO": "TW",    # Taiwan OTC / Taipei Exchange
+    "KS": "KR",     # KOSPI (e.g. 005930.KS)
+    "KQ": "KR",     # KOSDAQ (e.g. 123456.KQ)
+}
+
+
+def detect_market(ticker: str) -> str:
+    """Return the market code for a ticker based on its suffix.
+
+    Returns one of: "US" | "HK" | "JP" | "TW" | "KR" | "UNKNOWN".
+
+    Bare tickers (no dot) and US-style hyphenated tickers like "BRK-B"
+    are treated as US.
+    """
+    if not ticker:
+        return "UNKNOWN"
+    if "." not in ticker:
+        # Bare US ticker; allow letters, digits, and hyphen (e.g. BRK-B).
+        # If it looks like junk (lowercase, weird chars), still call it US —
+        # the upstream filter will reject it on length/charset.
+        return "US"
+    suffix = ticker.rsplit(".", 1)[1].upper()
+    return _MARKET_SUFFIXES.get(suffix, "UNKNOWN")
+
+
 # ═══════════════════════════════════════════════════════════════
 # STAGE 1: WIDE NET — Collect tickers from multiple sources
 # ═══════════════════════════════════════════════════════════════
@@ -209,13 +242,23 @@ def stage1_collect_universe(watchlist_tickers: set[str]) -> list[str]:
         print(f"  Excluded {excluded} stocks already on watchlist")
 
     # Remove ETFs and common non-stock tickers
+    # Multi-market aware: keep US tickers and known Asian suffixes
+    # (.HK, .T, .TW, .TWO, .KS, .KQ). Warn (don't silently drop) on unknown formats.
     etf_suffixes = {"X", "Q"}  # crude filter
     cleaned = set()
     for t in all_tickers:
-        # Skip anything with dots (BRK.B → BRK-B handled elsewhere), numbers, or >5 chars
-        if "." in t or len(t) > 5:
-            continue
-        cleaned.add(t)
+        market = detect_market(t)
+        if market == "US":
+            # Bare US ticker — same heuristic as before (≤5 chars, no dot).
+            if "." in t or len(t) > 5:
+                continue
+            cleaned.add(t)
+        elif market != "UNKNOWN":
+            # Known Asian suffix — keep it.
+            cleaned.add(t)
+        else:
+            # Unrecognized format — log instead of silently dropping.
+            print(f"  [filter] Unknown ticker format dropped: {t!r}")
 
     universe = sorted(cleaned)
     print(f"\n  Stage 1 result: {len(universe)} unique tickers to scan")
@@ -229,6 +272,11 @@ def stage1_collect_universe(watchlist_tickers: set[str]) -> list[str]:
 def _fetch_stock_data(ticker: str) -> dict | None:
     """Fetch fundamentals from yfinance for a single ticker. Fast path."""
     try:
+        market = detect_market(ticker)
+        if market == "UNKNOWN":
+            print(f"  [fetch] Unknown ticker format, skipping: {ticker!r}")
+            return None
+
         stock = yf.Ticker(ticker)
         info = stock.info
         if not info or "marketCap" not in info:
@@ -279,6 +327,7 @@ def _fetch_stock_data(ticker: str) -> dict | None:
 
         return {
             "ticker": ticker,
+            "market": market,
             "name": info.get("shortName") or info.get("longName") or ticker,
             "sector": info.get("sector", ""),
             "industry": info.get("industry", ""),
@@ -926,7 +975,6 @@ def main():
         mcap = f"${d['market_cap_b']:.1f}B"
         print(f"  {c['_rank']:<4} {c['ticker']:<7} {s['composite']:<6.1f} {d['revenue_growth_pct']:<7.0f} {d['gross_margin_pct']:<6.0f} {mcap:<8} {c['signal']:<8}")
 
-    # ── Stage 3: AI validation (unless quick mode) ──
     if not quick_mode and (PERPLEXITY_KEY or ANTHROPIC_KEY):
         ai_candidates = [c for c in candidates if c["scores"]["composite"] >= AI_SCORE_THRESHOLD]
         actual_top_n = min(ai_top_n, len(ai_candidates))

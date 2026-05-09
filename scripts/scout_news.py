@@ -319,9 +319,34 @@ def parse_search_results(ticker: str, raw_response: dict) -> dict:
     }
 
 
+def _load_tickers_from_discovery() -> list[dict]:
+    """Read US tickers from discovery_universe (statuses: exploring/promising/qualified/watchlisted)."""
+    from supabase_helper import get_client
+    sb = get_client()
+    rows = sb.table("discovery_universe").select(
+        "ticker,company_name,market"
+    ).in_("status", ["exploring", "promising", "qualified", "watchlisted"]).execute().data or []
+    return [{"ticker": r["ticker"], "name": r.get("company_name") or r["ticker"]} for r in rows]
+
+
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--source",
+        choices=["watchlist", "discovery"],
+        default="watchlist",
+        help=(
+            "Where to read tickers from. 'watchlist' (default) preserves legacy "
+            "behavior. 'discovery' reads the broader discovery_universe (~155 "
+            "tickers including 13F-surfaced candidates) — use this to enable "
+            "cross-type convergence in Module 11."
+        ),
+    )
+    args = parser.parse_args()
+
     print("=" * 50)
-    print("SCOUT 2: NEWS SCANNER (Perplexity)")
+    print(f"SCOUT 2: NEWS SCANNER (Perplexity, source={args.source})")
     print("=" * 50)
 
     if not PERPLEXITY_API_KEY:
@@ -330,7 +355,10 @@ def main():
         print("  PERPLEXITY_API_KEY=pplx-xxxxxxxxxxxx")
         return []
 
-    watchlist = get_watchlist()
+    if args.source == "discovery":
+        watchlist = _load_tickers_from_discovery()
+    else:
+        watchlist = get_watchlist()
 
     # Skip stocks with recent signals
     from utils import get_fresh_tickers

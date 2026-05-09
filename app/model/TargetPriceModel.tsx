@@ -186,7 +186,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
   // NOTE: stock can be undefined if all stocks are deleted — guard downstream,
   // but do NOT early-return here (all hooks must be called unconditionally).
   const hasQuant = stock ? (stock.currentPrice > 0 || stock.marketCapB > 0) : false;
-  const hasAnalysis = stock ? !!(stock.sector && stock.sector !== "Unknown" && stock.thesis && !stock.thesis.includes("pipeline will generate")) : false;
+  const hasAnalysis = stock ? !!(stock.sector && stock.sector !== "Unknown" && stock.watchlistThesis && !stock.watchlistThesis.includes("pipeline will generate")) : false;
   const stockHasData = hasQuant && hasAnalysis;
 
   // Detect valuation method — initial guess from stock data (may be overridden by engine)
@@ -423,39 +423,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg)]">
-      {/* Header */}
-      <header className="border-b border-[var(--border)] bg-[var(--bg-elevated)]">
-        <div className="max-w-[1000px] mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <a href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <div className="w-7 h-7 rounded-md bg-[var(--text)] flex items-center justify-center text-[11px] font-bold text-[var(--bg)]">SR</div>
-              <div>
-                <h1 className="text-[15px] font-semibold text-[var(--text)]">Target Price Model</h1>
-                <p className="text-[10px] text-[var(--muted)]">Reverse-Valuation Framework</p>
-              </div>
-            </a>
-            <nav className="flex gap-4 text-xs">
-              <a href="/" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Watchlist</a>
-              <a href="/discovery" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Discovery</a>
-              <span className="text-amber-500 font-medium">Models</span>
-            </nav>
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={toggleTheme}
-              className="text-[var(--muted)] hover:text-[var(--text)] transition-colors p-1.5 rounded-md hover:bg-[var(--hover)]"
-              title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            >
-              {theme === "dark" ? (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.4 3.4l.7.7M11.9 11.9l.7.7M3.4 12.6l.7-.7M11.9 4.1l.7-.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 9.2A5.5 5.5 0 016.8 2.5a6 6 0 106.7 6.7z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              )}
-            </button>
-          </div>
-        </div>
-      </header>
+    <div style={{ minHeight: "100vh", background: "var(--sr-paper)", color: "var(--sr-ink)" }}>
 
       <main className="max-w-[1000px] mx-auto px-6 py-8">
         {/* Stock selector */}
@@ -512,10 +480,10 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
         </div>
 
         {/* Thesis */}
-        {stock.thesis && (
+        {stock.watchlistThesis && (
           <div className="mb-8 text-[13px] text-[var(--secondary)] leading-relaxed">
             <span className="text-[var(--text)] font-medium">Thesis: </span>
-            {stock.thesis}
+            {stock.watchlistThesis}
           </div>
         )}
 
@@ -1047,7 +1015,7 @@ export default function TargetPriceModel({ stocks: initialStocks, meta, initialT
               )}
               {kEval?.checked_at && (
                 <div className="text-[9px] text-[var(--faint)] mt-2 font-mono">
-                  Last checked: {new Date(kEval.checked_at).toLocaleDateString()}
+                  Last checked: {new Date(kEval.checked_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                 </div>
               )}
             </div>

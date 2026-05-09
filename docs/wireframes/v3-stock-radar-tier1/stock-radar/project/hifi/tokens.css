@@ -1,0 +1,198 @@
+/* =======================================================================
+   Stock Radar — Production tokens
+   Earth-tone palette, Inter + Geist Mono, WCAG AA on both themes.
+   ======================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* --- LIGHT THEME (default) ----------------------------------------- */
+  --paper:        #fcfcfa;   /* page background */
+  --paper-1:      #f6f4ec;   /* card / surface */
+  --paper-2:      #ece8d8;   /* elevated / hover */
+  --paper-3:      #dfd9c4;   /* sunken / press */
+  --rule:         #d6cfb6;   /* primary divider */
+  --rule-soft:    #e6dfc8;   /* secondary divider */
+  --rule-strong:  #b8ae8e;   /* emphasis divider */
+
+  --ink:          #14120f;   /* primary text */
+  --ink-1:        #34302a;   /* high-emphasis secondary */
+  --ink-2:        #5a544a;   /* medium-emphasis secondary */
+  --ink-3:        #847e6f;   /* tertiary / placeholder */
+  --ink-4:        #a39b87;   /* disabled */
+
+  /* Conviction — 5 levels, AA on paper -------------------------------- */
+  --conv-strong:    #0f6b3e;   /* emerald — high conviction */
+  --conv-strong-bg: #d8eadd;
+  --conv-good:      #527a1a;   /* lime — solid */
+  --conv-good-bg:   #e3eccf;
+  --conv-watch:     #8a6914;   /* amber — watching */
+  --conv-watch-bg:  #f0e4c2;
+  --conv-fade:      #a25217;   /* orange — fading */
+  --conv-fade-bg:   #f3dcc4;
+  --conv-broken:    #9b2a1d;   /* red — broken thesis */
+  --conv-broken-bg: #f1d3cd;
+
+  /* Direction — price up/down ----------------------------------------- */
+  --pos:        #0f6b3e;
+  --pos-bg:     #d8eadd;
+  --neg:        #9b2a1d;
+  --neg-bg:     #f1d3cd;
+  --neutral:    #5a544a;
+
+  /* Action --------------------------------------------------------------*/
+  --action:     #14120f;     /* primary button bg */
+  --action-ink: #fcfcfa;     /* primary button text */
+  --link:       #2c5e8c;     /* sober blue, AA on paper */
+
+  /* State pills -------------------------------------------------------- */
+  --info-bg:    #dde6ef;
+  --info-ink:   #2c5e8c;
+  --warn-bg:    #f0e4c2;
+  --warn-ink:   #6b4f0d;
+  --err-bg:     #f1d3cd;
+  --err-ink:    #7a1f15;
+  --ok-bg:      #d8eadd;
+  --ok-ink:     #0a4f2c;
+
+  --shadow-sm: 0 1px 0 rgba(20,18,15,0.04), 0 1px 2px rgba(20,18,15,0.06);
+  --shadow-md: 0 1px 0 rgba(20,18,15,0.04), 0 4px 12px rgba(20,18,15,0.08);
+  --shadow-lg: 0 1px 0 rgba(20,18,15,0.04), 0 16px 40px rgba(20,18,15,0.14);
+
+  --radius-sm: 4px;
+  --radius:    6px;
+  --radius-lg: 10px;
+
+  /* Typography --------------------------------------------------------- */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'JetBrains Mono', SFMono-Regular, Consolas, monospace;
+  --num-feat: "tnum" 1, "lnum" 1, "ss01" 1, "zero" 1; /* tabular + slashed zero */
+}
+
+[data-theme="dark"] {
+  --paper:        #14120f;
+  --paper-1:      #1c1a17;
+  --paper-2:      #25221d;
+  --paper-3:      #2f2b25;
+  --rule:         #3a352d;
+  --rule-soft:    #2c2823;
+  --rule-strong:  #5b5347;
+
+  --ink:          #ece7da;
+  --ink-1:        #d3ccba;
+  --ink-2:        #aaa28e;
+  --ink-3:        #847e6f;
+  --ink-4:        #5b5347;
+
+  --conv-strong:    #5fb583;
+  --conv-strong-bg: #1f3a29;
+  --conv-good:      #a8c860;
+  --conv-good-bg:   #2e3a1c;
+  --conv-watch:     #d9b755;
+  --conv-watch-bg:  #3a311a;
+  --conv-fade:      #d98a4a;
+  --conv-fade-bg:   #3a261a;
+  --conv-broken:    #d96a59;
+  --conv-broken-bg: #3a1f1a;
+
+  --pos:    #5fb583;
+  --pos-bg: #1f3a29;
+  --neg:    #d96a59;
+  --neg-bg: #3a1f1a;
+  --neutral:#aaa28e;
+
+  --action:     #ece7da;
+  --action-ink: #14120f;
+  --link:       #7eaad9;
+
+  --info-bg:  #1f2c3a;
+  --info-ink: #9bbde0;
+  --warn-bg:  #3a311a;
+  --warn-ink: #e0c478;
+  --err-bg:   #3a1f1a;
+  --err-ink:  #e89484;
+  --ok-bg:    #1f3a29;
+  --ok-ink:   #8acca5;
+
+  --shadow-sm: 0 1px 0 rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.5);
+  --shadow-md: 0 1px 0 rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.45);
+  --shadow-lg: 0 1px 0 rgba(0,0,0,0.4), 0 16px 40px rgba(0,0,0,0.6);
+}
+
+/* =======================================================================
+   Base resets — scoped to .sr surfaces so the canvas chrome is unaffected
+   ======================================================================= */
+.sr, .sr * {
+  box-sizing: border-box;
+}
+
+.sr {
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--paper);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01" 1;
+}
+
+.sr .mono { font-family: var(--font-mono); font-feature-settings: var(--num-feat); }
+.sr .num  { font-variant-numeric: tabular-nums slashed-zero; font-feature-settings: var(--num-feat); }
+
+.sr h1, .sr h2, .sr h3, .sr h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.sr p { margin: 0; }
+.sr button { font: inherit; color: inherit; }
+
+/* eyebrow / overline */
+.sr .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+/* utility */
+.sr hr { border: 0; border-top: 1px solid var(--rule); margin: 0; }
+.sr .rule-soft  { border-top: 1px solid var(--rule-soft); }
+
+/* surfaces */
+.sr-surface {
+  background: var(--paper-1);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+/* artboard host (used inside DCArtboard) */
+.sr-artboard {
+  width: 100%;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  overflow: hidden;
+}
+
+/* skeleton shimmer ---------------------------------------------------- */
+@keyframes sr-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.sr-skel {
+  background: linear-gradient(
+    90deg,
+    var(--paper-2) 0%,
+    var(--paper-3) 50%,
+    var(--paper-2) 100%
+  );
+  background-size: 800px 100%;
+  animation: sr-shimmer 1.6s linear infinite;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+/* focus ring ---------------------------------------------------------- */
+.sr :focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

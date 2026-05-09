@@ -278,31 +278,6 @@ export default function LogsDashboard() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
-      {/* Header */}
-      <header className="border-b border-[var(--border)] bg-[var(--bg-elevated)]">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="text-[var(--muted)] hover:text-[var(--fg)] text-sm">
-              ← Dashboard
-            </Link>
-            <h1 className="text-lg font-semibold">Activity Log</h1>
-            <span className="text-xs text-[var(--muted)]">{total} entries</span>
-          </div>
-
-          {/* Quick stats */}
-          <div className="flex items-center gap-3 text-xs font-mono">
-            <span className="text-[var(--muted)]">{stats.info} info</span>
-            <span className="text-amber-400">{stats.warn} warn</span>
-            <span className="text-red-400">{stats.error} error</span>
-            <button
-              onClick={fetchLogs}
-              className="ml-2 px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--card)] text-[var(--muted)]"
-            >
-              ↻ Refresh
-            </button>
-          </div>
-        </div>
-      </header>
 
       <div className="max-w-6xl mx-auto px-4 py-4">
         {/* Filters */}

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Stock Radar — Production</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="hifi/tokens.css" />
+<style>
+  html, body { margin: 0; padding: 0; background: var(--paper); height: 100%; overflow: hidden; }
+  body { font-family: 'Inter', system-ui, sans-serif; color: var(--ink); }
+</style>
+</head>
+<body data-theme="light">
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="hifi/design-canvas.jsx"></script>
+<script type="text/babel" src="hifi/tweaks-panel.jsx"></script>
+<script type="text/babel" src="hifi/sr-data.jsx"></script>
+<script type="text/babel" src="hifi/sr-atoms.jsx"></script>
+<script type="text/babel" src="hifi/sr-watchlist.jsx"></script>
+<script type="text/babel" src="hifi/sr-detail.jsx"></script>
+<script type="text/babel" src="hifi/sr-model.jsx"></script>
+<script type="text/babel" src="hifi/sr-other.jsx"></script>
+<script type="text/babel" src="hifi/sr-convergence.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "state": "happy",
+  "view": "list"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tw, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  React.useEffect(() => { document.body.dataset.theme = tw.theme; }, [tw.theme]);
+  const stateOpts = ['happy','empty','loading','error','stale'];
+
+  return (
+    <>
+      <DesignCanvas>
+        {/* WATCHLIST */}
+        <DCSection id="watch-desktop" title="Watchlist · Desktop" subtitle="default = list · toggle to grid or ladder · all states">
+          <DCArtboard id="wl-d-happy"   label="Desktop · happy · list"   width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="happy"   defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-grid"    label="Desktop · happy · grid"   width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="happy"   defaultView="grid" /></DCArtboard>
+          <DCArtboard id="wl-d-ladder"  label="Desktop · happy · ladder" width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="happy"   defaultView="ladder" /></DCArtboard>
+          <DCArtboard id="wl-d-loading" label="Desktop · loading"        width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="loading" defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-error"   label="Desktop · error"          width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="error"   defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-stale"   label="Desktop · stale"          width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="stale"   defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-empty"   label="Desktop · empty"          width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="empty"   defaultView="list" /></DCArtboard>
+        </DCSection>
+
+        <DCSection id="watch-tablet" title="Watchlist · Tablet (834×1112)" subtitle="grid 2-up · list scrolls horizontally">
+          <DCArtboard id="wl-t-grid"  label="Tablet · grid"  width={834} height={1112}><WatchlistArtboard breakpoint="tablet" state="happy" defaultView="grid"/></DCArtboard>
+          <DCArtboard id="wl-t-list"  label="Tablet · list"  width={834} height={1112}><WatchlistArtboard breakpoint="tablet" state="happy" defaultView="list"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="watch-phone" title="Watchlist · Phone (390×844)" subtitle="full parity · stacked cards · bottom nav">
+          <DCArtboard id="wl-p-happy"   label="Phone · happy"   width={390} height={844}><WatchlistArtboard breakpoint="phone" state="happy"/></DCArtboard>
+          <DCArtboard id="wl-p-loading" label="Phone · loading" width={390} height={844}><WatchlistArtboard breakpoint="phone" state="loading"/></DCArtboard>
+          <DCArtboard id="wl-p-error"   label="Phone · error"   width={390} height={844}><WatchlistArtboard breakpoint="phone" state="error"/></DCArtboard>
+        </DCSection>
+
+        {/* STOCK DETAIL */}
+        <DCSection id="detail-desktop" title="Stock Detail · Desktop" subtitle="full-page route · all states">
+          <DCArtboard id="sd-d-happy"   label="Desktop · happy"   width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="happy"/></DCArtboard>
+          <DCArtboard id="sd-d-empty"   label="Desktop · empty (no thesis yet)" width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="empty"/></DCArtboard>
+          <DCArtboard id="sd-d-loading" label="Desktop · loading (60–120s)"      width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="loading"/></DCArtboard>
+          <DCArtboard id="sd-d-error"   label="Desktop · error (subprocess)"    width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="error"/></DCArtboard>
+          <DCArtboard id="sd-d-stale"   label="Desktop · stale (>24h)"          width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="stale"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="detail-tablet" title="Stock Detail · Tablet">
+          <DCArtboard id="sd-t-happy" label="Tablet · happy" width={834} height={1180}><StockDetailArtboard breakpoint="tablet" state="happy"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="detail-phone" title="Stock Detail · Phone">
+          <DCArtboard id="sd-p-happy"   label="Phone · happy"   width={390} height={844}><StockDetailArtboard breakpoint="phone" state="happy"/></DCArtboard>
+          <DCArtboard id="sd-p-empty"   label="Phone · empty"   width={390} height={844}><StockDetailArtboard breakpoint="phone" state="empty"/></DCArtboard>
+          <DCArtboard id="sd-p-loading" label="Phone · loading" width={390} height={844}><StockDetailArtboard breakpoint="phone" state="loading"/></DCArtboard>
+          <DCArtboard id="sd-p-error"   label="Phone · error"   width={390} height={844}><StockDetailArtboard breakpoint="phone" state="error"/></DCArtboard>
+        </DCSection>
+
+        {/* MODEL DETAIL */}
+        <DCSection id="model-detail" title="Model Detail · Thesis + Floor" subtitle="full thesis output, DCF as floor input, run history">
+          <DCArtboard id="md-d-happy" label="Desktop · happy"  width={1440} height={1100}><ModelDetailArtboard state="happy"/></DCArtboard>
+          <DCArtboard id="md-d-stale" label="Desktop · stale"  width={1440} height={1100}><ModelDetailArtboard state="stale"/></DCArtboard>
+        </DCSection>
+
+        {/* ============================================================
+             DISCOVERY (CONVERGENCE) — REPLACES generic Discovery
+             ============================================================ */}
+        <DCSection id="disc-rationale" title="Discovery · convergence — rationale" subtitle="how I'm modeling tier and class chips, plus the two opinion answers">
+          <DCArtboard id="disc-notes" label="Design notes & opinions" width={1280} height={820}>
+            <div className="sr" style={{ padding: '32px 40px', height: '100%', overflow: 'auto', background: 'var(--paper)' }}>
+              <div style={{ maxWidth: 880, display: 'flex', flexDirection: 'column', gap: 22 }}>
+                <header>
+                  <span className="eyebrow">Convergence Discovery — design rationale</span>
+                  <h1 style={{ fontSize: 24, marginTop: 6, letterSpacing: '-0.015em' }}>Three opinions you asked for, then the artboards.</h1>
+                </header>
+
+                <section>
+                  <h3 style={{ fontSize: 14 }}>1 · Should STRONG be visually <em>louder</em>?</h3>
+                  <p style={{ fontSize: 13, color: 'var(--ink-1)', marginTop: 6, lineHeight: 1.55 }}>
+                    <strong>Yes — but only on the badge and a 3-px left rule on cards, not background fills.</strong> The whole point of convergence is that 3+ classes hitting the same name is rare and load-bearing; you want it pre-attentively visible while skimming a long list at 6am. A flat list where SINGLE-class momentum noise looks identical to STRONG cross-source signal forces the eye to read every chip group, which defeats the purpose of pre-aggregating. The risk of "loud" is fatigue — so the loudness budget is spent ONLY on the tier badge color/fill and a 3px conv-strong border on the left of cards. Background fills on the whole row are too much; we only fill MEDIUM/STRONG <em>lane backgrounds</em> in the ladder view (variant C) where the lane chrome <em>is</em> the structure.
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 6 }}>
+                    Compare wl-disc-Bloud vs wl-disc-Bquiet artboards below — the quiet version legitimately feels democratic but it makes you re-derive tier from chip count on every row.
+                  </p>
+                </section>
+
+                <section>
+                  <h3 style={{ fontSize: 14 }}>2 · Class chips: always-on, hover, or expandable?</h3>
+                  <p style={{ fontSize: 13, color: 'var(--ink-1)', marginTop: 6, lineHeight: 1.55 }}>
+                    <strong>Always-on, with a 5-slot fixed-width strip.</strong> Hover reveal fails on touch and on tablets. Expandable adds a click between you and the answer. The chips are tiny (16-19px tall, mono caps, ~32-44px wide) — five of them inline cost ~220px, which fits even at 375px phone width if you accept wrapping. The fixed-slot variant (chip = present, dim placeholder = absent) is tempting for visual rhythm but adds noise; we're keeping the simpler "show present chips left-aligned, wrap if needed" approach.
+                  </p>
+                </section>
+
+                <section>
+                  <h3 style={{ fontSize: 14 }}>3 · Queue thesis run — how much friction?</h3>
+                  <p style={{ fontSize: 13, color: 'var(--ink-1)', marginTop: 6, lineHeight: 1.55 }}>
+                    Two strongest options shipped as toggleable variants:
+                  </p>
+                  <ol style={{ fontSize: 13, color: 'var(--ink-1)', marginTop: 6, lineHeight: 1.6, paddingLeft: 18 }}>
+                    <li><strong>One-click + toast undo</strong> (recommended for STRONG/MEDIUM). The button instantly switches to "Queued" with a 5s undo affordance. Reasoning: STRONG candidates are the whole reason this view exists — adding modal friction here punishes the user for using the feature correctly. The toast undo covers fat-finger.</li>
+                    <li><strong>Two-click confirm with cost callout</strong> (recommended for SINGLE / momentum-only). When you queue a 1-class candidate, the inline confirm shows "~$3-5 · Opus run" before charging. The cost is the same; the asymmetric friction nudges you away from queueing low-quality candidates without forbidding it.</li>
+                  </ol>
+                  <p style={{ fontSize: 13, color: 'var(--ink-1)', marginTop: 8, lineHeight: 1.55 }}>
+                    "Review for thesis → opens a queue" was rejected: it adds a workflow stage that doesn't earn its place. The convergence list <em>is</em> the queue.
+                  </p>
+                </section>
+
+                <section style={{ background: 'var(--paper-1)', border: '1px solid var(--rule)', borderRadius: 6, padding: 14 }}>
+                  <h3 style={{ fontSize: 13 }}>What's downstream of this section</h3>
+                  <ul style={{ fontSize: 12.5, color: 'var(--ink-1)', marginTop: 6, lineHeight: 1.6, paddingLeft: 18 }}>
+                    <li><strong>Discovery A · Bloomberg table</strong> — 1 row per candidate, 7 columns. Loud variant only. Phone falls back to variant B.</li>
+                    <li><strong>Discovery B · Cards with reasons</strong> — recommended for default. Loud + Quiet variants. Confirmation patterns: one-click and two-click.</li>
+                    <li><strong>Discovery C · Pipeline ladder</strong> — Trello-style, tier × cheap_score. Best for triage.</li>
+                    <li><strong>States</strong> — empty / loading skeleton / error w/ retry.</li>
+                    <li><strong>Watchlist Refresh A</strong> — inline strip above table.</li>
+                    <li><strong>Watchlist Refresh B</strong> — sticky right rail.</li>
+                  </ul>
+                </section>
+              </div>
+            </div>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="disc-desktop" title="Discovery · Desktop (1440×900)" subtitle="three row-layout variants, all happy state">
+          <DCArtboard id="dc-A-loud"  label="A · Bloomberg table · loud tiers"   width={1440} height={900}><DiscoveryConvergenceArtboard variant="A" breakpoint="desktop" state="happy" loud={true}/></DCArtboard>
+          <DCArtboard id="dc-A-quiet" label="A · Bloomberg table · quiet tiers"  width={1440} height={900}><DiscoveryConvergenceArtboard variant="A" breakpoint="desktop" state="happy" loud={false}/></DCArtboard>
+          <DCArtboard id="dc-B-loud"  label="B · Cards · loud · one-click"       width={1440} height={900}><DiscoveryConvergenceArtboard variant="B" breakpoint="desktop" state="happy" loud={true}  confirmPattern="one-click"/></DCArtboard>
+          <DCArtboard id="dc-B-quiet" label="B · Cards · quiet · two-click"      width={1440} height={900}><DiscoveryConvergenceArtboard variant="B" breakpoint="desktop" state="happy" loud={false} confirmPattern="two-click"/></DCArtboard>
+          <DCArtboard id="dc-C"       label="C · Pipeline ladder"                width={1440} height={900}><DiscoveryConvergenceArtboard variant="C" breakpoint="desktop" state="happy" loud={true}/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="disc-states" title="Discovery · States" subtitle="empty, loading, error — applies to all three variants">
+          <DCArtboard id="dc-empty"   label="Empty · run feeders"        width={1440} height={760}><DiscoveryConvergenceArtboard variant="B" state="empty"/></DCArtboard>
+          <DCArtboard id="dc-loading" label="Loading · skeleton table"   width={1440} height={760}><DiscoveryConvergenceArtboard variant="A" state="loading"/></DCArtboard>
+          <DCArtboard id="dc-error"   label="Error · partial w/ retry"   width={1440} height={760}><DiscoveryConvergenceArtboard variant="B" state="error"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="disc-tablet" title="Discovery · Tablet (768×1024)" subtitle="Bloomberg table falls back to cards; ladder collapses to single column">
+          <DCArtboard id="dc-t-B" label="Tablet · cards"   width={768} height={1024}><DiscoveryConvergenceArtboard variant="B" breakpoint="tablet" state="happy" loud={true}/></DCArtboard>
+          <DCArtboard id="dc-t-C" label="Tablet · ladder"  width={768} height={1024}><DiscoveryConvergenceArtboard variant="C" breakpoint="tablet" state="happy" loud={true}/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="disc-phone" title="Discovery · Phone (375×812)" subtitle="A→B fallback (table won't fit); ladder stacks to single column">
+          <DCArtboard id="dc-p-B"    label="Phone · cards (default)" width={375} height={812}><DiscoveryConvergenceArtboard variant="B" breakpoint="phone" state="happy" loud={true}/></DCArtboard>
+          <DCArtboard id="dc-p-Bnow" label="Phone · cards · one-click queue" width={375} height={812}><DiscoveryConvergenceArtboard variant="B" breakpoint="phone" state="happy" loud={true} confirmPattern="one-click"/></DCArtboard>
+          <DCArtboard id="dc-p-C"    label="Phone · ladder (stacked)"        width={375} height={812}><DiscoveryConvergenceArtboard variant="C" breakpoint="phone" state="happy" loud={true}/></DCArtboard>
+          <DCArtboard id="dc-p-empty" label="Phone · empty"                  width={375} height={812}><DiscoveryConvergenceArtboard variant="B" breakpoint="phone" state="empty"/></DCArtboard>
+        </DCSection>
+
+        {/* ============================================================
+             WATCHLIST CONVERGENCE REFRESH
+             ============================================================ */}
+        <DCSection id="refresh-desktop" title="Watchlist · Convergence refresh (1440×900)" subtitle="A inline strip · B sticky right rail">
+          <DCArtboard id="rf-A-d"        label="A · inline strip · happy"   width={1440} height={900}><WatchlistWithRefresh variant="A" breakpoint="desktop" refreshState="happy"/></DCArtboard>
+          <DCArtboard id="rf-A-d-empty"  label="A · inline strip · empty"   width={1440} height={900}><WatchlistWithRefresh variant="A" breakpoint="desktop" refreshState="empty"/></DCArtboard>
+          <DCArtboard id="rf-B-d"        label="B · sticky right rail · happy"  width={1440} height={900}><WatchlistWithRefresh variant="B" breakpoint="desktop" refreshState="happy"/></DCArtboard>
+          <DCArtboard id="rf-B-d-empty"  label="B · sticky right rail · empty"  width={1440} height={900}><WatchlistWithRefresh variant="B" breakpoint="desktop" refreshState="empty"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="refresh-responsive" title="Watchlist · Convergence refresh — responsive" subtitle="tablet keeps A only; phone collapses to A">
+          <DCArtboard id="rf-A-t" label="Tablet · 768 · inline strip"  width={768} height={1024}><WatchlistWithRefresh variant="A" breakpoint="tablet" refreshState="happy"/></DCArtboard>
+          <DCArtboard id="rf-A-p" label="Phone · 375 · inline strip"   width={375} height={812}><WatchlistWithRefresh variant="A" breakpoint="phone"  refreshState="happy"/></DCArtboard>
+        </DCSection>
+
+        {/* ============================================================
+             RESPONSIVE PARITY — confirm existing flows at requested breakpoints
+             ============================================================ */}
+        <DCSection id="responsive-parity" title="Responsive parity at requested breakpoints" subtitle="existing Watchlist A and Stock Detail B re-rendered at 1440×900, 768×1024, 375×812">
+          <DCArtboard id="rp-wl-1440" label="Watchlist A · 1440 desktop"  width={1440} height={900}><WatchlistArtboard breakpoint="desktop" state="happy" defaultView="list"/></DCArtboard>
+          <DCArtboard id="rp-wl-768"  label="Watchlist A · 768 tablet"    width={768}  height={1024}><WatchlistArtboard breakpoint="tablet" state="happy" defaultView="list"/></DCArtboard>
+          <DCArtboard id="rp-wl-375"  label="Watchlist A · 375 phone"     width={375}  height={812}><WatchlistArtboard breakpoint="phone" state="happy"/></DCArtboard>
+          <DCArtboard id="rp-sd-1440" label="Stock Detail B · 1440 desktop" width={1440} height={900}><StockDetailArtboard breakpoint="desktop" state="happy"/></DCArtboard>
+          <DCArtboard id="rp-sd-768"  label="Stock Detail B · 768 tablet"   width={768}  height={1024}><StockDetailArtboard breakpoint="tablet" state="happy"/></DCArtboard>
+          <DCArtboard id="rp-sd-375"  label="Stock Detail B · 375 phone"    width={375}  height={812}><StockDetailArtboard breakpoint="phone" state="happy"/></DCArtboard>
+          <DCArtboard id="rp-md-768"  label="Model Detail · 768 tablet"     width={768}  height={1024}><ModelDetailArtboard state="happy"/></DCArtboard>
+          <DCArtboard id="rp-md-375"  label="Model Detail · 375 phone"      width={375}  height={812}><ModelDetailArtboard state="happy"/></DCArtboard>
+        </DCSection>
+
+        {/* DISCOVERY (legacy) ASK · LOGS · PICKER — kept stable per direction */}
+        <DCSection id="other-flows" title="Other flows (stable — not changed this round)" subtitle="legacy discovery is now replaced by the Convergence section above">
+          <DCArtboard id="o-ask"    label="Ask"          width={1280} height={760}><AskArtboard/></DCArtboard>
+          <DCArtboard id="o-logs"   label="Run logs"     width={1280} height={760}><LogsArtboard/></DCArtboard>
+          <DCArtboard id="o-picker" label="Model picker" width={1280} height={760}><PickerArtboard/></DCArtboard>
+        </DCSection>
+
+        {/* COMPONENT SHEET */}
+        <DCSection id="components" title="Component sheet" subtitle="every atom, every state — the building blocks">
+          <DCArtboard id="cs-main" label="Components" width={1100} height={1400}><ComponentSheet/></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Theme"/>
+        <TweakRadio label="Mode" value={tw.theme} options={['light','dark']} onChange={v => setTweak('theme', v)}/>
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

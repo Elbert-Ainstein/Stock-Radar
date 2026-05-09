@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Stock Radar — Production</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>/* =======================================================================
+   Stock Radar — Production tokens
+   Earth-tone palette, Inter + Geist Mono, WCAG AA on both themes.
+   ======================================================================= */
+
+/* cyrillic */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("16a8bd7c-acc7-4042-ae64-61b603e2ba2a") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("69b65bdb-7061-4645-81a8-a9f93de2e4cb") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("e121828a-8b04-48c1-81ef-31d2aa844d6a") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("16a8bd7c-acc7-4042-ae64-61b603e2ba2a") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("69b65bdb-7061-4645-81a8-a9f93de2e4cb") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("e121828a-8b04-48c1-81ef-31d2aa844d6a") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("16a8bd7c-acc7-4042-ae64-61b603e2ba2a") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("69b65bdb-7061-4645-81a8-a9f93de2e4cb") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("e121828a-8b04-48c1-81ef-31d2aa844d6a") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("4f0224cb-2922-44e6-b606-82b73038a934") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("74664145-8787-4d5e-b9fb-31651fa8cf22") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("ba401464-8a1b-495c-8b6a-b736380fa2e9") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("94f269cd-df0a-4c5c-931c-cb7c437af185") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fc652482-e402-4a82-ae6d-36e0cc723104") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("4014eba4-5684-4da9-a518-17822b469705") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("036debfc-d61d-4e95-b686-4cda4d4b6be6") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("4f0224cb-2922-44e6-b606-82b73038a934") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("74664145-8787-4d5e-b9fb-31651fa8cf22") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("ba401464-8a1b-495c-8b6a-b736380fa2e9") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("94f269cd-df0a-4c5c-931c-cb7c437af185") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fc652482-e402-4a82-ae6d-36e0cc723104") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("4014eba4-5684-4da9-a518-17822b469705") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("036debfc-d61d-4e95-b686-4cda4d4b6be6") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("4f0224cb-2922-44e6-b606-82b73038a934") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("74664145-8787-4d5e-b9fb-31651fa8cf22") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("ba401464-8a1b-495c-8b6a-b736380fa2e9") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("94f269cd-df0a-4c5c-931c-cb7c437af185") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fc652482-e402-4a82-ae6d-36e0cc723104") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("4014eba4-5684-4da9-a518-17822b469705") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("036debfc-d61d-4e95-b686-4cda4d4b6be6") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("4f0224cb-2922-44e6-b606-82b73038a934") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("74664145-8787-4d5e-b9fb-31651fa8cf22") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("ba401464-8a1b-495c-8b6a-b736380fa2e9") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("94f269cd-df0a-4c5c-931c-cb7c437af185") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fc652482-e402-4a82-ae6d-36e0cc723104") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("4014eba4-5684-4da9-a518-17822b469705") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("036debfc-d61d-4e95-b686-4cda4d4b6be6") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+
+:root {
+  /* --- LIGHT THEME (default) ----------------------------------------- */
+  --paper:        #fcfcfa;   /* page background */
+  --paper-1:      #f6f4ec;   /* card / surface */
+  --paper-2:      #ece8d8;   /* elevated / hover */
+  --paper-3:      #dfd9c4;   /* sunken / press */
+  --rule:         #d6cfb6;   /* primary divider */
+  --rule-soft:    #e6dfc8;   /* secondary divider */
+  --rule-strong:  #b8ae8e;   /* emphasis divider */
+
+  --ink:          #14120f;   /* primary text */
+  --ink-1:        #34302a;   /* high-emphasis secondary */
+  --ink-2:        #5a544a;   /* medium-emphasis secondary */
+  --ink-3:        #847e6f;   /* tertiary / placeholder */
+  --ink-4:        #a39b87;   /* disabled */
+
+  /* Conviction — 5 levels, AA on paper -------------------------------- */
+  --conv-strong:    #0f6b3e;   /* emerald — high conviction */
+  --conv-strong-bg: #d8eadd;
+  --conv-good:      #527a1a;   /* lime — solid */
+  --conv-good-bg:   #e3eccf;
+  --conv-watch:     #8a6914;   /* amber — watching */
+  --conv-watch-bg:  #f0e4c2;
+  --conv-fade:      #a25217;   /* orange — fading */
+  --conv-fade-bg:   #f3dcc4;
+  --conv-broken:    #9b2a1d;   /* red — broken thesis */
+  --conv-broken-bg: #f1d3cd;
+
+  /* Direction — price up/down ----------------------------------------- */
+  --pos:        #0f6b3e;
+  --pos-bg:     #d8eadd;
+  --neg:        #9b2a1d;
+  --neg-bg:     #f1d3cd;
+  --neutral:    #5a544a;
+
+  /* Action --------------------------------------------------------------*/
+  --action:     #14120f;     /* primary button bg */
+  --action-ink: #fcfcfa;     /* primary button text */
+  --link:       #2c5e8c;     /* sober blue, AA on paper */
+
+  /* State pills -------------------------------------------------------- */
+  --info-bg:    #dde6ef;
+  --info-ink:   #2c5e8c;
+  --warn-bg:    #f0e4c2;
+  --warn-ink:   #6b4f0d;
+  --err-bg:     #f1d3cd;
+  --err-ink:    #7a1f15;
+  --ok-bg:      #d8eadd;
+  --ok-ink:     #0a4f2c;
+
+  --shadow-sm: 0 1px 0 rgba(20,18,15,0.04), 0 1px 2px rgba(20,18,15,0.06);
+  --shadow-md: 0 1px 0 rgba(20,18,15,0.04), 0 4px 12px rgba(20,18,15,0.08);
+  --shadow-lg: 0 1px 0 rgba(20,18,15,0.04), 0 16px 40px rgba(20,18,15,0.14);
+
+  --radius-sm: 4px;
+  --radius:    6px;
+  --radius-lg: 10px;
+
+  /* Typography --------------------------------------------------------- */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'JetBrains Mono', SFMono-Regular, Consolas, monospace;
+  --num-feat: "tnum" 1, "lnum" 1, "ss01" 1, "zero" 1; /* tabular + slashed zero */
+}
+
+[data-theme="dark"] {
+  --paper:        #14120f;
+  --paper-1:      #1c1a17;
+  --paper-2:      #25221d;
+  --paper-3:      #2f2b25;
+  --rule:         #3a352d;
+  --rule-soft:    #2c2823;
+  --rule-strong:  #5b5347;
+
+  --ink:          #ece7da;
+  --ink-1:        #d3ccba;
+  --ink-2:        #aaa28e;
+  --ink-3:        #847e6f;
+  --ink-4:        #5b5347;
+
+  --conv-strong:    #5fb583;
+  --conv-strong-bg: #1f3a29;
+  --conv-good:      #a8c860;
+  --conv-good-bg:   #2e3a1c;
+  --conv-watch:     #d9b755;
+  --conv-watch-bg:  #3a311a;
+  --conv-fade:      #d98a4a;
+  --conv-fade-bg:   #3a261a;
+  --conv-broken:    #d96a59;
+  --conv-broken-bg: #3a1f1a;
+
+  --pos:    #5fb583;
+  --pos-bg: #1f3a29;
+  --neg:    #d96a59;
+  --neg-bg: #3a1f1a;
+  --neutral:#aaa28e;
+
+  --action:     #ece7da;
+  --action-ink: #14120f;
+  --link:       #7eaad9;
+
+  --info-bg:  #1f2c3a;
+  --info-ink: #9bbde0;
+  --warn-bg:  #3a311a;
+  --warn-ink: #e0c478;
+  --err-bg:   #3a1f1a;
+  --err-ink:  #e89484;
+  --ok-bg:    #1f3a29;
+  --ok-ink:   #8acca5;
+
+  --shadow-sm: 0 1px 0 rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.5);
+  --shadow-md: 0 1px 0 rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.45);
+  --shadow-lg: 0 1px 0 rgba(0,0,0,0.4), 0 16px 40px rgba(0,0,0,0.6);
+}
+
+/* =======================================================================
+   Base resets — scoped to .sr surfaces so the canvas chrome is unaffected
+   ======================================================================= */
+.sr, .sr * {
+  box-sizing: border-box;
+}
+
+.sr {
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--paper);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01" 1;
+}
+
+.sr .mono { font-family: var(--font-mono); font-feature-settings: var(--num-feat); }
+.sr .num  { font-variant-numeric: tabular-nums slashed-zero; font-feature-settings: var(--num-feat); }
+
+.sr h1, .sr h2, .sr h3, .sr h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.sr p { margin: 0; }
+.sr button { font: inherit; color: inherit; }
+
+/* eyebrow / overline */
+.sr .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+/* utility */
+.sr hr { border: 0; border-top: 1px solid var(--rule); margin: 0; }
+.sr .rule-soft  { border-top: 1px solid var(--rule-soft); }
+
+/* surfaces */
+.sr-surface {
+  background: var(--paper-1);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+/* artboard host (used inside DCArtboard) */
+.sr-artboard {
+  width: 100%;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  overflow: hidden;
+}
+
+/* skeleton shimmer ---------------------------------------------------- */
+@keyframes sr-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.sr-skel {
+  background: linear-gradient(
+    90deg,
+    var(--paper-2) 0%,
+    var(--paper-3) 50%,
+    var(--paper-2) 100%
+  );
+  background-size: 800px 100%;
+  animation: sr-shimmer 1.6s linear infinite;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+/* focus ring ---------------------------------------------------------- */
+.sr :focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+</style>
+<style>
+  html, body { margin: 0; padding: 0; background: var(--paper); height: 100%; overflow: hidden; }
+  body { font-family: 'Inter', system-ui, sans-serif; color: var(--ink); }
+</style>
+</head>
+<body data-theme="light">
+<div id="root"></div>
+
+
+
+<script src="32afad4e-8303-4008-994e-e656a8cf3797" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="0ad0beeb-c09b-4454-9171-b63764cc48e1" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="a98cd457-8ec6-4b0b-8cc0-e664f4dadbd7" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="612fe08b-7053-4bf8-a239-d5c65e115d98"></script>
+<script type="text/babel" src="81a94316-ee5f-4ac4-93bb-3f0334a72fd8"></script>
+<script type="text/babel" src="afdc57a9-fcff-4ce7-9fa9-98a21cff44ca"></script>
+<script type="text/babel" src="75ce14c4-eb4a-4e68-b1e5-eba9c6e456f6"></script>
+<script type="text/babel" src="cf1ed42f-141f-4741-a933-7f02d80710e5"></script>
+<script type="text/babel" src="7ea0afe1-096f-4df3-8315-7673099e1fd7"></script>
+<script type="text/babel" src="e04a3059-c0a8-4344-b8c2-78875734198a"></script>
+<script type="text/babel" src="6dc797e3-f5f6-4848-a479-93180e05a19f"></script>
+
+<script type="text/babel" data-presets="react">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "state": "happy",
+  "view": "list"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tw, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  React.useEffect(() => { document.body.dataset.theme = tw.theme; }, [tw.theme]);
+  const stateOpts = ['happy','empty','loading','error','stale'];
+
+  return (
+    <>
+      <DesignCanvas>
+        {/* WATCHLIST */}
+        <DCSection id="watch-desktop" title="Watchlist · Desktop" subtitle="default = list · toggle to grid or ladder · all states">
+          <DCArtboard id="wl-d-happy"   label="Desktop · happy · list"   width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="happy"   defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-grid"    label="Desktop · happy · grid"   width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="happy"   defaultView="grid" /></DCArtboard>
+          <DCArtboard id="wl-d-ladder"  label="Desktop · happy · ladder" width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="happy"   defaultView="ladder" /></DCArtboard>
+          <DCArtboard id="wl-d-loading" label="Desktop · loading"        width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="loading" defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-error"   label="Desktop · error"          width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="error"   defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-stale"   label="Desktop · stale"          width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="stale"   defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-empty"   label="Desktop · empty"          width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="empty"   defaultView="list" /></DCArtboard>
+        </DCSection>
+
+        <DCSection id="watch-tablet" title="Watchlist · Tablet (834×1112)" subtitle="grid 2-up · list scrolls horizontally">
+          <DCArtboard id="wl-t-grid"  label="Tablet · grid"  width={834} height={1112}><WatchlistArtboard breakpoint="tablet" state="happy" defaultView="grid"/></DCArtboard>
+          <DCArtboard id="wl-t-list"  label="Tablet · list"  width={834} height={1112}><WatchlistArtboard breakpoint="tablet" state="happy" defaultView="list"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="watch-phone" title="Watchlist · Phone (390×844)" subtitle="full parity · stacked cards · bottom nav">
+          <DCArtboard id="wl-p-happy"   label="Phone · happy"   width={390} height={844}><WatchlistArtboard breakpoint="phone" state="happy"/></DCArtboard>
+          <DCArtboard id="wl-p-loading" label="Phone · loading" width={390} height={844}><WatchlistArtboard breakpoint="phone" state="loading"/></DCArtboard>
+          <DCArtboard id="wl-p-error"   label="Phone · error"   width={390} height={844}><WatchlistArtboard breakpoint="phone" state="error"/></DCArtboard>
+        </DCSection>
+
+        {/* STOCK DETAIL */}
+        <DCSection id="detail-desktop" title="Stock Detail · Desktop" subtitle="full-page route · all states">
+          <DCArtboard id="sd-d-happy"   label="Desktop · happy"   width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="happy"/></DCArtboard>
+          <DCArtboard id="sd-d-empty"   label="Desktop · empty (no thesis yet)" width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="empty"/></DCArtboard>
+          <DCArtboard id="sd-d-loading" label="Desktop · loading (60–120s)"      width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="loading"/></DCArtboard>
+          <DCArtboard id="sd-d-error"   label="Desktop · error (subprocess)"    width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="error"/></DCArtboard>
+          <DCArtboard id="sd-d-stale"   label="Desktop · stale (>24h)"          width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="stale"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="detail-tablet" title="Stock Detail · Tablet">
+          <DCArtboard id="sd-t-happy" label="Tablet · happy" width={834} height={1180}><StockDetailArtboard breakpoint="tablet" state="happy"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="detail-phone" title="Stock Detail · Phone">
+          <DCArtboard id="sd-p-happy"   label="Phone · happy"   width={390} height={844}><StockDetailArtboard breakpoint="phone" state="happy"/></DCArtboard>
+          <DCArtboard id="sd-p-empty"   label="Phone · empty"   width={390} height={844}><StockDetailArtboard breakpoint="phone" state="empty"/></DCArtboard>
+          <DCArtboard id="sd-p-loading" label="Phone · loading" width={390} height={844}><StockDetailArtboard breakpoint="phone" state="loading"/></DCArtboard>
+          <DCArtboard id="sd-p-error"   label="Phone · error"   width={390} height={844}><StockDetailArtboard breakpoint="phone" state="error"/></DCArtboard>
+        </DCSection>
+
+        {/* MODEL DETAIL */}
+        <DCSection id="model-detail" title="Model Detail · Thesis + Floor" subtitle="full thesis output, DCF as floor input, run history">
+          <DCArtboard id="md-d-happy" label="Desktop · happy"  width={1440} height={1100}><ModelDetailArtboard state="happy"/></DCArtboard>
+          <DCArtboard id="md-d-stale" label="Desktop · stale"  width={1440} height={1100}><ModelDetailArtboard state="stale"/></DCArtboard>
+        </DCSection>
+
+        {/* DISCOVERY · ASK · LOGS · PICKER */}
+        <DCSection id="other-flows" title="Other flows" subtitle="discovery feed, ask AI, run logs, model picker">
+          <DCArtboard id="o-discovery" label="Discovery"     width={1280} height={760}><DiscoveryArtboard/></DCArtboard>
+          <DCArtboard id="o-ask"       label="Ask"           width={1280} height={760}><AskArtboard/></DCArtboard>
+          <DCArtboard id="o-logs"      label="Run logs"      width={1280} height={760}><LogsArtboard/></DCArtboard>
+          <DCArtboard id="o-picker"    label="Model picker"  width={1280} height={760}><PickerArtboard/></DCArtboard>
+        </DCSection>
+
+        {/* COMPONENT SHEET */}
+        <DCSection id="components" title="Component sheet" subtitle="every atom, every state — the building blocks">
+          <DCArtboard id="cs-main" label="Components" width={1100} height={1400}><ComponentSheet/></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Theme"/>
+        <TweakRadio label="Mode" value={tw.theme} options={['light','dark']} onChange={v => setTweak('theme', v)}/>
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+
+</body></html>

@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import type { GlobeCandidate } from "./geo-data";

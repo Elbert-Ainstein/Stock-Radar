@@ -12,6 +12,9 @@ Usage:
     python scripts/run_pipeline.py --ticker AAPL      # mini-pipeline for a single new stock
     python scripts/run_pipeline.py --scouts-only      # just refresh scout signals (cheap, no Claude)
     python scripts/run_pipeline.py --rebuild-only     # just analyst + models (expensive, uses Claude)
+    python scripts/run_pipeline.py --no-thesis        # skip the v2 thesis stage (Opus + web_search)
+                                                      # ⚠ scheduled CI MUST pass this — running thesis
+                                                      # on a cron is ~$2,160/month at twice-daily × 12 tix
 """
 import sys
 import os
@@ -92,6 +95,41 @@ def _clear_progress():
         PROGRESS_FILE.unlink(missing_ok=True)
     except Exception:
         pass
+
+
+def _spawn_auto_thesis(ticker: str) -> None:
+    """Fire-and-forget: spawn run_thesis.py <ticker> as a detached subprocess.
+    Used after run_single_ticker(t) when --auto-thesis-after is passed.
+    Detached so it survives the parent run_pipeline.py exiting.
+
+    NOTE: this costs ~$3-5 of Opus tokens per ticker. Only invoked when the
+    parent has --auto-thesis-after, which itself is only set by user-driven
+    /api/stocks/add — never by cron. See project memory `project_ci_cost_runaway_fix`."""
+    import subprocess
+    thesis_script = HERE / "run_thesis.py"
+    if not thesis_script.exists():
+        print(f"  [auto-thesis] run_thesis.py not found at {thesis_script}", file=sys.stderr)
+        return
+    try:
+        # Detach: stdout/stderr go to DEVNULL, no wait. Parent can exit cleanly.
+        kwargs = {
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "cwd": str(REPO_ROOT),
+        }
+        if sys.platform == "win32":
+            # On Windows, DETACHED_PROCESS makes the child survive parent exit
+            kwargs["creationflags"] = subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
+        else:
+            kwargs["start_new_session"] = True
+        subprocess.Popen(
+            [sys.executable, str(thesis_script), ticker, "--trigger-reason", "manual"],
+            **kwargs,
+        )
+        print(f"  [auto-thesis] spawned run_thesis.py for {ticker} (fire-and-forget)")
+    except Exception as e:
+        print(f"  [auto-thesis] failed to spawn for {ticker}: {e}", file=sys.stderr)
 
 
 def _read_queued_tickers() -> list[str]:
@@ -186,7 +224,7 @@ def run_single_ticker(ticker: str):
         ("social", "scout_social"),
         ("fundamentals", "scout_fundamentals"),
     ]
-    total_stages = len(mini_scouts) + 2  # scouts + analyst + model
+    total_stages = len(mini_scouts) + 3  # scouts + analyst + model + thesis
     _write_progress("scouts", f"Running scouts for {ticker}...", 1, total_stages)
 
     def _run_scout(name_module):
@@ -242,6 +280,21 @@ def run_single_ticker(ticker: str):
         import traceback
         traceback.print_exc()
 
+    # ── Stage 4: Thesis run (v2 architecture) ──
+    if _is_cancelled(ticker):
+        print(f"  [CANCELLED] {ticker} was deleted — halting mini-pipeline before thesis run")
+        _clear_progress()
+        os.environ.pop("PIPELINE_TICKER_FILTER", None)
+        return
+
+    _write_progress("thesis", f"Generating thesis for {ticker}...", total_stages, total_stages + 1)
+    try:
+        from run_thesis import run_one as run_thesis_one
+        run_thesis_one(ticker, trigger_reason="manual", supabase=True, dry_run=False)
+        print(f"  [OK] Thesis generated for {ticker}")
+    except Exception as e:
+        print(f"  [FAIL] Thesis run failed for {ticker}: {e}")
+
     _write_progress("done", f"{ticker} pipeline complete", total_stages, total_stages)
     # Clear ticker filter so subsequent calls (e.g. queued tickers) are not restricted
     os.environ.pop("PIPELINE_TICKER_FILTER", None)
@@ -264,12 +317,26 @@ def run():
     # ── Pipeline mode flags ──
     # --scouts-only: just refresh signals (cheap, no Claude tokens)
     # --rebuild-only: just analyst + models (expensive, skips scouts)
+    # --no-thesis: skip the v2 thesis stage (~$3/ticker × N watchlist).
+    #   IMPORTANT: scheduled GH Actions (analyst-rebuild) MUST pass this.
+    #   The thesis stage is opt-in; running it twice daily on a 12-ticker
+    #   watchlist would cost ~$2,160/month and corrupt #45 calibration data
+    #   with intra-day LLM-variance entry-price churn. See memory:
+    #   project_session_5_6_deferral.md and feedback_engine_complexity_ratchet.md
     scouts_only = "--scouts-only" in sys.argv
     rebuild_only = "--rebuild-only" in sys.argv
+    no_thesis = "--no-thesis" in sys.argv
+    # --auto-thesis-after: after run_single_ticker(t), spawn run_thesis.py for t
+    # Used by /api/stocks/add to auto-thesis a freshly-added ticker. Fire-and-
+    # forget — does NOT wait, so the pipeline returns immediately and the
+    # thesis runs in background. Cost: ~$3-5 of Opus per ticker.
+    auto_thesis_after = "--auto-thesis-after" in sys.argv
 
     # Single-ticker mode (called from stock add)
     if single_ticker:
         run_single_ticker(single_ticker)
+        if auto_thesis_after:
+            _spawn_auto_thesis(single_ticker)
         _clear_progress()
         return
 
@@ -622,6 +689,55 @@ def run():
                     print(f"  Model generation stage failed: {e}")
                     print("  Continuing without model updates...")
 
+            # ─── Thesis Layer (v2 architecture) ────────────────────────
+            # Generate per-ticker thesis runs via run_thesis.py — the v2
+            # dashboard headline source. Each run calls Claude Opus + web
+            # search (~$3 per ticker, 60-120s wall time). Skipped on free
+            # tier since it depends on the paid Anthropic API.
+            #
+            # ALSO SKIPPED on --no-thesis. Scheduled GH Actions pass this
+            # flag — running thesis on a cron cadence would (a) burn
+            # ~$70/day in Opus calls on autopilot and (b) corrupt the
+            # entry-price-anchor data #45 calibration eventually needs by
+            # generating new thesis rows from LLM variance every 12 hours.
+            if not free_only and not no_thesis:
+                stage_idx += 1
+                _write_progress("theses", "Generating thesis runs (v2)...", stage_idx, total_stages)
+                print("\n\n" + "=" * 60)
+                print("  RUNNING THESIS LAYER: V2 DASHBOARD HEADLINE")
+                print("=" * 60)
+                try:
+                    from run_thesis import run_one as run_thesis_one
+                    from utils import get_watchlist as _get_wl_t
+                    wl_t = _get_wl_t()
+                    thesis_count = 0
+                    thesis_errors = 0
+                    for s in wl_t:
+                        t = s["ticker"]
+                        if _is_cancelled(t):
+                            print(f"  [CANCELLED] {t} — skipping thesis")
+                            continue
+                        _write_progress("theses", f"Thesis for {t}...", stage_idx, total_stages)
+                        try:
+                            row = run_thesis_one(
+                                t,
+                                trigger_reason="scheduled",
+                                supabase=True,
+                                dry_run=False,
+                            )
+                            if row and not row.get("dry_run"):
+                                thesis_count += 1
+                                print(f"  [OK] {t} thesis generated")
+                            else:
+                                print(f"  [SKIP] {t} — no thesis returned")
+                        except Exception as te:
+                            thesis_errors += 1
+                            print(f"  [FAIL] {t} thesis error: {te}")
+                    print(f"\n  Theses generated: {thesis_count}/{len(wl_t)} (errors: {thesis_errors})")
+                except Exception as e:
+                    print(f"  Thesis stage failed: {e}")
+                    print("  Continuing without thesis updates...")
+
             # ─── Prediction Logging ────────────────────────────────────
             # Log prediction snapshots immediately after model generation.
             # This data is irreplaceable — every week of delay is a week of
@@ -729,6 +845,8 @@ def run():
         for t in queued:
             _write_progress("queued", f"Running queued pipeline for {t}...", 0, 1)
             run_single_ticker(t)
+            if auto_thesis_after:
+                _spawn_auto_thesis(t)
 
     _clear_progress()
 

@@ -80,7 +80,7 @@ export type Payload = {
     price_horizon_months?: number;
     price_target_date?: string;
     exit_fiscal_year?: string;
-    valuation_method?: string;  // "ev_ebitda" | "revenue_multiple"
+    valuation_method?: string;
   };
   historicals: {
     quarterly: HistPeriod[];
@@ -102,6 +102,36 @@ export type Payload = {
   error?: string;
 };
 
-export type Tab = "summary" | "income" | "cashflow" | "valuation" | "formulas" | "whatif";
+export type ThesisFilter = { pass: boolean; evidence: string };
+export type ThesisItem = {
+  name: string;
+  probability: number;
+  price_impact: number;
+  early_signal?: string;
+  confirming_signal?: string;
+};
+export type ThesisData = {
+  exists?: boolean;
+  thesis_target?: number | null;
+  breakout_price?: number | null;
+  risk_adj_target?: number | null;
+  conviction?: string | null;
+  position_size_pct?: number | null;
+  buy_below?: number | null;
+  trim_above?: number | null;
+  prompt_version?: string;
+  run_at?: string;
+  markdown_path?: string | null;
+  spot_at_run?: number | null;
+  trigger_reason?: string | null;
+  coverage_quality?: string | null;
+  cited_domains?: string[];
+  filters?: Record<string, ThesisFilter>;
+  top_risks?: ThesisItem[];
+  top_catalysts?: ThesisItem[];
+  kill_triggers?: string[];
+};
+
+export type Tab = "thesis" | "setup" | "risks" | "floor" | "income" | "cashflow" | "formulas" | "whatif";
 
 export type HorizonMonths = 12 | 24 | 36;

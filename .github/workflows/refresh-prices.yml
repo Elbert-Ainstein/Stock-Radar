@@ -1,0 +1,34 @@
+name: refresh-prices
+
+# Quote-only price refresh during US market hours.
+# Runs every 5 minutes Mon-Fri 9:30am - 4:00pm ET (= 13:30-21:00 UTC, accounting
+# for DST roughly with a wider window). Calls scripts/refresh_prices.py which
+# uses yfinance fast_info — free, no API tokens.
+on:
+  schedule:
+    # 9:30 AM - 4:00 PM ET ≈ 13:30 - 21:00 UTC (EDT) / 14:30 - 22:00 UTC (EST)
+    # We run a wide UTC window 13:25-21:00 to cover both DST states without
+    # checking the calendar. Light overage outside market hours is harmless;
+    # yfinance just returns the same close price.
+    - cron: "*/5 13-20 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          pip install --break-system-packages yfinance supabase python-dotenv
+      - name: Refresh prices
+        run: |
+          python scripts/refresh_prices.py

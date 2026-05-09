@@ -1,0 +1,191 @@
+{
+  "_meta": {
+    "captured_at": "2026-05-01T18:53:56.328957",
+    "purpose": "Regression fixture: low/base/high tolerance bands + method-equality + TTM data-layer canary. Updated only when an engine change is intentional.",
+    "tolerance_pct": 50.0,
+    "skip_floor": 2,
+    "method_must_match_when_set": true
+  },
+  "fixtures": [
+    {
+      "name": "LITE_cyclical_trough",
+      "ticker": "LITE",
+      "as_of": "2024-05-15",
+      "archetype": "cyclical",
+      "expected_method": null,
+      "tolerance_pct": 25.0,
+      "spot": 45.720001220703125,
+      "method": "cyclical",
+      "low": 0.0,
+      "base": 42.15060596736494,
+      "high": 127.9156338328689,
+      "pinned_data": {
+        "ttm_revenue": 1380100000.0,
+        "ttm_ebitda": 35100000.0
+      },
+      "note": "deep cyclical trough"
+    },
+    {
+      "name": "LITE_cyclical_peak",
+      "ticker": "LITE",
+      "as_of": "2022-02-15",
+      "archetype": "cyclical",
+      "expected_method": null,
+      "tolerance_pct": 20.0,
+      "spot": 97.1500015258789,
+      "method": "cyclical",
+      "low": 21.02191605159848,
+      "base": 68.60360269738841,
+      "high": 122.09313668117815,
+      "pinned_data": {
+        "ttm_revenue": 1738800000.0,
+        "ttm_ebitda": 721100000.0
+      },
+      "note": "AI-optical peak"
+    },
+    {
+      "name": "ASML_compounder_guidance_cut",
+      "ticker": "ASML",
+      "as_of": "2024-08-15",
+      "archetype": "compounder",
+      "expected_method": null,
+      "tolerance_pct": 20.0,
+      "spot": 914.129638671875,
+      "method": "ev_ebitda",
+      "low": 241.11178285003496,
+      "base": 479.32873778799575,
+      "high": 597.6412432951869,
+      "pinned_data": {
+        "ttm_revenue": 26102300000.0,
+        "ttm_ebitda": 9206500000.0
+      },
+      "note": "Q3 2024 guidance cut"
+    },
+    {
+      "name": "ASML_compounder_bull",
+      "ticker": "ASML",
+      "as_of": "2021-05-15",
+      "archetype": "compounder",
+      "expected_method": null,
+      "tolerance_pct": 20.0,
+      "spot": 618.8150024414062,
+      "method": "ev_ebitda",
+      "low": 313.86302257202703,
+      "base": 545.797430030186,
+      "high": 688.0773439887956,
+      "pinned_data": {
+        "ttm_revenue": 13978400000.0,
+        "ttm_ebitda": 4541800000.0
+      },
+      "note": "post-COVID semi supercycle"
+    },
+    {
+      "name": "ASML_compounder_mid_cycle",
+      "ticker": "ASML",
+      "as_of": "2023-05-15",
+      "archetype": "compounder",
+      "expected_method": null,
+      "tolerance_pct": 20.0,
+      "spot": 638.995849609375,
+      "method": "ev_ebitda",
+      "low": 333.44730090443767,
+      "base": 530.2637597890173,
+      "high": 663.4705173054551,
+      "pinned_data": {
+        "ttm_revenue": 21173400000.0,
+        "ttm_ebitda": 7100500000.0
+      },
+      "note": "mid-cycle stable"
+    },
+    {
+      "name": "MRVL_regime_transition",
+      "ticker": "MRVL",
+      "as_of": null,
+      "archetype": null,
+      "expected_method": "ev_ebitda",
+      "tolerance_pct": 50.0,
+      "spot": 165.15,
+      "method": "ev_ebitda",
+      "low": 113.14978563264685,
+      "base": 226.28691139861624,
+      "high": 290.1575696818533,
+      "pinned_data": {
+        "ttm_revenue": 8194600000.0,
+        "ttm_ebitda": 4531800000.0
+      },
+      "note": "post-Inphi; must NOT auto-promote (live)"
+    },
+    {
+      "name": "AMD_garp",
+      "ticker": "AMD",
+      "as_of": "2023-02-15",
+      "archetype": "garp",
+      "expected_method": null,
+      "tolerance_pct": 20.0,
+      "spot": 85.18000030517578,
+      "method": "ev_ebitda",
+      "low": 69.22275973371318,
+      "base": 207.45416094401517,
+      "high": 277.11080722659847,
+      "pinned_data": {
+        "ttm_revenue": 22828000000.0,
+        "ttm_ebitda": 4229000000.0
+      },
+      "note": "GARP, AI-cycle inflection"
+    },
+    {
+      "name": "FSLY_pre_profit_ps",
+      "ticker": "FSLY",
+      "as_of": "2022-02-15",
+      "archetype": null,
+      "expected_method": null,
+      "tolerance_pct": 25.0,
+      "spot": 29.5,
+      "method": "revenue_multiple",
+      "low": 10.37846360397601,
+      "base": 21.941624578855926,
+      "high": 35.39022373300238,
+      "pinned_data": {
+        "ttm_revenue": 339262000.0,
+        "ttm_ebitda": -130475000.0
+      },
+      "note": "pre-profit, P/S routing"
+    },
+    {
+      "name": "TSLA_transformational",
+      "ticker": "TSLA",
+      "as_of": "2020-08-15",
+      "archetype": "transformational",
+      "expected_method": null,
+      "tolerance_pct": 25.0,
+      "spot": 110.04733276367188,
+      "method": "ev_ebitda",
+      "low": 37.91248965374944,
+      "base": 94.73387854054603,
+      "high": 126.1364503205543,
+      "pinned_data": {
+        "ttm_revenue": 26021676000.0,
+        "ttm_ebitda": 3117916000.0
+      },
+      "note": "transformational tilts + 25% Gordon floor"
+    },
+    {
+      "name": "GE_special_situation",
+      "ticker": "GE",
+      "as_of": "2024-08-15",
+      "archetype": "special_situation",
+      "expected_method": null,
+      "tolerance_pct": 30.0,
+      "spot": 168.20773315429688,
+      "method": "ev_ebitda",
+      "low": 34.792513329448454,
+      "base": 65.15801241245592,
+      "high": 76.19534264941421,
+      "pinned_data": {
+        "ttm_revenue": 46434000000.0,
+        "ttm_ebitda": 8103000000.0
+      },
+      "note": "post-spin GE Aerospace"
+    }
+  ]
+}

@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import type { Stock } from "@/lib/data";
 import { inferCurrency } from "@/lib/data";
 import type { PipelineProgress, ScoutInfo } from "./types";
 import { cn, scoreColor, formatTime } from "./helpers";
 import PipelineProgressBar from "./PipelineProgressBar";
-import StockRow from "./StockRow";
-import StockDetail from "./StockDetail";
+import StockRow, { SRWatchlistHeader, SR_GRID } from "./StockRow";
+import RunAllThesesButton from "./RunAllThesesButton";
+import WatchlistRefreshPanel from "./WatchlistRefreshPanel";
 import TickerSearch from "./TickerSearch";
 import ScoutPanel from "./ScoutPanel";
 import SummaryCards from "./SummaryCards";
@@ -16,6 +18,7 @@ import HealthPanel from "./HealthPanel";
 // ─── Main Dashboard ───
 
 export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { generatedAt: string; scoutsActive: string[]; scoutDetails: ScoutInfo[] } }) {
+  const router = useRouter();
   const [selectedTicker, setSelectedTicker] = useState<string | null>(stocks[0]?.ticker || null);
   const [sortBy, setSortBy] = useState<"score" | "change" | "convergence">("score");
   const [filterSector, setFilterSector] = useState<string>("all");
@@ -348,122 +351,6 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
 
   return (
     <div className="min-h-screen">
-      {/* Top bar */}
-      <header className="border-b border-[var(--border)] bg-[var(--bg)]">
-        <div className="max-w-[1400px] mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
-          <div className="flex items-center gap-4 sm:gap-6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[var(--text)] flex items-center justify-center text-sm font-bold text-[var(--bg)]">SR</div>
-              <div>
-                <h1 className="text-lg font-bold">Stock Radar</h1>
-                <p className="text-[10px] text-[var(--muted)] hidden sm:block">Multi-AI Agent System</p>
-              </div>
-            </div>
-            <nav className="flex gap-3 sm:gap-4 text-xs ml-2 sm:ml-4">
-              <span className="text-amber-500 font-medium">Watchlist</span>
-              <a href="/discovery" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Discovery</a>
-              <a href="/model" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Models</a>
-              <a href="/ask" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors hidden sm:inline">Ask AI</a>
-              <a href="/logs" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Logs</a>
-            </nav>
-          </div>
-          <div className="flex items-center gap-3 sm:gap-6 text-xs text-[var(--muted)] overflow-x-auto">
-            <button
-              onClick={toggleTheme}
-              className="text-[var(--muted)] hover:text-[var(--text)] transition-colors p-1.5 rounded-md hover:bg-[var(--hover)]"
-              title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            >
-              {theme === "dark" ? (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.4 3.4l.7.7M11.9 11.9l.7.7M3.4 12.6l.7-.7M11.9 4.1l.7-.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 9.2A5.5 5.5 0 016.8 2.5a6 6 0 106.7 6.7z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              )}
-            </button>
-            {/* Pipeline controls */}
-            <div className="flex items-center gap-2">
-              {pipelineRunning ? (
-                <button
-                  onClick={stopPipeline}
-                  className="px-3 py-1.5 rounded-md border border-red-500/40 text-[11px] font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/60 transition-all"
-                  title="Force-stop the running pipeline"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="2.5" y="2.5" width="7" height="7" rx="1" fill="currentColor"/></svg>
-                    Stop Pipeline
-                  </span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => runPipeline(false)}
-                  className="px-3 py-1.5 rounded-md border border-[var(--border)] text-[11px] font-medium text-[var(--secondary)] hover:text-[var(--text)] hover:border-[var(--border-hover)] hover:bg-[var(--hover)] transition-all"
-                  title="Run all scouts including AI-powered ones (requires API keys)"
-                >
-                  Run Pipeline
-                </button>
-              )}
-              <button
-                onClick={() => runPipeline(true)}
-                disabled={pipelineRunning}
-                className={cn(
-                  "px-2.5 py-1.5 rounded-md border border-[var(--border)] text-[10px] transition-all",
-                  pipelineRunning
-                    ? "text-[var(--muted)] cursor-not-allowed opacity-50"
-                    : "text-[var(--muted)] hover:text-[var(--secondary)] hover:bg-[var(--hover)]"
-                )}
-                title={pipelineRunning ? "Pipeline is already running" : "Run only free scouts (no API keys needed)"}
-              >
-                Free only
-              </button>
-              <button
-                onClick={() => runRebuild()}
-                disabled={rebuildRunning || pipelineRunning}
-                className={cn(
-                  "px-2.5 py-1.5 rounded-md border border-[var(--border)] text-[10px] transition-all",
-                  (rebuildRunning || pipelineRunning)
-                    ? "text-[var(--muted)] cursor-not-allowed opacity-50"
-                    : "text-[var(--muted)] hover:text-[var(--secondary)] hover:bg-[var(--hover)]"
-                )}
-                title={
-                  rebuildRunning
-                    ? "Rebuild is running"
-                    : pipelineRunning
-                    ? "Wait for pipeline to finish"
-                    : "Recompute analysis from existing signals (no scout re-run)"
-                }
-              >
-                {rebuildRunning ? (
-                  <span className="flex items-center gap-1">
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v1.5M5 7.5V9M1 5h1.5M7.5 5H9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="animate-spin origin-center" style={{ transformBox: "fill-box" }}/></svg>
-                    Rebuilding...
-                  </span>
-                ) : "Rebuild"}
-              </button>
-            </div>
-            <span>Last scan: <span className="text-[var(--secondary)] font-mono">{formatTime(meta.generatedAt)}</span></span>
-            <button
-              onClick={() => setShowScoutPanel(!showScoutPanel)}
-              className="flex items-center gap-1.5 hover:text-[var(--text)] transition-colors"
-            >
-              <span className={cn("w-2 h-2 rounded-full", activeScoutCount > 0 ? "bg-[var(--success)] signal-pulse" : "bg-[var(--muted)]")}></span>
-              {activeScoutCount}/{totalScoutCount} scouts active
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className={cn("transition-transform", showScoutPanel && "rotate-180")}>
-                <path d="M2.5 3.75L5 6.25L7.5 3.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            <button
-              onClick={() => setShowHealthPanel(!showHealthPanel)}
-              className="flex items-center gap-1.5 hover:text-[var(--text)] transition-colors"
-              title="System health: data providers, tests, pipeline status"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M7 1.5v3M7 9.5v3M1.5 7h3M9.5 7h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.2"/>
-              </svg>
-              Health
-            </button>
-          </div>
-        </div>
-      </header>
 
       {/* Pipeline progress bar (shown when running) */}
       {pipelineRunning && (
@@ -608,20 +495,43 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
           </div>
         )}
 
-        {/* Stock list */}
-        {sorted.map(stock => (
-          <div key={stock.ticker}>
-            <StockRow
-              stock={stock}
-              isSelected={selectedTicker === stock.ticker}
-              onClick={() => setSelectedTicker(selectedTicker === stock.ticker ? null : stock.ticker)}
-              selectMode={selectMode}
-              isChecked={selectedTickers.has(stock.ticker)}
-              onCheck={toggleCheck}
-            />
-            {selectedTicker === stock.ticker && !selectMode && <StockDetail stock={stock} onDelete={() => handleDeleteStock(stock.ticker)} />}
+        {/* Module 12 — Watchlist convergence refresh on the Watchlist page.
+            Discovery convergence panel lives on /discovery (different information architecture):
+            this surface shows fresh cross-source signal on names you already track. */}
+        <WatchlistRefreshPanel top={8} minClasses={2} />
+
+        {/* SR Production watchlist — CSS-grid layout from May 4 redesign
+            (StockRow + SRWatchlistHeader, sr-* tokens, mono numerics, 28px row height). */}
+        {sorted.length > 0 && (
+          <div style={{
+            border: "1px solid var(--sr-rule, #2a2a2a)",
+            borderRadius: 6,
+            background: "var(--sr-paper, #0e0e10)",
+            overflowX: "auto",
+            marginBottom: 16,
+          }}>
+            <div style={{ minWidth: 1208 }}>
+              <SRWatchlistHeader />
+              {sorted.map((stock, idx) => (
+                <StockRow
+                  key={stock.ticker}
+                  stock={stock}
+                  isSelected={false}
+                  onClick={() => {
+                    if (selectMode) {
+                      toggleCheck(stock.ticker);
+                    } else {
+                      router.push(`/stock/${encodeURIComponent(stock.ticker)}`);
+                    }
+                  }}
+                  selectMode={selectMode}
+                  isChecked={selectedTickers.has(stock.ticker)}
+                  onCheck={toggleCheck}
+                />
+              ))}
+            </div>
           </div>
-        ))}
+        )}
 
         {/* Footer */}
         <footer className="mt-8 pt-4 border-t border-[#1e1e2e] text-center text-[10px] text-gray-600">

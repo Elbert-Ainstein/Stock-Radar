@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 
 import FunnelStats from "./FunnelStats";
 import ControlBar from "./ControlBar";
 import CandidateTable from "./CandidateTable";
+import DiscoveryConvergencePanel from "../dashboard/DiscoveryConvergencePanel";
 import type { SortKey } from "./CandidateTable";
 
 const DiscoveryGlobe = lazy(() => import("../components/DiscoveryGlobe"));
@@ -170,29 +171,33 @@ export default function DiscoveryClient() {
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       {/* ─── HEADER ─── */}
-      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg)]/80 backdrop-blur-xl">
-        <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <a href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">SR</span>
-              </div>
-              <span className="font-semibold text-[var(--text)]">Stock Radar</span>
-            </a>
-            <nav className="flex gap-4 text-sm">
-              <a href="/" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Watchlist</a>
-              <span className="text-amber-500 font-medium">Discovery</span>
-              <a href="/model" className="text-[var(--muted)] hover:text-[var(--text)] transition-colors">Models</a>
-            </nav>
-          </div>
-          <div className="text-xs text-[var(--muted)] font-mono">
-            {state.lastRunAt ? `Last scan: ${timeAgo(state.lastRunAt)}` : "No scans yet"}
-          </div>
-        </div>
-      </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-8">
         {/* ─── FUNNEL STATS ─── */}
+        {/* Module 12 — Tier 1 cross-source convergence panel. Surfaces ENTG/AXON/MTSI/etc.
+
+            candidates that emerged from 13F + insider + news convergence on discovery_universe.
+
+            Different data source from the legacy 3-stage Yahoo→Haiku→AI flow below. */}
+
+        <DiscoveryConvergencePanel statuses="exploring,promising,qualified" top={25} />
+
+        <details className="sr-legacy-discovery" style={{ marginTop: 24 }}>
+          <summary style={{
+            cursor: "pointer",
+            padding: "10px 14px",
+            background: "var(--sr-paper-1, #f6f4ec)",
+            border: "1px solid var(--sr-rule, #d6cfb6)",
+            borderRadius: 6,
+            fontSize: 12,
+            color: "var(--sr-ink-2, #5a544a)",
+            fontWeight: 500,
+            userSelect: "none",
+            marginBottom: 12,
+          }}>
+            Legacy 3-stage scan (Yahoo screener → Haiku grade → AI validation) — superseded by cross-source convergence above
+          </summary>
+
         <FunnelStats
           totalCandidates={state.totalCandidates}
           shortlistCount={state.shortlistCount}
@@ -301,6 +306,7 @@ export default function DiscoveryClient() {
             Showing {filtered.length} of {state.totalCandidates} candidates {"\u00B7"} Sorted by {sortKey.replace(/_/g, " ")} {sortAsc ? "\u2191" : "\u2193"}
           </div>
         )}
+      </details>
       </main>
     </div>
   );

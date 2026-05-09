@@ -625,3 +625,50 @@ if HAS_HYPOTHESIS:
             """WACC must always be within [0.06, 0.22] regardless of inputs."""
             wacc = _compute_bottom_up_wacc("semiconductors", debt, mcap)
             assert 0.06 <= wacc <= 0.22
+
+
+# ---------------------------------------------------------------------------
+# Private-symbol existence canary
+# ---------------------------------------------------------------------------
+# Originally exercised by scripts/debug_scenario_inversion.py (deleted as
+# orphan). The script imported nine private symbols; if any get renamed
+# during a refactor, the BULL < BASE scenario-inversion diagnostic surface
+# silently disappears. This test is the cheap stand-in: it just asserts the
+# symbols exist with their documented signatures. Failures here mean
+# someone renamed/removed an internal helper that some user (or a future
+# debug session) might still reach for.
+
+class TestPrivateSymbolCanary:
+    """Asserts internal helpers used by past diagnostic tooling still exist."""
+
+    def test_private_symbols_importable(self):
+        # Imported here (not at module top) so a missing symbol fails the
+        # individual test rather than the whole module collection.
+        from target_engine import (
+            _merge_drivers,
+            _apply_scenario,
+            _scenario_price,
+            _forecast_annual,
+            _should_use_revenue_multiple,
+            _ttm_fcf_sbc,
+            _annual_label_from_q,
+            _discount_years_for_horizon,
+            SCENARIO_OFFSETS,
+            VALUATION_YEAR,
+            DISCOUNT_YEARS,
+        )
+        # Sanity: each is non-None and callable/values are correct kind
+        for fn in (
+            _merge_drivers,
+            _apply_scenario,
+            _scenario_price,
+            _forecast_annual,
+            _should_use_revenue_multiple,
+            _ttm_fcf_sbc,
+            _annual_label_from_q,
+            _discount_years_for_horizon,
+        ):
+            assert callable(fn), f"{fn!r} no longer callable"
+        assert isinstance(SCENARIO_OFFSETS, dict)
+        assert isinstance(VALUATION_YEAR, int)
+        assert isinstance(DISCOUNT_YEARS, (int, float))

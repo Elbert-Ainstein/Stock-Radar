@@ -1,21 +1,50 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Payload, Tab, HorizonMonths } from "./types";
+import type { Payload, Tab, HorizonMonths, ThesisData } from "./types";
 import { fmtDollar, fmtPct, tabLabel } from "./helpers";
 import { Summary } from "./components/TableHelpers";
-import SummaryTab from "./components/SummaryTab";
+import ThesisTab from "./components/ThesisTab";
+import SetupTab from "./components/SetupTab";
+import RisksCatalystsTab from "./components/RisksCatalystsTab";
+import FloorTab from "./components/FloorTab";
 import IncomeTab from "./components/IncomeTab";
 import CashTab from "./components/CashTab";
-import ValuationTab from "./components/ValuationTab";
 import FormulasTab from "./components/FormulasTab";
 import WhatIfTab from "./components/WhatIfTab";
+
+// ─── SR Production Detailed Model — 8-tab workbook with sr- tokens ──────
+// Source: docs/wireframes/v2-production/extracted_e04a3059_detail.jsx → ModelDetailArtboard.
 
 export default function DetailedModel({ ticker }: { ticker: string }) {
   const [payload, setPayload] = useState<Payload | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("summary");
+  const [tab, setTab] = useState<Tab>("thesis");
   const [horizon, setHorizon] = useState<HorizonMonths>(12);
+  const [thesis, setThesis] = useState<ThesisData | null>(null);
+  const [, setThesisLoading] = useState(true);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  // Read persisted theme on mount (matches Dashboard + StockDetailPage)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem("sr-theme");
+    if (saved === "light") {
+      setTheme("light");
+      document.documentElement.setAttribute("data-theme", "light");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    if (typeof window === "undefined") return;
+    if (next === "light") document.documentElement.setAttribute("data-theme", "light");
+    else document.documentElement.removeAttribute("data-theme");
+    localStorage.setItem("sr-theme", next);
+  };
 
   useEffect(() => {
     setPayload(null);
@@ -26,155 +55,155 @@ export default function DetailedModel({ ticker }: { ticker: string }) {
       .catch((e: Error) => setErr(e.message));
   }, [ticker, horizon]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setThesis(null);
+    setThesisLoading(true);
+    fetch(`/api/thesis/${encodeURIComponent(ticker)}`)
+      .then((r) => r.json())
+      .then((d: ThesisData) => { if (!cancelled) { setThesis(d); setThesisLoading(false); } })
+      .catch(() => { if (!cancelled) setThesisLoading(false); });
+    return () => { cancelled = true; };
+  }, [ticker]);
+
   if (err) {
     return (
-      <div className="p-8 min-h-screen bg-neutral-950 text-rose-200">
-        <div className="max-w-4xl mx-auto rounded-lg border border-rose-700 bg-rose-950/40 p-6">
-          <div className="text-xl font-semibold">Cannot build model for {ticker}</div>
-          <div className="mt-2 opacity-80">{err}</div>
-          <a href={`/model?ticker=${ticker}`} className="inline-block mt-4 text-blue-300 hover:underline">
-            ← Back
-          </a>
+      <div style={{ minHeight: "100vh", background: "var(--sr-paper)", color: "var(--sr-ink)", padding: 32 }}>
+        <div style={{ maxWidth: 720, margin: "0 auto", border: "1px solid var(--sr-conv-broken)", background: "var(--sr-err-bg)", color: "var(--sr-err-ink)", borderRadius: 6, padding: 20 }}>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>Cannot build model for {ticker}</div>
+          <div style={{ marginTop: 8, opacity: 0.85 }}>{err}</div>
+          <a href={`/model?ticker=${ticker}`} style={{ display: "inline-block", marginTop: 14, color: "var(--sr-link)", textDecoration: "none" }}>← Back</a>
         </div>
       </div>
     );
   }
 
-  if (!payload) {
-    return (
-      <div className="p-8 min-h-screen bg-neutral-950 text-neutral-400">
-        Loading {ticker} …
-      </div>
-    );
-  }
+  if (!payload) return <div style={{ padding: 32, minHeight: "100vh", background: "var(--sr-paper)", color: "var(--sr-ink-3)" }}>Loading {ticker}…</div>;
+
+  const showThesisStrip = !!thesis?.exists && thesis.thesis_target != null && Number.isFinite(thesis.thesis_target);
+  const thesisTarget = thesis?.thesis_target ?? null;
+  const cur = payload.target.current_price;
+  const upside = thesisTarget != null && cur > 0 ? (thesisTarget - cur) / cur : null;
+  const conviction = (thesis?.conviction || "").toUpperCase();
+  const convStyle: Record<string, { fg: string; bg: string }> = {
+    HIGH:   { fg: "var(--sr-conv-strong)", bg: "var(--sr-conv-strong-bg)" },
+    MEDIUM: { fg: "var(--sr-conv-good)",   bg: "var(--sr-conv-good-bg)"   },
+    LOW:    { fg: "var(--sr-conv-watch)",  bg: "var(--sr-conv-watch-bg)"  },
+    BROKEN: { fg: "var(--sr-conv-broken)", bg: "var(--sr-conv-broken-bg)" },
+  };
+  const conv = convStyle[conviction] || convStyle.BROKEN;
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <a href={`/model?ticker=${ticker}`} className="text-sm text-blue-400 hover:underline">
-              ← Back to model picker
-            </a>
-            <h1 className="text-2xl font-semibold mt-1">
-              {payload.ticker} — {payload.name}
-            </h1>
-            <div className="text-sm text-neutral-400">
-              {payload.sector} · Source: yfinance (SEC filings)
-            </div>
-            <div className="text-xs text-neutral-400 mt-1 space-y-0.5">
-              <div>
-                <span className="text-neutral-500">Exit fundamentals: </span>
-                <span className="text-neutral-200">
-                  {payload.target.exit_fiscal_year || "Y3"} (Year 3)
-                </span>
-              </div>
-              <div>
-                <span className="text-neutral-500">Price target: </span>
-                <span className="text-blue-300 font-medium">
-                  {payload.target.price_horizon_months ?? horizon} months forward
-                </span>
-                {payload.target.price_target_date && (
-                  <span className="text-neutral-400"> (≈ {payload.target.price_target_date})</span>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col items-end gap-1">
-              <div className="text-[10px] uppercase tracking-wider text-neutral-500">
-                Target horizon
-              </div>
-              <div className="inline-flex rounded border border-neutral-700 overflow-hidden">
-                {([12, 24, 36] as HorizonMonths[]).map((h) => (
-                  <button
-                    key={h}
-                    onClick={() => setHorizon(h)}
-                    className={`px-3 py-1 text-xs transition-colors ${
-                      horizon === h
-                        ? "bg-blue-600 text-white"
-                        : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-                    }`}
-                  >
-                    {h}mo
-                  </button>
-                ))}
-              </div>
-            </div>
-            <a
-              href={`/api/model/${ticker}/excel?horizon=${horizon}`}
-              className="text-sm bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded px-3 py-2"
-            >
-              ↓ Download Excel (live formulas)
-            </a>
-          </div>
-        </div>
+    <div style={{ minHeight: "100vh", background: "var(--sr-paper)", color: "var(--sr-ink)" }}>
 
-        {/* Valuation method badge */}
+      <main className="max-w-[1400px] mx-auto" style={{ padding: "16px 18px" }}>
         {payload.target.valuation_method === "revenue_multiple" && (
-          <div className="mb-3 rounded-lg border border-violet-700/50 bg-violet-950/30 text-violet-300 text-xs px-3 py-2 flex items-center gap-2">
-            <span className="font-semibold">P/S Revenue-Multiple Method</span>
-            <span className="text-violet-400/70">—</span>
-            <span className="text-violet-400/70">Pre-profit or extreme P/S detected. Using revenue-based valuation instead of EV/EBITDA.</span>
+          <div style={{
+            marginBottom: 12, padding: "8px 12px", fontSize: 11.5,
+            border: "1px solid var(--sr-info-ink)", background: "var(--sr-info-bg)",
+            color: "var(--sr-info-ink)", borderRadius: 5,
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <span style={{ fontWeight: 600 }}>P/S Revenue-Multiple Method</span>
+            <span style={{ opacity: 0.7 }}>—</span>
+            <span style={{ opacity: 0.85 }}>Pre-profit or extreme P/S detected. Using revenue-based valuation.</span>
           </div>
         )}
 
-        {/* Target summary */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        {/* Thesis headline strip — V3 thesis dominates the DCF grid */}
+        {showThesisStrip && (
+          <div style={{
+            marginBottom: 10, padding: "12px 16px",
+            border: `1.5px solid ${conv.fg}`, background: conv.bg, borderRadius: 6,
+            display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap",
+          }}>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span className="sr-eyebrow" style={{ color: conv.fg }}>Thesis target</span>
+              <span className="sr-mono" style={{ fontSize: 22, fontWeight: 600, color: conv.fg, lineHeight: 1.1 }}>{fmtDollar(thesisTarget)}</span>
+              {upside != null && <span className="sr-mono" style={{ fontSize: 11, color: conv.fg, opacity: 0.8 }}>{fmtPct(upside)} upside</span>}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span className="sr-eyebrow" style={{ color: conv.fg }}>Conviction</span>
+              <span className="sr-mono" style={{ fontSize: 13, fontWeight: 700, color: conv.fg, padding: "2px 7px", border: `1px solid ${conv.fg}`, borderRadius: 3, marginTop: 2, alignSelf: "flex-start" }}>
+                {conviction}{thesis?.position_size_pct != null ? ` · ${thesis.position_size_pct}%` : ""}
+              </span>
+            </div>
+            {thesis?.breakout_price != null && (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span className="sr-eyebrow">Breakout</span>
+                <span className="sr-mono" style={{ fontSize: 14, color: conv.fg, opacity: 0.85 }}>{fmtDollar(thesis.breakout_price)}</span>
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 12 }} />
+            <span style={{ fontSize: 11, fontStyle: "italic", color: "var(--sr-ink-3)" }}>
+              Headline: V3 thesis. The DCF grid below is the conservative floor.
+            </span>
+          </div>
+        )}
+
+        {/* DCF summary — 4 tiles, secondary to thesis */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 14 }}>
           <Summary label="Current" value={fmtDollar(payload.target.current_price)} />
-          <Summary
-            label="Downside"
-            value={fmtDollar(payload.target.low)}
-            sub={fmtPct(payload.target.upside_low_pct)}
-          />
-          <Summary
-            label={payload.target.valuation_method === "revenue_multiple" ? "Base target (P/S)" : "Base target"}
-            value={fmtDollar(payload.target.base)}
-            sub={fmtPct(payload.target.upside_base_pct)}
-            emphasize
-          />
-          <Summary
-            label="Upside"
-            value={fmtDollar(payload.target.high)}
-            sub={fmtPct(payload.target.upside_high_pct)}
-          />
+          <Summary label="Downside" value={fmtDollar(payload.target.low)} sub={fmtPct(payload.target.upside_low_pct)} />
+          <Summary label={payload.target.valuation_method === "revenue_multiple" ? "Floor base (P/S)" : "Floor base (DCF)"} value={fmtDollar(payload.target.base)} sub={fmtPct(payload.target.upside_base_pct)} emphasize />
+          <Summary label="Upside" value={fmtDollar(payload.target.high)} sub={fmtPct(payload.target.upside_high_pct)} />
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mb-4 border-b border-neutral-800">
-          {(["summary", "income", "cashflow", "valuation", "formulas", "whatif"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm transition-colors ${
-                tab === t
-                  ? "border-b-2 border-blue-500 text-neutral-100"
-                  : "text-neutral-400 hover:text-neutral-100"
-              }`}
-            >
-              {tabLabel(t)}
-            </button>
-          ))}
+        {/* Tab strip — scroll-snap on mobile */}
+        <div
+          style={{
+            display: "flex", gap: 0, marginBottom: 14,
+            borderBottom: "1px solid var(--sr-rule-strong)",
+            overflowX: "auto", marginLeft: -8, paddingLeft: 8,
+            scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch",
+          }}
+        >
+          {(["thesis", "setup", "risks", "floor", "income", "cashflow", "formulas", "whatif"] as Tab[]).map((id) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                style={{
+                  padding: "9px 14px", fontSize: 12.5,
+                  background: "transparent", border: "none", cursor: "pointer",
+                  color: active ? "var(--sr-ink)" : "var(--sr-ink-2)",
+                  fontWeight: active ? 600 : 500,
+                  borderBottom: active ? "2px solid var(--sr-ink)" : "2px solid transparent",
+                  flexShrink: 0, whiteSpace: "nowrap",
+                  scrollSnapAlign: "start",
+                  fontFamily: "var(--font-sans)",
+                }}
+              >
+                {tabLabel(id)}
+              </button>
+            );
+          })}
         </div>
 
-        {tab === "summary" && <SummaryTab payload={payload} />}
+        {tab === "thesis" && <ThesisTab thesis={thesis} loading={false} />}
+        {tab === "setup" && <SetupTab thesis={thesis} loading={false} />}
+        {tab === "risks" && <RisksCatalystsTab thesis={thesis} loading={false} />}
+        {tab === "floor" && <FloorTab payload={payload} thesis={thesis} />}
         {tab === "income" && <IncomeTab payload={payload} />}
         {tab === "cashflow" && <CashTab payload={payload} />}
-        {tab === "valuation" && <ValuationTab payload={payload} />}
         {tab === "formulas" && <FormulasTab payload={payload} />}
         {tab === "whatif" && <WhatIfTab payload={payload} />}
 
         {payload.warnings && payload.warnings.length > 0 && (
-          <div className="mt-6 rounded border border-amber-800 bg-amber-950/30 text-amber-200 text-xs p-3">
-            <div className="font-semibold mb-1">Warnings</div>
-            <ul className="list-disc pl-4 space-y-0.5">
-              {payload.warnings.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
+          <div style={{
+            marginTop: 18, padding: "10px 14px",
+            border: "1px solid var(--sr-warn-ink)", background: "var(--sr-warn-bg)",
+            color: "var(--sr-warn-ink)", borderRadius: 5,
+            fontSize: 11.5,
+          }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Warnings</div>
+            <ul style={{ margin: 0, paddingLeft: 18, listStyle: "disc" }}>
+              {payload.warnings.map((w, i) => <li key={i} style={{ marginBottom: 2 }}>{w}</li>)}
             </ul>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

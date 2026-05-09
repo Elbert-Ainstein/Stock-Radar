@@ -1,5 +1,53 @@
 @import "tailwindcss";
 
+/* ═══ SR Production tokens — earth-tone palette, additive to legacy tokens ═══
+   Source: docs/wireframes/v2-production/Stock_Radar_styles.css.
+   Used by .sr-* surfaces (watchlist v2). Legacy tokens stay untouched.
+*/
+:root {
+  --sr-paper: #14120f; --sr-paper-1: #1c1a17; --sr-paper-2: #25221d; --sr-paper-3: #2f2b25;
+  --sr-rule: #4a4338; --sr-rule-soft: #322e27; --sr-rule-strong: #7a705f;
+  --sr-ink: #ece7da; --sr-ink-1: #d3ccba; --sr-ink-2: #aaa28e; --sr-ink-3: #847e6f; --sr-ink-4: #5b5347;
+  --sr-conv-strong: #5fb583; --sr-conv-strong-bg: #1f3a29;
+  --sr-conv-good: #a8c860; --sr-conv-good-bg: #2e3a1c;
+  --sr-conv-watch: #d9b755; --sr-conv-watch-bg: #3a311a;
+  --sr-conv-fade: #d98a4a; --sr-conv-fade-bg: #3a261a;
+  --sr-conv-broken: #d96a59; --sr-conv-broken-bg: #3a1f1a;
+  --sr-pos: #5fb583; --sr-pos-bg: #1f3a29; --sr-neg: #d96a59; --sr-neg-bg: #3a1f1a; --sr-neutral: #aaa28e;
+  --sr-action: #ece7da; --sr-action-ink: #14120f; --sr-link: #7eaad9;
+  --sr-info-bg: #1f2c3a; --sr-info-ink: #9bbde0;
+  --sr-warn-bg: #3a311a; --sr-warn-ink: #e0c478;
+  --sr-err-bg: #3a1f1a; --sr-err-ink: #e89484;
+  --sr-ok-bg: #1f3a29; --sr-ok-ink: #8acca5;
+  --sr-font-mono: 'Geist Mono', ui-monospace, 'JetBrains Mono', SFMono-Regular, Consolas, monospace;
+}
+[data-theme="light"] {
+  --sr-paper: #fcfcfa; --sr-paper-1: #f6f4ec; --sr-paper-2: #ece8d8; --sr-paper-3: #dfd9c4;
+  --sr-rule: #c8c0a3; --sr-rule-soft: #ddd6bd; --sr-rule-strong: #8a7e60;
+  --sr-ink: #14120f; --sr-ink-1: #34302a; --sr-ink-2: #5a544a; --sr-ink-3: #847e6f; --sr-ink-4: #a39b87;
+  --sr-conv-strong: #0f6b3e; --sr-conv-strong-bg: #d8eadd;
+  --sr-conv-good: #527a1a; --sr-conv-good-bg: #e3eccf;
+  --sr-conv-watch: #8a6914; --sr-conv-watch-bg: #f0e4c2;
+  --sr-conv-fade: #a25217; --sr-conv-fade-bg: #f3dcc4;
+  --sr-conv-broken: #9b2a1d; --sr-conv-broken-bg: #f1d3cd;
+  --sr-pos: #0f6b3e; --sr-pos-bg: #d8eadd; --sr-neg: #9b2a1d; --sr-neg-bg: #f1d3cd; --sr-neutral: #5a544a;
+  --sr-action: #14120f; --sr-action-ink: #fcfcfa; --sr-link: #2c5e8c;
+  --sr-info-bg: #dde6ef; --sr-info-ink: #2c5e8c;
+  --sr-warn-bg: #f0e4c2; --sr-warn-ink: #6b4f0d;
+  --sr-err-bg: #f1d3cd; --sr-err-ink: #7a1f15;
+  --sr-ok-bg: #d8eadd; --sr-ok-ink: #0a4f2c;
+}
+@keyframes sr-shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+.sr-skel {
+  background: linear-gradient(90deg, var(--sr-paper-2) 0%, var(--sr-paper-3) 50%, var(--sr-paper-2) 100%);
+  background-size: 800px 100%;
+  animation: sr-shimmer 1.6s linear infinite;
+  border-radius: 4px; display: inline-block;
+}
+.sr-mono { font-family: var(--sr-font-mono); font-feature-settings: "tnum" 1, "lnum" 1, "ss01" 1, "zero" 1; }
+.sr-num { font-variant-numeric: tabular-nums slashed-zero; }
+.sr-eyebrow { font-family: var(--sr-font-mono); font-size: 9.5px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sr-ink-3); }
+
 /* ═══ Theme: Professional muted palette ═══ */
 /* Dark mode (default) */
 :root {
@@ -78,41 +126,4 @@ body {
 
 /* Signal dot pulse */
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-.signal-pulse { animation: pulse 2s infinite; }
-
-/* Card hover */
-.stock-card {
-  transition: background 0.15s, border-color 0.15s;
-}
-.stock-card:hover {
-  background: var(--hover);
-  border-color: var(--border-hover);
-}
-
-/* Range slider (cross-browser) */
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 6px;
-  border-radius: 3px;
-  cursor: pointer;
-  background: var(--border);
-}
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--text);
-  border: 2px solid var(--bg);
-  cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-}
-input[type="range"]::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--text);
-  border: 2px solid var(--bg);
-  cursor: pointer;
-}
+.signal-pulse { animation: pulse 2s ease-in-out infinite; }

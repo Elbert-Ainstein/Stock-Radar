@@ -49,6 +49,11 @@ class EarningsFetchError(Exception):
 # Shared constants and utilities (provider-agnostic)
 # ---------------------------------------------------------------------------
 
+# Number of trailing quarters used for TTM. Suspect-data hard-fails apply
+# to this window because TTM corrupts the entire downstream model.
+# IMPORTANT: keep this in sync with any other place that computes TTM.
+TTM_QUARTERS = 4
+
 # Minimum required line items. If any are missing in BOTH quarterly and annual
 # views for a ticker, we cannot build a model.
 REQUIRED_LINES = {
@@ -199,7 +204,7 @@ def _period_label(ts, freq: str) -> str:
     return f"{q}Q{str(y)[-2:]}"
 
 
-def _validate_quarterly_revenue(periods: list[dict]) -> list[str]:
+def _validate_quarterly_revenue(periods: list[dict]) -> tuple[list[str], set[int]]:
     """Detect quarters with suspicious revenue spikes.
 
     Checks two signals for each quarter:
@@ -223,8 +228,9 @@ def _validate_quarterly_revenue(periods: list[dict]) -> list[str]:
     and produced a $1290 base target on a $455 stock.
     """
     warnings: list[str] = []
+    suspect_indices: set[int] = set()
     if not periods:
-        return warnings
+        return warnings, suspect_indices
 
     # Only check the most recent 8 quarters (2 years) — flagging ancient
     # data (e.g. ASML 2010) is noise, not signal.
@@ -267,6 +273,7 @@ def _validate_quarterly_revenue(periods: list[dict]) -> list[str]:
                     f"Possible data error — cross-check against "
                     f"10-Q filing before trusting this quarter."
                 )
+                suspect_indices.add(i)
 
         # Check 2: same-quarter-last-year (4 periods back in quarterly data)
         if i >= 4:
@@ -288,8 +295,9 @@ def _validate_quarterly_revenue(periods: list[dict]) -> list[str]:
                         f"last-year ${yoy_rev/1e9:.2f}B "
                         f"(threshold: {yoy_thresh:.1f}x). Verify against filing."
                     )
+                    suspect_indices.add(i)
 
-    return warnings
+    return warnings, suspect_indices
 
 
 def _check_required(periods: list[dict], category: str) -> list[str]:
@@ -355,6 +363,7 @@ def _validate_and_build(
     source: str,
     min_quarters: int = 4,
     extra_warnings: list[str] | None = None,
+    override_suspect_recent: bool = False,
 ) -> FinancialData:
     """Shared validation + FinancialData construction used by all providers.
 
@@ -365,12 +374,45 @@ def _validate_and_build(
     warnings: list[str] = list(extra_warnings or [])
 
     # Revenue sanity check
-    rev_warnings = _validate_quarterly_revenue(q_inc)
+    rev_warnings, suspect_indices = _validate_quarterly_revenue(q_inc)
     if rev_warnings:
         warnings.extend(rev_warnings)
         print(f"  [{ticker}] Revenue sanity check fired:", file=sys.stderr)
         for w in rev_warnings:
             print(f"    {w}", file=sys.stderr)
+
+    # HARD-FAIL when a suspect quarter is in the most-recent TTM_QUARTERS:
+    # those quarters drive TTM revenue and bad TTM corrupts every downstream
+    # number. Per earnings-as-source-of-truth contract: never silently fall
+    # back to estimates. Operator must verify against the 10-Q filing.
+    # Override path: pass override_suspect_recent=True after manual verification
+    # for legitimate large jumps (M&A, post-IPO, post-spinoff like SNDK).
+    if suspect_indices and q_inc:
+        n = len(q_inc)
+        recent_window = set(range(max(0, n - TTM_QUARTERS), n))
+        recent_suspects = sorted(suspect_indices & recent_window)
+        if recent_suspects:
+            recent_labels = [q_inc[i].get("period", f"idx-{i}") for i in recent_suspects]
+            recent_warnings = [w for w in rev_warnings
+                               if any(lbl in w for lbl in recent_labels)]
+            if override_suspect_recent:
+                warnings.append(
+                    f"OVERRIDE_SUSPECT_RECENT: {ticker} {recent_labels} flagged "
+                    f"by sanity check; operator override applied. Verify against 10-Q."
+                )
+                print(f"  [{ticker}] override_suspect_recent=True — building model "
+                      f"despite sanity-check failure on {recent_labels}", file=sys.stderr)
+            else:
+                raise EarningsFetchError(
+                    f"{ticker}: revenue sanity check FAILED on recent quarter(s) "
+                    f"{recent_labels} (within last {TTM_QUARTERS}Q used for TTM). "
+                    f"Provider data is inconsistent with prior quarters by 2x "
+                    f"trailing-avg / 2.5x YoY thresholds (size-aware). Cannot "
+                    f"build a reliable model. Operator must verify against 10-Q. "
+                    f"If data is genuinely correct (M&A, post-IPO, post-spinoff), "
+                    f"pass override_suspect_recent=True to fetch_financials. Details:\n  "
+                    + "\n  ".join(recent_warnings)
+                )
 
     # Enforce minimum coverage
     if len(q_inc) < min_quarters and len(a_inc) < 2:
@@ -577,7 +619,8 @@ class DataProvider(ABC):
     """
 
     @abstractmethod
-    def fetch(self, ticker: str, min_quarters: int = 4) -> FinancialData:
+    def fetch(self, ticker: str, min_quarters: int = 4,
+              override_suspect_recent: bool = False) -> FinancialData:
         """Fetch financial data for a ticker.
 
         Raises EarningsFetchError if data is unavailable or insufficient.
@@ -637,7 +680,8 @@ class YFinanceProvider(DataProvider):
             periods.append(pd_)
         return periods
 
-    def fetch(self, ticker: str, min_quarters: int = 4) -> FinancialData:
+    def fetch(self, ticker: str, min_quarters: int = 4,
+              override_suspect_recent: bool = False) -> FinancialData:
         self._ensure_yfinance()
         import yfinance as yf
 
@@ -680,6 +724,7 @@ class YFinanceProvider(DataProvider):
             a_inc=a_inc, a_cf=a_cf, a_bs=a_bs,
             source=self.name,
             min_quarters=min_quarters,
+            override_suspect_recent=override_suspect_recent,
         )
 
 
@@ -790,7 +835,8 @@ class EODHDProvider(DataProvider):
                     # capex is usually negative in EODHD; FCF = OCF + capex (if neg)
                     p["Free Cash Flow"] = ocf + capex if capex < 0 else ocf - abs(capex)
 
-    def fetch(self, ticker: str, min_quarters: int = 4) -> FinancialData:
+    def fetch(self, ticker: str, min_quarters: int = 4,
+              override_suspect_recent: bool = False) -> FinancialData:
         import json
         try:
             import requests
@@ -926,6 +972,7 @@ class EODHDProvider(DataProvider):
             a_inc=a_inc, a_cf=a_cf, a_bs=a_bs,
             source=self.name,
             min_quarters=min_quarters,
+            override_suspect_recent=override_suspect_recent,
         )
 
 
@@ -1030,7 +1077,8 @@ class AlphaVantageProvider(DataProvider):
         periods.reverse()
         return periods
 
-    def fetch(self, ticker: str, min_quarters: int = 4) -> FinancialData:
+    def fetch(self, ticker: str, min_quarters: int = 4,
+              override_suspect_recent: bool = False) -> FinancialData:
         import time
 
         ticker = ticker.upper().strip()
@@ -1106,6 +1154,7 @@ class AlphaVantageProvider(DataProvider):
             a_inc=a_inc, a_cf=a_cf, a_bs=a_bs,
             source=self.name,
             min_quarters=min_quarters,
+            override_suspect_recent=override_suspect_recent,
         )
 
 
@@ -1164,7 +1213,8 @@ def get_provider(name: str | None = None) -> DataProvider:
     return YFinanceProvider()
 
 
-def fetch_financials(ticker: str, min_quarters: int = 4) -> FinancialData:
+def fetch_financials(ticker: str, min_quarters: int = 4,
+                     override_suspect_recent: bool = False) -> FinancialData:
     """Fetch historical financials for `ticker` using the configured provider.
 
     This is the public API that all downstream consumers call. The provider
@@ -1195,7 +1245,7 @@ def fetch_financials(ticker: str, min_quarters: int = 4) -> FinancialData:
 
     provider = get_provider()
     try:
-        result = provider.fetch(ticker, min_quarters=min_quarters)
+        result = provider.fetch(ticker, min_quarters=min_quarters, override_suspect_recent=override_suspect_recent)
     except EarningsFetchError as primary_err:
         # If the primary provider is not yfinance, try yfinance as fallback
         if provider.name != "yfinance":
@@ -1209,7 +1259,7 @@ def fetch_financials(ticker: str, min_quarters: int = 4) -> FinancialData:
             )
             try:
                 fallback = YFinanceProvider()
-                result = fallback.fetch(ticker, min_quarters=min_quarters)
+                result = fallback.fetch(ticker, min_quarters=min_quarters, override_suspect_recent=override_suspect_recent)
                 result.warnings.append(
                     f"FALLBACK: Used yfinance instead of {provider.name} "
                     f"(primary error: {primary_err})"

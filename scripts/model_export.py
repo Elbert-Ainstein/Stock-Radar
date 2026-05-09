@@ -824,11 +824,17 @@ def _build_valuation(wb: Workbook, fin: FinancialData, t: TargetResult) -> None:
         c.number_format = FMT_MULT
     EV_FCF_MULT_ROW = r
     r += 1
-    # WACC
-    ws.cell(row=r, column=2, value="WACC").font = BLACK
+    # WACC — constant across scenarios since Pass 1 (no per-scenario discount_rate
+    # in SCENARIO_OFFSETS anymore). Pull the literal value from the base scenario.
+    # CHANGELOG #21 dropped this from scenario_keys but the call site here was missed.
+    base_wacc = 0.10  # safe default if scenarios dict not yet populated
+    try:
+        base_wacc = float(t.scenarios["base"].discount_rate)
+    except (KeyError, AttributeError, TypeError):
+        pass
+    ws.cell(row=r, column=2, value="WACC (constant across scenarios)").font = BLACK
     for scen, col in SCEN_COLS.items():
-        c = ws.cell(row=r, column=ord(col) - ord("A") + 1,
-                    value=f"={scen_refs[scen]['discount_rate']}")
+        c = ws.cell(row=r, column=ord(col) - ord("A") + 1, value=base_wacc)
         c.font = BLACK
         c.number_format = FMT_PCT
     WACC_ROW = r

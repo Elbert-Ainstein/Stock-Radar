@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Stock Radar — Print</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="hifi/tokens.css" />
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; color: var(--ink); font-family: 'Inter', system-ui, sans-serif; }
+
+  /* Print page setup */
+  @page { size: A4 landscape; margin: 0.6cm; }
+  @media print {
+    html, body { background: #fff !important; }
+    .pg { page-break-after: always; break-after: page; }
+    .pg:last-child { page-break-after: auto; break-after: auto; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  }
+
+  /* Page wrapper — a single artboard per page, scaled to fit */
+  .pg {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14mm 14mm 12mm;
+    display: flex;
+    flex-direction: column;
+    gap: 6mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Cover page */
+  .cover {
+    min-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 20mm 18mm;
+  }
+  .cover h1 {
+    font-family: Georgia, serif;
+    font-size: 64pt;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin: 0 0 16pt;
+  }
+  .cover .sub { font-size: 16pt; color: var(--ink-2); max-width: 540pt; line-height: 1.45; }
+  .cover .meta { display: flex; justify-content: space-between; align-items: flex-end; font-family: 'Geist Mono', monospace; font-size: 9pt; color: var(--ink-3); border-top: 1px solid var(--rule); padding-top: 10pt; }
+
+  /* Section divider page */
+  .divider {
+    min-height: 75vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 20mm 18mm;
+  }
+  .divider .eyebrow { font-family: 'Geist Mono', monospace; font-size: 9pt; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8pt; }
+  .divider h2 { font-family: Georgia, serif; font-size: 38pt; font-weight: 600; letter-spacing: -0.015em; margin: 0 0 8pt; line-height: 1.05; }
+  .divider .desc { font-size: 13pt; color: var(--ink-2); max-width: 600pt; }
+
+  /* Page header for artboard pages */
+  .pg-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 4mm;
+  }
+  .pg-head .title { font-size: 14pt; font-weight: 600; letter-spacing: -0.01em; }
+  .pg-head .label { font-family: 'Geist Mono', monospace; font-size: 8.5pt; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; }
+  .pg-head .dim { font-family: 'Geist Mono', monospace; font-size: 8pt; color: var(--ink-3); }
+
+  /* Artboard container — scaled with transform */
+  .ab-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .ab {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+    transform-origin: top center;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* Footer */
+  .pg-foot {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'Geist Mono', monospace;
+    font-size: 7.5pt;
+    color: var(--ink-3);
+    border-top: 1px solid var(--rule-soft);
+    padding-top: 3mm;
+  }
+
+  /* Side-by-side small artboards (phone) */
+  .multi {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8mm;
+    flex: 1;
+    align-items: start;
+    justify-items: center;
+  }
+  .multi .ab-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3mm;
+  }
+  .multi .ab-cell .cap { font-family: 'Geist Mono', monospace; font-size: 8pt; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* TOC */
+  .toc { font-size: 11pt; }
+  .toc-row { display: flex; justify-content: space-between; padding: 3mm 0; border-bottom: 1px dotted var(--rule-soft); align-items: baseline; }
+  .toc-row .num { font-family: 'Geist Mono', monospace; font-size: 9pt; color: var(--ink-3); width: 24pt; }
+  .toc-row .label { flex: 1; }
+  .toc-row .pgnum { font-family: 'Geist Mono', monospace; font-size: 9pt; color: var(--ink-3); }
+</style>
+</head>
+<body data-theme="light">
+
+<!-- COVER -->
+<section class="pg cover">
+  <div>
+    <div style="font-family:'Geist Mono',monospace; font-size:9pt; letter-spacing:0.2em; text-transform:uppercase; color:var(--ink-3); margin-bottom:24pt;">Hi-fi · Production</div>
+    <h1>Stock Radar</h1>
+    <p class="sub">An equity research workstation. Reasoned thesis is the headline; DCF is the floor. Built around watch, decide, run, remember.</p>
+  </div>
+  <div style="display:flex; gap:18pt; margin-top:24pt;">
+    <svg viewBox="0 0 600 220" style="width:100%; max-width:540pt;">
+      <g stroke="#0a0a0a" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="0,180 50,160 100,170 150,120 200,135 250,80 300,100 350,55 400,70 450,30 500,40 560,15"/>
+        <circle cx="560" cy="15" r="8" fill="#0a0a0a"/>
+      </g>
+      <line x1="0" y1="120" x2="600" y2="120" stroke="#cfcec7" stroke-width="1" stroke-dasharray="3 3"/>
+      <text x="6" y="115" font-family="Geist Mono, monospace" font-size="9" fill="#6b6b66">FLOOR · DCF</text>
+    </svg>
+  </div>
+  <div class="meta">
+    <span>v3.2.4 · May 4, 2026</span>
+    <span>Design canvas → PDF</span>
+    <span>Page 1</span>
+  </div>
+</section>
+
+<!-- TOC -->
+<section class="pg">
+  <div class="pg-head">
+    <span class="title">Contents</span>
+    <span class="label">26 artboards · 6 sections</span>
+  </div>
+  <div class="toc">
+    <div class="toc-row"><span class="num">01</span><span class="label">Watchlist · Desktop · 7 states</span><span class="pgnum">p. 3</span></div>
+    <div class="toc-row"><span class="num">02</span><span class="label">Watchlist · Tablet</span><span class="pgnum">p. 11</span></div>
+    <div class="toc-row"><span class="num">03</span><span class="label">Watchlist · Phone · 3 states</span><span class="pgnum">p. 13</span></div>
+    <div class="toc-row"><span class="num">04</span><span class="label">Stock Detail · Desktop · 5 states</span><span class="pgnum">p. 15</span></div>
+    <div class="toc-row"><span class="num">05</span><span class="label">Stock Detail · Tablet + Phone</span><span class="pgnum">p. 21</span></div>
+    <div class="toc-row"><span class="num">06</span><span class="label">Model Detail · Thesis + Floor</span><span class="pgnum">p. 24</span></div>
+    <div class="toc-row"><span class="num">07</span><span class="label">Other flows · Discovery · Ask · Logs · Picker</span><span class="pgnum">p. 26</span></div>
+    <div class="toc-row"><span class="num">08</span><span class="label">Component sheet</span><span class="pgnum">p. 30</span></div>
+  </div>
+  <div class="pg-foot"><span>Stock Radar · Hi-fi</span><span>v3.2.4</span><span>02</span></div>
+</section>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="hifi/sr-data.jsx"></script>
+<script type="text/babel" src="hifi/sr-atoms.jsx"></script>
+<script type="text/babel" src="hifi/sr-watchlist.jsx"></script>
+<script type="text/babel" src="hifi/sr-detail.jsx"></script>
+<script type="text/babel" src="hifi/sr-model.jsx"></script>
+<script type="text/babel" src="hifi/sr-other.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+
+/* Page sizes for landscape A4 in CSS px:
+   A4 landscape ≈ 1123 × 794 px at 96dpi, minus margins → usable ~1057 × 735.
+   Padding 14mm + headers/footers → workable artboard area ~960 × 580. */
+
+const PAGE_W = 1000;   // workable px width on the page after margins
+const PAGE_H = 560;    // workable px height after head/foot/padding
+
+function fitScale(w, h, maxW = PAGE_W, maxH = PAGE_H) {
+  return Math.min(maxW / w, maxH / h, 1);
+}
+
+function ArtboardPage({ section, label, width, height, children, idx, total }) {
+  const s = fitScale(width, height);
+  return (
+    <section className="pg">
+      <div className="pg-head">
+        <span className="title">{section}</span>
+        <span className="label">{label}</span>
+        <span className="dim">{width}×{height} · scale {Math.round(s * 100)}%</span>
+      </div>
+      <div className="ab-wrap">
+        <div className="ab" style={{ width, height, transform: `scale(${s})` }}>
+          {children}
+        </div>
+      </div>
+      <div className="pg-foot"><span>Stock Radar · Hi-fi</span><span>{section}</span><span>{idx}/{total}</span></div>
+    </section>
+  );
+}
+
+function MultiPhonePage({ section, items, idx, total }) {
+  // each phone 390x844, scale to fit 3-up
+  const cellW = 280, cellH = 480;
+  const s = Math.min(cellW / 390, cellH / 844);
+  return (
+    <section className="pg">
+      <div className="pg-head">
+        <span className="title">{section}</span>
+        <span className="label">{items.length} states · phone 390×844</span>
+        <span className="dim">scale {Math.round(s * 100)}%</span>
+      </div>
+      <div className="multi" style={{ alignContent: 'center' }}>
+        {items.map((it, i) => (
+          <div key={i} className="ab-cell">
+            <div className="ab" style={{ width: 390, height: 844, transform: `scale(${s})`, transformOrigin: 'top center', marginBottom: -844 * (1 - s) }}>
+              {it.node}
+            </div>
+            <div className="cap">{it.cap}</div>
+          </div>
+        ))}
+      </div>
+      <div className="pg-foot"><span>Stock Radar · Hi-fi</span><span>{section}</span><span>{idx}/{total}</span></div>
+    </section>
+  );
+}
+
+function Divider({ eyebrow, title, desc }) {
+  return (
+    <section className="pg divider">
+      <div>
+        <div className="eyebrow">{eyebrow}</div>
+        <h2>{title}</h2>
+        <p className="desc">{desc}</p>
+      </div>
+    </section>
+  );
+}
+
+function PrintBook() {
+  const pages = [];
+  let n = 3;
+
+  // Watchlist desktop
+  pages.push(<Divider key="d1" eyebrow="01 · Watchlist" title="Desktop — list, grid, ladder" desc="Default is list. Grid for visual scan; ladder for thesis-vs-floor stack rank. All five states render in the production chrome."/>);
+  const wlD = [
+    { id: 'happy-list',   v: 'list',   s: 'happy',   cap: 'happy · list' },
+    { id: 'happy-grid',   v: 'grid',   s: 'happy',   cap: 'happy · grid' },
+    { id: 'happy-ladder', v: 'ladder', s: 'happy',   cap: 'happy · ladder' },
+    { id: 'loading',      v: 'list',   s: 'loading', cap: 'loading' },
+    { id: 'error',        v: 'list',   s: 'error',   cap: 'error' },
+    { id: 'stale',        v: 'list',   s: 'stale',   cap: 'stale' },
+    { id: 'empty',        v: 'list',   s: 'empty',   cap: 'empty' },
+  ];
+  wlD.forEach((c, i) => pages.push(
+    <ArtboardPage key={'wlD'+i} section="01 · Watchlist · Desktop" label={c.cap} width={1440} height={820} idx={n++} total={36}>
+      <WatchlistArtboard breakpoint="desktop" state={c.s} defaultView={c.v} />
+    </ArtboardPage>
+  ));
+
+  // Watchlist tablet
+  pages.push(<Divider key="d2" eyebrow="02 · Watchlist" title="Tablet — 834×1112" desc="Grid 2-up by default. List view scrolls horizontally to preserve column structure."/>);
+  pages.push(<ArtboardPage key="wlT1" section="02 · Watchlist · Tablet" label="grid" width={834} height={1112} idx={n++} total={36}>
+    <WatchlistArtboard breakpoint="tablet" state="happy" defaultView="grid" />
+  </ArtboardPage>);
+  pages.push(<ArtboardPage key="wlT2" section="02 · Watchlist · Tablet" label="list" width={834} height={1112} idx={n++} total={36}>
+    <WatchlistArtboard breakpoint="tablet" state="happy" defaultView="list" />
+  </ArtboardPage>);
+
+  // Watchlist phone (3-up on one page)
+  pages.push(<Divider key="d3" eyebrow="03 · Watchlist" title="Phone — full parity" desc="Stacked cards, bottom nav, identical conviction grammar."/>);
+  pages.push(<MultiPhonePage key="wlP" section="03 · Watchlist · Phone" idx={n++} total={36} items={[
+    { cap: 'happy',   node: <WatchlistArtboard breakpoint="phone" state="happy" /> },
+    { cap: 'loading', node: <WatchlistArtboard breakpoint="phone" state="loading" /> },
+    { cap: 'error',   node: <WatchlistArtboard breakpoint="phone" state="error" /> },
+  ]}/>);
+
+  // Stock Detail desktop
+  pages.push(<Divider key="d4" eyebrow="04 · Stock Detail" title="Desktop — full-page route" desc="Thesis is the headline. Floor is a tile in the side rail. Memory and scouts persist regardless of state."/>);
+  ['happy','empty','loading','error','stale'].forEach((s, i) => pages.push(
+    <ArtboardPage key={'sdD'+i} section="04 · Stock Detail · Desktop" label={s} width={1440} height={920} idx={n++} total={36}>
+      <StockDetailArtboard breakpoint="desktop" state={s} />
+    </ArtboardPage>
+  ));
+
+  // Detail tablet + phone
+  pages.push(<Divider key="d5" eyebrow="05 · Stock Detail" title="Tablet + Phone" desc="Single-column responsive. Side rail folds into the main flow below the fold."/>);
+  pages.push(<ArtboardPage key="sdT" section="05 · Stock Detail · Tablet" label="happy" width={834} height={1180} idx={n++} total={36}>
+    <StockDetailArtboard breakpoint="tablet" state="happy"/>
+  </ArtboardPage>);
+  pages.push(<MultiPhonePage key="sdP" section="05 · Stock Detail · Phone" idx={n++} total={36} items={[
+    { cap: 'happy',   node: <StockDetailArtboard breakpoint="phone" state="happy"/> },
+    { cap: 'loading', node: <StockDetailArtboard breakpoint="phone" state="loading"/> },
+    { cap: 'error',   node: <StockDetailArtboard breakpoint="phone" state="error"/> },
+  ]}/>);
+
+  // Model detail
+  pages.push(<Divider key="d6" eyebrow="06 · Model Detail" title="Thesis + Floor" desc="Thesis tab uses full-bleed layouts and the action color. Floor uses muted chrome — italic numerals, dashed borders."/>);
+  ['happy','stale'].forEach((s, i) => pages.push(
+    <ArtboardPage key={'mdD'+i} section="06 · Model Detail" label={s} width={1440} height={1100} idx={n++} total={36}>
+      <ModelDetailArtboard state={s} />
+    </ArtboardPage>
+  ));
+
+  // Other flows
+  pages.push(<Divider key="d7" eyebrow="07 · Other flows" title="Discovery · Ask · Logs · Picker" desc="Adjacent surfaces — discovery feed, AI query over your workspace, run logs, model selection."/>);
+  pages.push(<ArtboardPage key="oD" section="07 · Discovery"   label="happy" width={1280} height={760} idx={n++} total={36}><DiscoveryArtboard/></ArtboardPage>);
+  pages.push(<ArtboardPage key="oA" section="07 · Ask"         label="conversational" width={1280} height={760} idx={n++} total={36}><AskArtboard/></ArtboardPage>);
+  pages.push(<ArtboardPage key="oL" section="07 · Run logs"    label="9-row sample"  width={1280} height={760} idx={n++} total={36}><LogsArtboard/></ArtboardPage>);
+  pages.push(<ArtboardPage key="oP" section="07 · Model picker" label="4 candidates"  width={1280} height={760} idx={n++} total={36}><PickerArtboard/></ArtboardPage>);
+
+  // Component sheet
+  pages.push(<Divider key="d8" eyebrow="08 · Components" title="Component sheet" desc="Every atom, every state. The system is small and rule-bound by design — that's how the product feels stable."/>);
+  pages.push(<ArtboardPage key="cs" section="08 · Components" label="atoms · states · sizes" width={1100} height={1400} idx={n++} total={36}><ComponentSheet/></ArtboardPage>);
+
+  return <>{pages}</>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<PrintBook />);
+
+/* Auto-print after fonts + babel ready */
+(async () => {
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+  await new Promise(r => setTimeout(r, 1500));
+  window.print();
+})();
+</script>
+</body>
+</html>

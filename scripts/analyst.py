@@ -861,6 +861,30 @@ def collect_events_from_signals(signals: list[dict]) -> list[dict]:
     return events
 
 
+def _load_latest_archetype(ticker: str) -> str | None:
+    """Read the latest stored archetype.primary for a ticker from Supabase.
+
+    Returns None if no model has been generated yet (first-time tickers, or
+    rebuild with no prior model row). This is consumed by the engine to
+    route to cyclical / compounder / transformational valuation modes.
+    """
+    try:
+        from supabase_helper import get_client
+        sb = get_client()
+        resp = sb.table("models").select("archetype").eq("ticker", ticker).order(
+            "created_at", desc=True
+        ).limit(1).execute()
+        rows = resp.data or []
+        if not rows:
+            return None
+        arch = rows[0].get("archetype") or {}
+        if isinstance(arch, dict):
+            return (arch.get("primary") or "").lower() or None
+        return None
+    except Exception:
+        return None
+
+
 def analyze_stock(ticker: str, name: str, sector: str, signals: list[dict], all_scouts: dict) -> dict:
     """Produce full analysis for a single stock."""
 
@@ -1156,7 +1180,12 @@ def analyze_stock(ticker: str, name: str, sector: str, signals: list[dict], all_
     if _TARGET_ENGINE_AVAILABLE and ticker:
         try:
             _fin = _engine_fetch_financials(ticker)
-            _tres = _engine_build_target(_fin)
+            # Read the latest stored archetype for this ticker so the engine
+            # can route to cyclical/transformational/compounder logic
+            # (without this, the engine ran archetype-blind and produced
+            # trough-anchored numbers — see backtest 2026-04-28).
+            _arch_primary = _load_latest_archetype(ticker)
+            _tres = _engine_build_target(_fin, archetype=_arch_primary)
             engine_target = round(_tres.base)
             engine_target_available = True
             engine_target_warnings = list(_tres.warnings or [])

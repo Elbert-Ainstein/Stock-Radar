@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS prediction_outcomes (
     id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    prediction_id   UUID REFERENCES prediction_log(id) ON DELETE CASCADE,
+    prediction_id   BIGINT REFERENCES prediction_log(id) ON DELETE CASCADE,
     ticker          TEXT NOT NULL,
     days_elapsed    INTEGER NOT NULL,
     actual_price    DOUBLE PRECISION,

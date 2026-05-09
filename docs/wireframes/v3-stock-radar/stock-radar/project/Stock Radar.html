@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Stock Radar — Production</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="hifi/tokens.css" />
+<style>
+  html, body { margin: 0; padding: 0; background: var(--paper); height: 100%; overflow: hidden; }
+  body { font-family: 'Inter', system-ui, sans-serif; color: var(--ink); }
+</style>
+</head>
+<body data-theme="light">
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="hifi/design-canvas.jsx"></script>
+<script type="text/babel" src="hifi/tweaks-panel.jsx"></script>
+<script type="text/babel" src="hifi/sr-data.jsx"></script>
+<script type="text/babel" src="hifi/sr-atoms.jsx"></script>
+<script type="text/babel" src="hifi/sr-watchlist.jsx"></script>
+<script type="text/babel" src="hifi/sr-detail.jsx"></script>
+<script type="text/babel" src="hifi/sr-model.jsx"></script>
+<script type="text/babel" src="hifi/sr-other.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "state": "happy",
+  "view": "list"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tw, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  React.useEffect(() => { document.body.dataset.theme = tw.theme; }, [tw.theme]);
+  const stateOpts = ['happy','empty','loading','error','stale'];
+
+  return (
+    <>
+      <DesignCanvas>
+        {/* WATCHLIST */}
+        <DCSection id="watch-desktop" title="Watchlist · Desktop" subtitle="default = list · toggle to grid or ladder · all states">
+          <DCArtboard id="wl-d-happy"   label="Desktop · happy · list"   width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="happy"   defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-grid"    label="Desktop · happy · grid"   width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="happy"   defaultView="grid" /></DCArtboard>
+          <DCArtboard id="wl-d-ladder"  label="Desktop · happy · ladder" width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="happy"   defaultView="ladder" /></DCArtboard>
+          <DCArtboard id="wl-d-loading" label="Desktop · loading"        width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="loading" defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-error"   label="Desktop · error"          width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="error"   defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-stale"   label="Desktop · stale"          width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="stale"   defaultView="list" /></DCArtboard>
+          <DCArtboard id="wl-d-empty"   label="Desktop · empty"          width={1440} height={820}><WatchlistArtboard breakpoint="desktop" state="empty"   defaultView="list" /></DCArtboard>
+        </DCSection>
+
+        <DCSection id="watch-tablet" title="Watchlist · Tablet (834×1112)" subtitle="grid 2-up · list scrolls horizontally">
+          <DCArtboard id="wl-t-grid"  label="Tablet · grid"  width={834} height={1112}><WatchlistArtboard breakpoint="tablet" state="happy" defaultView="grid"/></DCArtboard>
+          <DCArtboard id="wl-t-list"  label="Tablet · list"  width={834} height={1112}><WatchlistArtboard breakpoint="tablet" state="happy" defaultView="list"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="watch-phone" title="Watchlist · Phone (390×844)" subtitle="full parity · stacked cards · bottom nav">
+          <DCArtboard id="wl-p-happy"   label="Phone · happy"   width={390} height={844}><WatchlistArtboard breakpoint="phone" state="happy"/></DCArtboard>
+          <DCArtboard id="wl-p-loading" label="Phone · loading" width={390} height={844}><WatchlistArtboard breakpoint="phone" state="loading"/></DCArtboard>
+          <DCArtboard id="wl-p-error"   label="Phone · error"   width={390} height={844}><WatchlistArtboard breakpoint="phone" state="error"/></DCArtboard>
+        </DCSection>
+
+        {/* STOCK DETAIL */}
+        <DCSection id="detail-desktop" title="Stock Detail · Desktop" subtitle="full-page route · all states">
+          <DCArtboard id="sd-d-happy"   label="Desktop · happy"   width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="happy"/></DCArtboard>
+          <DCArtboard id="sd-d-empty"   label="Desktop · empty (no thesis yet)" width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="empty"/></DCArtboard>
+          <DCArtboard id="sd-d-loading" label="Desktop · loading (60–120s)"      width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="loading"/></DCArtboard>
+          <DCArtboard id="sd-d-error"   label="Desktop · error (subprocess)"    width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="error"/></DCArtboard>
+          <DCArtboard id="sd-d-stale"   label="Desktop · stale (>24h)"          width={1440} height={920}><StockDetailArtboard breakpoint="desktop" state="stale"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="detail-tablet" title="Stock Detail · Tablet">
+          <DCArtboard id="sd-t-happy" label="Tablet · happy" width={834} height={1180}><StockDetailArtboard breakpoint="tablet" state="happy"/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="detail-phone" title="Stock Detail · Phone">
+          <DCArtboard id="sd-p-happy"   label="Phone · happy"   width={390} height={844}><StockDetailArtboard breakpoint="phone" state="happy"/></DCArtboard>
+          <DCArtboard id="sd-p-empty"   label="Phone · empty"   width={390} height={844}><StockDetailArtboard breakpoint="phone" state="empty"/></DCArtboard>
+          <DCArtboard id="sd-p-loading" label="Phone · loading" width={390} height={844}><StockDetailArtboard breakpoint="phone" state="loading"/></DCArtboard>
+          <DCArtboard id="sd-p-error"   label="Phone · error"   width={390} height={844}><StockDetailArtboard breakpoint="phone" state="error"/></DCArtboard>
+        </DCSection>
+
+        {/* MODEL DETAIL */}
+        <DCSection id="model-detail" title="Model Detail · Thesis + Floor" subtitle="full thesis output, DCF as floor input, run history">
+          <DCArtboard id="md-d-happy" label="Desktop · happy"  width={1440} height={1100}><ModelDetailArtboard state="happy"/></DCArtboard>
+          <DCArtboard id="md-d-stale" label="Desktop · stale"  width={1440} height={1100}><ModelDetailArtboard state="stale"/></DCArtboard>
+        </DCSection>
+
+        {/* DISCOVERY · ASK · LOGS · PICKER */}
+        <DCSection id="other-flows" title="Other flows" subtitle="discovery feed, ask AI, run logs, model picker">
+          <DCArtboard id="o-discovery" label="Discovery"     width={1280} height={760}><DiscoveryArtboard/></DCArtboard>
+          <DCArtboard id="o-ask"       label="Ask"           width={1280} height={760}><AskArtboard/></DCArtboard>
+          <DCArtboard id="o-logs"      label="Run logs"      width={1280} height={760}><LogsArtboard/></DCArtboard>
+          <DCArtboard id="o-picker"    label="Model picker"  width={1280} height={760}><PickerArtboard/></DCArtboard>
+        </DCSection>
+
+        {/* COMPONENT SHEET */}
+        <DCSection id="components" title="Component sheet" subtitle="every atom, every state — the building blocks">
+          <DCArtboard id="cs-main" label="Components" width={1100} height={1400}><ComponentSheet/></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Theme"/>
+        <TweakRadio label="Mode" value={tw.theme} options={['light','dark']} onChange={v => setTweak('theme', v)}/>
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
