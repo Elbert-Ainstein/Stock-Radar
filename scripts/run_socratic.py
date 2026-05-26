@@ -52,6 +52,7 @@ PROMPTS_DIR = HERE / "prompts" / "socratic"
 SOURCES_PATH = HERE / "prompts" / "sources_allowlist.json"
 SOCRATIC_DIR = REPO_ROOT / "data" / "socratic"
 OPERATOR_NOTES_DIR = REPO_ROOT / "data" / "operator_notes"
+VALIDATED_CORRECTIONS_PATH = REPO_ROOT / "data" / "validated_corrections.md"  # 2026-05-26 cross-ticker fact layer
 
 SOCRATIC_MODEL = "claude-sonnet-4-6"
 MAX_TOOL_ITER_PER_MODEL = 5
@@ -582,6 +583,35 @@ def fetch_operator_notes(ticker: str) -> str:
     return "\n".join(lines).strip() or f"(none — operator note file body empty after title)"
 
 
+def fetch_validated_corrections() -> str:
+    """Load cross-ticker engine-verified factual corrections from data/validated_corrections.md.
+
+    Unlike per-ticker operator_notes (subjective), this file contains corrections to
+    common market narratives that engine research has confirmed. Loaded into EVERY
+    Socratic run so corrections to claims about Company A do not get re-cited
+    incorrectly when analyzing Company B that mentions Company A.
+
+    Treatment in prompts: corrections are FACTS, not opinions. Models must treat
+    them as ground truth. See data/validated_corrections.md for format.
+    """
+    path = VALIDATED_CORRECTIONS_PATH
+    if not path.exists():
+        return f"(none — no validated_corrections.md file at {path})"
+    try:
+        body = path.read_text(encoding="utf-8").strip()
+    except Exception as e:
+        print(f"  [validated_corrections] WARN: could not read {path.name}: {e}", file=sys.stderr)
+        return f"(none — validated_corrections file present but unreadable: {e})"
+    if not body:
+        return f"(none — validated_corrections file is empty)"
+    lines = body.splitlines()
+    if lines and lines[0].startswith("# "):
+        lines = lines[1:]
+        while lines and not lines[0].strip():
+            lines = lines[1:]
+    return "\n".join(lines).strip() or f"(none — validated_corrections body empty after title)"
+
+
 # ────────────────────────────────────────────────────────────────────
 # Context: build the placeholder dict each model gets
 # ────────────────────────────────────────────────────────────────────
@@ -631,6 +661,7 @@ def build_context(ticker: str, *, override_suspect_recent: bool = False) -> dict
     # so the strict-fill guard accepts the placeholder. Prompts treat the notes as
     # input to test against the data, NOT as fact. See data/operator_notes/README.md.
     operator_notes = fetch_operator_notes(ticker)
+    validated_corrections = fetch_validated_corrections()
 
     if macro_row:
         print(f"  [macro] regime={macro_row.get('regime_classification','?')} (id={macro_row.get('id','?')})", file=sys.stderr, flush=True)
@@ -646,6 +677,10 @@ def build_context(ticker: str, *, override_suspect_recent: bool = False) -> dict
     else:
         preview = operator_notes.replace("\n", " ")[:80]
         print(f"  [operator_notes] LOADED for {ticker.upper()} ({len(operator_notes)} chars): {preview}...", file=sys.stderr, flush=True)
+    if validated_corrections.startswith("(none"):
+        print(f"  [validated_corrections] none", file=sys.stderr, flush=True)
+    else:
+        print(f"  [validated_corrections] LOADED ({len(validated_corrections)} chars, cross-ticker facts)", file=sys.stderr, flush=True)
 
     return {
         "ticker": ticker.upper(),
@@ -660,6 +695,7 @@ def build_context(ticker: str, *, override_suspect_recent: bool = False) -> dict
         "macro_context": macro_context,
         "wave_context": wave_context,
         "operator_notes": operator_notes,
+        "validated_corrections": validated_corrections,
         "macro_environment_id": macro_row.get("id") if macro_row else None,
         "wave_health_id": wave_row.get("id") if wave_row else None,
     }
@@ -733,6 +769,7 @@ def run_corpus_callosum(ctx: dict, round_1: dict[str, dict]) -> dict:
         price=ctx["price"],
         macro_context=ctx.get("macro_context", "(none)"),
         operator_notes=ctx.get("operator_notes", "(none)"),
+        validated_corrections=ctx.get("validated_corrections", "(none)"),
         model_a_json=json.dumps(round_1["a"]["parsed"], ensure_ascii=False, indent=2),
         model_b_json=json.dumps(round_1["b"]["parsed"], ensure_ascii=False, indent=2),
         model_c_json=json.dumps(round_1["c"]["parsed"], ensure_ascii=False, indent=2),
@@ -858,6 +895,7 @@ def run_rough_target_range(
         macro_context=ctx.get("macro_context", "(none)"),
         wave_context=ctx.get("wave_context", "(none)"),
         operator_notes=ctx.get("operator_notes", "(none)"),
+        validated_corrections=ctx.get("validated_corrections", "(none)"),
         model_a_json=json.dumps(round_1["a"]["parsed"], ensure_ascii=False, indent=2),
         model_b_json=json.dumps(round_1["b"]["parsed"], ensure_ascii=False, indent=2),
         model_c_json=json.dumps(round_1["c"]["parsed"], ensure_ascii=False, indent=2),

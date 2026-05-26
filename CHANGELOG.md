@@ -2,6 +2,112 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-05-26] validated_corrections.md: cross-ticker fact layer (fixes contamination bug)
+
+**Theme:** COHR id=23 surfaced a silent contamination bug. Both Model B and Model C cited LITE's "$42B contracted backlog" with HIGH confidence as evidence that COHR is the disadvantaged challenger. But that figure was research-corrected to $420.7M in LITE id=16 (Form ARS June 29 2024). The correction lived only in `data/operator_notes/LITE.md`, scoped to LITE-as-target runs. When COHR is the target ticker, LITE's operator notes do not load, and the engine re-cites the wrong figure as if it's still a fact.
+
+Root cause: research-confirmed factual corrections were per-ticker, but the facts they correct are cross-ticker. Same gap would hit any future analysis where Company B references Company A.
+
+Fix: shared `data/validated_corrections.md` loaded into EVERY Socratic run as a new `[VALIDATED_CORRECTIONS]` context block alongside `[MACRO_CONTEXT]`, `[WAVE_CONTEXT]`, and `[OPERATOR_NOTES]`. Corrections are treated as engine-verified FACTS (not subjective operator views), with an explicit anti-contamination rule in each prompt.
+
+### What shipped
+
+**`data/validated_corrections.md`** (new, ~4.3KB) — initial seed with 3 verified corrections:
+1. LITE backlog: $42B (wrong) → $420.7M (actual, Form ARS June 29 2024)
+2. COHR 200G EML at 1.6T: "next-gen only" (wrong) → product disclosed at OFC 2026 March 17 2026 (current-gen overlap)
+3. NVIDIA partnership exclusivity (LITE + COHR): "sole-source" (wrong) → explicitly non-exclusive per both 8-Ks
+
+Each entry includes: wrong claim, actual fact, verified-by source citation (Socratic run id + research_N + confidence), cross-ticker implication.
+
+**`scripts/run_socratic.py`** — 7 surgical edits, mirroring the OPERATOR_NOTES wiring shipped 2026-05-24:
+1. `VALIDATED_CORRECTIONS_PATH` constant (line 55)
+2. `fetch_validated_corrections()` helper (line 586) — file-scoped not ticker-scoped, same H1-stripping pattern as `fetch_operator_notes`
+3. `build_context()` invokes the fetch and adds `validated_corrections` to the returned ctx dict
+4. Stdout logging line: `[validated_corrections] LOADED (N chars, cross-ticker facts)` or `none`
+5. `run_corpus_callosum()` fill call passes `validated_corrections=ctx.get("validated_corrections", "(none)")`
+6. `fill_rough_target_range()` same explicit kwarg
+7. (Model A/B/C round-1 calls already pass via `**ctx` — no edit needed)
+
+**5 Socratic prompts** updated with a new "## VALIDATED CORRECTIONS (engine-verified cross-ticker facts)" section + `[VALIDATED_CORRECTIONS]` placeholder, inserted BEFORE the existing "## OPERATOR NOTES" section. Same shape in all 5 files. The section includes an explicit anti-contamination rule: "if your `reasoning_bullets` or competitive analysis would state a claim that contradicts an entry in [VALIDATED_CORRECTIONS], that is a failure mode. Correct course and cite the validated fact."
+
+Files modified:
+- `scripts/prompts/socratic/model_a_fundamentals.md` (+929 bytes)
+- `scripts/prompts/socratic/model_b_regime.md` (+929 bytes)
+- `scripts/prompts/socratic/model_c_adversarial.md` (+929 bytes)
+- `scripts/prompts/socratic/corpus_callosum.md` (+929 bytes)
+- `scripts/prompts/socratic/rough_target_range.md` (+929 bytes)
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| `ast.parse(run_socratic.py)` | PASS |
+| `fetch_validated_corrections()` returns 4331-char body | PASS (file loaded) |
+| All 5 prompts fill with validated_corrections placeholder filled | PASS (smoke harness) |
+| No remaining `[VALIDATED_CORRECTIONS]` after fill | PASS |
+| Corrections content (LITE + $420.7M) appears in each filled prompt | PASS |
+| `research_question.md` (not in scope — kept untouched) | n/a |
+
+### Pass criterion for next Socratic run
+
+Re-run COHR (or any ticker that references LITE). Verify:
+
+1. **`$420.7M` appears** in Model B or Model C's `reasoning_bullets` when LITE backlog is referenced, OR they cite the OCS-backlog ">$400M" + NVDA-purchase-commitment language instead.
+2. **`$42B` does NOT appear** in any model's output as a current claim about LITE. (It MAY appear in the corrections block content itself as the documented-wrong figure, which is fine.)
+3. **`[validated_corrections] LOADED` line** appears in stdout, with N matching the file size.
+4. If a model contradicts a validated correction, that's a failure mode — surface in `reasoning_bullets` per anti-contamination rule.
+
+### What's NOT in this change (deferred)
+
+- **Research round injection.** `research_question.md` doesn't yet receive `[VALIDATED_CORRECTIONS]`. Useful for short-circuiting re-verification of already-corrected claims, but not load-bearing for the bug at hand. Defer.
+- **Auto-promotion from socratic_analyses.research_findings to validated_corrections.md.** When research_round produces a HIGH-confidence factual correction, it should be queued for inclusion in the corrections file. For now, manual append by operator.
+- **Schema-backed validated_corrections table.** File-based works for now (small set, version-controlled, human-reviewable). Move to Supabase only if the file grows past ~50 entries.
+
+### Why this matters architecturally
+
+The bug pattern — "fact corrected in one analysis, repeated as wrong fact in another" — would have compounded silently as the analysis library grew. Every new chokepoint stock that references LITE would have re-stated the $42B figure. Without a cross-ticker fact layer, the engine's "research" becomes lossy — each run starts from market consensus instead of from the engine's prior verified work.
+
+This fix establishes the pattern. Future research_findings that produce HIGH-confidence corrections should be promoted to the corrections file (manually for now; eventually auto-promoted) so the engine's knowledge base compounds rather than degrades.
+
+## [2026-05-26] data/operator_notes/LITE.md: engine id=21 verdict-flip annotation
+
+**Theme:** §7b future-pricing analysis on LITE id=21 produced a substantive verdict flip — Model B went from REGIME_UPSIDE (id=15, id=19) to REGIME_DOWNSIDE (id=21). The flip was driven by mechanical priced-years vs actual-years math: 5-6 years priced into $946.90 valuation vs 2-3 years actual moat visibility = NEGATIVE 2-3 year gap = SELL signal per pure DCF. The LITE.md operator notes file (which feeds back into future Socratic runs as `[OPERATOR_NOTES]` context) needed to reflect this update so subsequent runs don't reuse the original bullish 2026-05-23 framing as if it were unchanged.
+
+### What shipped
+
+**`data/operator_notes/LITE.md`** — 60-line section appended at top (newest-first per existing convention). Updated `Last updated` line and `Prior versions` chain. The new 2026-05-26 section captures:
+
+- The §7b math output (Years priced 5-6 with explicit PV cross-check at $929 ≈ $947 spot; Years actual 2-3 with COHR OFC 2026 disclosure as the named threat; gap NEGATIVE 2-3 years)
+- Pure DCF fair value if moat closes: $290-$350
+- Practical target_low $570 (macro repricing, not full DCF collapse) and target_high $1,280 (conditional on CPO/OCS conversion)
+- Explicit "intact / superseded / re-evaluated" breakdown of the original 2026-05-23 bull thesis — preserves Hume's directional view where it survives (CPO/OCS upside) and supersedes it where engine research contradicts (no-competitor framing now broken by COHR OFC 2026)
+- Position management context for Hume's $70 cost basis (engine floors still leave +315% to +715% open)
+- Five watch items in order of probability, with the CPI / Q4 FY26 earnings dates that gate the next thesis update
+
+The dad's-view $850 falsification was updated with the new floor comparison: dad's $850 is now $97 above Model B's independent $570 floor, not just above Model C's $565. If macro stagflation fires, dad's floor doesn't hold.
+
+### Why this matters
+
+Operator notes are not just for documenting Hume's view — they are part of the engine's input context on future runs. If the file still claimed "no real near-term competitor" and "$42B contracted backlog through 2028" after id=16 + id=21 surfaced both as wrong, subsequent runs would re-litigate the same corrections and the operator-note discipline would degrade. The notes file is now consistent with the engine's id=21 findings while preserving the historical chain (2026-05-23 → 2026-05-25 → 2026-05-26).
+
+### What's NOT in this change
+
+- Position management decision on LITE — Hume holds at $70 cost basis; trim vs hold is Hume's call, not the engine's. The notes capture the math but do not recommend action.
+- New schema for "supersedes_thesis_claim" tracking — the prior-claim corrections are inlined as prose, not structured. If the corrections grow numerous enough to need a table, that's a separate ticket.
+- Re-running other tickers (CAMT, GFS, etc.) through §7b. The agreed 3-item queue is now complete; deferred items re-enter the queue only on triggered conditions.
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| `head -5 LITE.md` shows updated `Last updated` line | PASS |
+| New 2026-05-26 section appears before 2026-05-25 sections | PASS |
+| Prior 2026-05-25 and 2026-05-23 sections preserved | PASS |
+| mtime after write | 2026-05-26 00:38:51 UTC (was 2026-05-25 04:20:10) |
+| Line count | 119 (was 59) |
+
+This closes out the §7b ship: prompt change → engine run → output validated → operator notes updated. Next Socratic run on LITE will see the new context block.
+
 ## [2026-05-25] model_b_regime.md: future-pricing analysis (priced-years vs actual-years gap)
 
 **Theme:** Item #3 of the agreed 3-item session-2 sequencing queue. The insight from `feedback_future_pricing_alpha`: 收获期 (harvesting) doesn't mean upside is over for chokepoint stocks — the market keeps surging because it extends the discounting horizon as proof points land. NVDA went from "$500B consensus" to $3T not by changing the math but by re-pricing more years of monopoly into the present value. The remaining alpha at any timing category is the GAP between years priced and years actual.

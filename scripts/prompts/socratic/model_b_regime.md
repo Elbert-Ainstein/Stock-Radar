@@ -90,6 +90,19 @@ You receive two upstream blocks before the stock-specific data: macro environmen
 
 ---
 
+## VALIDATED CORRECTIONS (engine-verified cross-ticker facts)
+
+These are research-confirmed corrections to common market narratives — for example, when prior Socratic research established that a widely-cited competitor backlog figure was wrong, or a competitor's technology positioning was misstated. Unlike operator notes below (subjective), entries here are FACTS verified by engine research. Treat as ground truth.
+
+**Anti-contamination rule:** if your `reasoning_bullets` or competitive analysis would state a claim that contradicts an entry in [VALIDATED_CORRECTIONS], that is a failure mode. Correct course and cite the validated fact. Common examples: when analyzing Ticker A, do not repeat a claim about Ticker B's backlog or technology that has been corrected in this block.
+
+If `(none)`: no validated corrections file loaded — proceed without this constraint.
+
+### [VALIDATED_CORRECTIONS]
+[VALIDATED_CORRECTIONS]
+
+---
+
 ## OPERATOR NOTES (Hume's subjective view — optional)
 
 Notes from the operator on this ticker. Treat as Hume's view, NOT as fact. The regime frame is the one most likely to benefit from operator input — Hume often sees regime shifts (washout endings, cycle turns, pricing-power inflections) before they show up in reported numbers. But the regime frame is ALSO the one most vulnerable to anchoring — a specific price cited in the notes can drag your target range toward it without you noticing. The rules below exist because anchoring was detected in id=17 (Model B's target_low matched an operator-provided price exactly).
