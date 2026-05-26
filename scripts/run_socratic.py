@@ -586,11 +586,16 @@ def fetch_operator_notes(ticker: str) -> str:
 # Context: build the placeholder dict each model gets
 # ────────────────────────────────────────────────────────────────────
 
-def build_context(ticker: str) -> dict:
-    """Gather price, sector, market cap, company name for the three model prompts."""
+def build_context(ticker: str, *, override_suspect_recent: bool = False) -> dict:
+    """Gather price, sector, market cap, company name for the three model prompts.
+
+    override_suspect_recent: passed through to fetch_financials to bypass Module 1's
+    recent-quarter sanity check. Use ONLY when operator has cross-checked against the
+    10-Q. See main() --override-suspect-recent flag for full caveat.
+    """
     from finance_data import fetch_financials
 
-    fin = fetch_financials(ticker)
+    fin = fetch_financials(ticker, override_suspect_recent=override_suspect_recent)
     spot = fin.price or 0.0
     sector = getattr(fin, "sector", "") or ""
     meta = get_ir_metadata(ticker)
@@ -1019,11 +1024,12 @@ def write_to_supabase(
 # Orchestrator
 # ────────────────────────────────────────────────────────────────────
 
-def run_socratic(ticker: str, *, trigger_reason: str = "manual", supabase: bool = True) -> dict:
+def run_socratic(ticker: str, *, trigger_reason: str = "manual", supabase: bool = True,
+                 override_suspect_recent: bool = False) -> dict:
     print(f"\n=== run_socratic: {ticker} ({trigger_reason}) ===", flush=True)
     run_at = datetime.now(timezone.utc)
 
-    ctx = build_context(ticker)
+    ctx = build_context(ticker, override_suspect_recent=override_suspect_recent)
     print(
         f"  spot={ctx['price']} sector={ctx['sector']} mkt_cap={ctx['market_cap']}",
         flush=True,
@@ -1133,12 +1139,26 @@ def main():
         action="store_true",
         help="Skip writing to Supabase (markdown report is still saved locally).",
     )
+    parser.add_argument(
+        "--override-suspect-recent",
+        action="store_true",
+        help=(
+            "Bypass Module 1's recent-quarter sanity check. Use ONLY when the operator "
+            "has cross-checked against the 10-Q and confirmed the apparent anomaly is "
+            "real (e.g. post-spinoff jump like SNDK, post-IPO first quarter, M&A close, "
+            "or early-stage commercial-revenue ramp from near-zero baseline like ASTS, "
+            "RKLB, PL, BKSY, LUNR). For genuine provider bugs (e.g. MU yfinance/EODHD "
+            "anomaly), the OVERRIDE produces a Socratic analysis built on bad numbers "
+            "\u2014 DO NOT USE."
+        ),
+    )
     args = parser.parse_args()
 
     run_socratic(
         args.ticker,
         trigger_reason=args.trigger_reason,
         supabase=not args.no_supabase,
+        override_suspect_recent=args.override_suspect_recent,
     )
 
 
