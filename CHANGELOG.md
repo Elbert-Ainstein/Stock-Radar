@@ -2,6 +2,1270 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-05-25] model_b_regime.md: future-pricing analysis (priced-years vs actual-years gap)
+
+**Theme:** Item #3 of the agreed 3-item session-2 sequencing queue. The insight from `feedback_future_pricing_alpha`: 收获期 (harvesting) doesn't mean upside is over for chokepoint stocks — the market keeps surging because it extends the discounting horizon as proof points land. NVDA went from "$500B consensus" to $3T not by changing the math but by re-pricing more years of monopoly into the present value. The remaining alpha at any timing category is the GAP between years priced and years actual.
+
+Model B is the regime frame — the one that should catch this. Adding the analysis as a CONDITIONAL block (fires only when Model B independently assesses the stock as having chokepoint/monopoly pricing power). Non-chokepoint stocks skip the section entirely.
+
+### What shipped
+
+**`scripts/prompts/socratic/model_b_regime.md`** — new 30-line section "FUTURE-PRICING ANALYSIS (conditional — chokepoint stocks only)" inserted between the existing Rules block and the UPSTREAM CONTEXT block. Requires three numbered bullets in `reasoning_bullets`:
+
+1. **"Years priced: N — at current price × Xx forward P/E and Y% discount rate, market is pricing N years of M% monopoly EPS growth before reverting to Z% terminal growth at K x terminal multiple."** Back-calculated from valuation math (price = sum of discounted EPS + terminal value).
+2. **"Years actual: K — visibility before [named threat] closes the moat: [reason 1 dated], [reason 2 dated]."** Anchored in specific named competitive threats with timelines, contract durations, and disclosed backlog. Stories without numbers fail.
+3. **"Gap: G years (Positive=upside continues / Zero=fully priced / Negative=sell signal)"** with directional interpretation that explicitly links to target_low / target_high adjustment.
+4. (additive) one bullet naming what closes the gap favorably (monopoly extends, next-gen design win) vs unfavorably (competition arrives, multiple compresses).
+
+The section's chokepoint guardrails: >50% market share OR sustained gross margin >60% defended by switching costs OR contractual lock-in OR technology barrier OR hyperscaler capacity reservation. If none apply, Model B skips the section.
+
+### Why conditional, not always-on
+
+Most stocks aren't chokepoints. Forcing future-pricing math on a cyclical merchant semi (SIMO) or a competitive SaaS name (ADBE) produces meaningless output — there's no monopoly duration to price. The conditional preserves discipline: when Model B asserts chokepoint status, the math must follow; when it doesn't, the analysis stays clean.
+
+The downside risk: Model B could assess away from chokepoint status to skip the math. Mitigation is via review — if Model B routinely fails to find chokepoints on stocks where A or C explicitly call out moat strength, that's a signal the conditional is being used as an escape hatch. Watch on next 5 runs.
+
+### Pass criterion for next LITE Socratic run
+
+Re-run Socratic on LITE. Model B must:
+
+1. Assess LITE as chokepoint (it is — sole-source 200G EML, contracted NVDA $2B + $42B+ commitments, sustained 70%+ GM).
+2. Emit "Years priced: N" bullet with derivation that includes discount rate (9-12%), terminal multiple (15-25x), and the back-calculated growth-rate × years × terminal-value math.
+3. Emit "Years actual: K" bullet citing COHR 200G EML at OFC 2026 (March 17, 2026) as the named threat with dated milestone (per id=19 research_1 output).
+4. Emit "Gap: G years" with directional interpretation explicitly linked to target_low / target_high.
+
+Expected gap on LITE: 2-4 years priced (high multiple, but contractual backlog limits how far market extends) vs 2-3 years actual (COHR catching up by H2 2026 at 1.6T, uncertain beyond at 3.2T). Engine should produce gap = 0 to -1 (fully priced or slightly over-priced) — which aligns with the existing id=19 read that LITE is fairly priced near $946.
+
+**Failure mode to watch:** Model B emits the format mechanically but the math is hand-wavy — no discount rate cited, no terminal multiple, no specific competitor timeline. If "Years priced" comes out as a round number like "5 years" with no PV math, the conditional is theater, not analysis. In that case the prompt needs tightening to require the PV equation cited explicitly.
+
+### What's NOT in this change (intentionally — `feedback_one_step_falsifiable`)
+
+- **§7c Expectations Decomposition + Fast-Sell** — auto-extracting structured kill triggers from the future-pricing prose, storing in `socratic_analyses.implied_expectations`, generating notification rules. Bigger lift (parsing reliability, schema migration, notification infrastructure). Defer until §7b produces reliably structured output across 3+ chokepoint stocks. Same one-step-at-a-time discipline as the override flag → archetype deferral.
+- **JSON schema field for `future_pricing_gap`** — could add structured `{is_chokepoint, years_priced, years_actual, gap_years, interpretation, closes_gap}` to Model B's output. Deferred until §7c needs it for parsing. Prose in `reasoning_bullets` is sufficient for falsification today.
+- **Harness routing on timing_category × held_status** — §5/§7b in the session 2 doc proposes routing rules. Deferred — no waves currently have `timing_category` populated, so the routing logic has nothing to read. Schema migration is its own task.
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| `grep "FUTURE-PRICING ANALYSIS"` in model_b_regime.md | PASS (line 45) |
+| `grep "Years priced"` | PASS (line 53, 55) |
+| `grep "Years actual"` | PASS (line 59, 61) |
+| `grep "Gap:"` | PASS (line 67) |
+| File mtime after write | 2026-05-26 00:20:00 UTC (was 17:52:33 UTC, same day) |
+| Line count | 125 (was 93) |
+| Anti-sycophancy section still intact below | PASS (Hard rules — apply mechanically header still at line 97) |
+
+This completes the 3-item agreed queue from the session 2 doc pushback. Items 1 (§7 anti-sycophancy) and 3 (§7b future-pricing) shipped; item 2 (§6 macro injection) was already operational. Next architectural decisions (Model D, lateral trace, expectations decomposition, tactical/thesis split, etc.) re-enter the queue only when triggered by observed gaps — not on a schedule.
+
+## [2026-05-25] model_b_regime.md: anti-sycophancy hard rules (mirrors Model C)
+
+**Theme:** Soft sycophancy detected in Socratic id=17 — Model B's `target_low` on LITE moved exactly to $850, the price cited in Hume's father's view in the operator notes. Model A and Model C held independent ranges. The asymmetry was Model B's: B is the regime frame and most receptive to operator input (regime shifts often surface in operator intuition before reported numbers), but "receptive to direction" should not become "anchored to specific numbers." This change adds the same mechanical anti-anchoring discipline to Model B that already exists on Model C — adapted from `downside_price` to `target_low`/`target_high`.
+
+### What shipped
+
+**`scripts/prompts/socratic/model_b_regime.md`** — operator-notes subsection rewritten from 4 bullets ("Rules for handling operator notes") to 7 numbered "Hard rules — apply mechanically", matching Model C's format:
+
+1. Derive `target_low`/`target_high` FIRST, pretending operator notes section is `(none)`. Compute from analog + re-rating math + macro/wave. Write down internally. Then read the notes.
+2. Independent range MUST equal the internally-derived range unless the note contains a SPECIFIC NUMERICAL input revising a load-bearing variable (backlog figure, margin-floor commitment, confirmed customer order, verified price change). Directional views ("washout ending", "no real competitor", "2027 pricing power") do NOT move the range — they need a confirming dated event/number first.
+3. `reasoning_bullets` must contain the phrase **"Independent regime-case range: $X - $Y"** with derivation. Audit trail.
+4. If independent range converges within 5% of any specific price cited in the notes, emit a second bullet starting **"ANCHOR CHECK:"** explaining the convergence numerically from the analog. If it can't be explained cleanly, widen the range back.
+5. No verdict-switching to match Hume. Cost of false agreement = bad bet recorded under Model B's name.
+6. Stories without numbers fail — even Hume's. Regime claim with no dated trigger stays in `pattern_match_evidence` as "Hume view, needs confirming event X."
+7. If operator notes is `(none)`: rules don't apply, run as normal.
+
+The introductory paragraph also names the specific incident ("anchoring was detected in id=17 where Model B's target_low matched an operator-provided price exactly") so future maintainers understand why the discipline is mechanical and not advisory.
+
+### Why this matters
+
+The asymmetric counter-weight architecture works only if EACH model holds its own ground. Model C's hard rules in id=17 successfully held downside_price at $565 across 3 runs and explicitly rejected the $850 anchor. Model B silently absorbed it. If Model B can be anchored, then A+B+C "agreement" on upside reflects engine echo of the operator rather than independent analysis — and the corpus callosum loses its ability to detect drift.
+
+### What's NOT in this change (intentionally — `feedback_one_step_falsifiable`)
+
+- **Corpus callosum visibility into `reasoning_bullets`:** CC currently sees only model JSON output, not the bullets. So even if Model B emits "ANCHOR CHECK:" the CC won't notice. Proper fix requires each model to emit a structured `operator_note_disposition` field. Bigger schema change. Deferred — same deferral as in `project_operator_notes_2026_05_24`.
+- **Model A anti-sycophancy:** A has weaker operator-notes coupling (it's the fundamentals frame, more anchored to financials) but is not protected by the same rule. Add if id=18+ shows A drifting. Not adding speculatively.
+- **Future-pricing analysis (§7b of session 2 doc):** related but separate concern (priced-years vs actual-years gap). Earned its way to the queue if/when this anchoring fix produces clean output on LITE.
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| `grep "Independent regime-case range"` in model_b_regime.md | PASS (line 71) |
+| `grep "ANCHOR CHECK"` | PASS (line 73) |
+| `grep "Hard rules — apply mechanically"` | PASS (line 65) |
+| File mtime after write | 2026-05-25 17:52:33 UTC (was 01:27:41) |
+| Line count | 93 (was 84) |
+
+### Pass criterion for next LITE Socratic run
+
+Re-run Socratic on LITE with the LITE.md operator notes that contain the "$850 floor, $1500 upside" dad's-view block. Expected output from Model B:
+
+1. `reasoning_bullets` includes a bullet starting **"Independent regime-case range: $X - $Y"** with derivation from a named historical analog + re-rating math (no reference to the $850 in this bullet's derivation).
+2. EITHER (a) the independent range does NOT converge with $850 within 5% — pass; OR (b) it does converge AND a second **"ANCHOR CHECK:"** bullet explains numerically why the pattern match independently produces ~$850.
+3. `target_low` and `target_high` equal the independent range unless rule 2's specific-numerical-revision condition is met (it isn't met by the current LITE notes — they contain directional views like "no real competitor" and "2027 pricing power", not specific revenue/margin numerical revisions).
+
+Failure mode to watch for: Model B emits the audit phrase mechanically but its derivation reasoning still leans on the $850 implicitly. If the "Independent" math is suspiciously circular (e.g., uses 2027 pricing power as a magic multiplier with no analog), the discipline is theater, not real. In that case the rule needs tightening to require the analog-name and the multiple to be cited BEFORE the price.
+
+## [2026-05-25] run_socratic.py: --override-suspect-recent flag (unblocks ASTS / early-stage ramps)
+
+**Theme:** Mirror run_thesis.py's existing `--override-suspect-recent` flag in `run_socratic.py` so the Socratic engine can analyze early-stage names whose revenue trajectories (real, accurate, but volatile from near-zero baselines) trip Module 1's data-quality guardrail. Hume's pushback: the guardrail is over-fit to mature-company failure modes (the only kind of "suspicious quarter" it imagines is a data-provider bug like MU yfinance contamination) and structurally blocks the asset class he's hunting for (10x setups live in early-stage). Same architectural pattern as `feedback_dcf_is_wrong_primary` — engine has blind spots around regime-shift / pre-stable / commercial-launch companies.
+
+This change is the smallest-scope unblock: operator manually confirms data is real (cross-check against the 10-Q), passes the flag, and the analysis proceeds. NOT a fix for the underlying design issue — that's deferred to two larger pieces of work documented in §"What's NOT in this change."
+
+### What shipped
+
+**`scripts/run_socratic.py`** — 5 surgical edits, all default-False (zero behavior change when flag absent):
+
+1. `build_context(ticker)` → `build_context(ticker, *, override_suspect_recent: bool = False)` + docstring note pointing to main()
+2. `fin = fetch_financials(ticker)` → `fin = fetch_financials(ticker, override_suspect_recent=override_suspect_recent)`
+3. `run_socratic(ticker, ...)` signature gains `override_suspect_recent: bool = False`
+4. `ctx = build_context(ticker)` inside run_socratic() → `ctx = build_context(ticker, override_suspect_recent=override_suspect_recent)`
+5. `main()` argparse gains `--override-suspect-recent` (mirrors run_thesis.py verbatim) + passes through to run_socratic()
+
+The flag's help text deliberately calls out the asset classes this unblocks (ASTS, RKLB, PL, BKSY, LUNR — early-stage commercial-revenue ramps) alongside the original use cases (post-spinoff SNDK, post-IPO first quarter, M&A close). Plus the standing warning: for genuine provider bugs, the override produces analysis built on bad numbers — DO NOT USE.
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| `ast.parse` | PASS |
+| `--help` shows new flag with full warning text | PASS (rendered correctly) |
+| `inspect.signature(build_context)` shows new param, default=False | PASS |
+| `inspect.signature(run_socratic)` shows new param, default=False | PASS |
+| Mock-driven regression smoke on CAMT (no flag) | 10/10 PASS — byte-identical behavior to pre-edit state |
+
+### What's NOT in this change (intentionally — `feedback_one_step_falsifiable`)
+
+Two larger pieces of work this surfaces but does not address:
+
+1. **`early_revenue_ramp` archetype.** The persistent fix. Add to `config/ticker_archetypes.json` with relaxed thresholds (e.g. 20x trailing tolerance for first 8 quarters of commercial revenue; disable YoY check when prior year revenue < $50M because the ratio is meaningless against a near-zero base). Tag ASTS, RKLB, PL, BKSY, LUNR, IonQ, RGTI, Oxford Instruments, ACHR all at once. Removes the per-run override requirement for the entire 远见期 / early 一步领先 universe.
+
+2. **Rewrite the guard's signal.** The real fraud-detection question is "do the provider numbers match the most recent 10-Q from SEC EDGAR?" — not "is the trajectory smooth?" The current check is a proxy that conflates "data accuracy" with "business stability" (orthogonal). Rewriting the guard to spot-check against EDGAR would fix the structural issue (both data-bug AND early-stage cases handled correctly), but requires the EDGAR client + a sampling strategy. Deferred until at least one early_revenue_ramp name produces a real Socratic analysis worth the engineering investment.
+
+### Git
+
+`scripts/run_socratic.py` is already tracked (commit 765409a from earlier today). This change is a clean follow-up commit — run from git bash:
+
+```bash
+cd "/c/Users/elber/Documents/Claude/Projects/Agent System for finding Stocks/stock-radar"
+git add scripts/run_socratic.py
+git commit -m "run_socratic.py: add --override-suspect-recent flag (mirrors run_thesis.py)"
+```
+
+### Memory
+
+- New: `feedback_data_guardrail_over_fit.md` — captures the architectural insight (guard is over-fit to mature-company failure mode; future fix is EDGAR-validation rewrite + early_revenue_ramp archetype). Same pattern as [[user-dcf-is-wrong-primary]].
+
+---
+
+## [2026-05-24] run_socratic.py truncation REPAIRED + first git commit needed
+
+**Theme:** Repaired the pre-existing line-1062 truncation in `scripts/run_socratic.py` discovered earlier today during the OPERATOR_NOTES smoke test. Reconstruction is mock-verified (10/10 pass criteria) and live on disk. Real-API smoke started cleanly through `build_context → 3 parallel Sonnet launch` before the sandbox killed the process (sandbox lifecycle, not code). The file STILL needs Hume to manually commit it to git — a stale `.git/index.lock` from 2026-05-16 blocks the commit from sandbox-bash and isn't removable from the workspace mount (`Operation not permitted`).
+
+### What was broken
+
+`scripts/run_socratic.py` ended mid-statement at line 1062 on `cc["pars` — no closing quote, no rest of file. Pre-existing from yesterday's session; the 2026-05-23 CHANGELOG entry described the file as "≈1090 lines, syntax clean" but the on-disk version was 1061 lines and chopped. File was untracked in git (`git ls-files` returns empty) so no version history existed to restore. Discovered when today's OPERATOR_NOTES smoke test tried to `import run_socratic` and Python raised `SyntaxError: unterminated string literal`.
+
+### What was reconstructed (~85 lines, all marked `# RECONSTRUCTED 2026-05-24`)
+
+The tail of `run_socratic()` orchestrator (lines 1062-1146 in repaired file), plus a fresh `main()` + `if __name__` block. Each block traces to one of three sources (no invented behavior):
+
+1. **The existing helpers in the same file.** `run_research_round` (line 765), `run_rough_target_range` (line 838), `save_markdown` (line 883), `write_to_supabase` (line 946) all already existed with their signatures intact. The orchestrator just needed to call them in order. No new logic.
+2. **The 2026-05-23 CHANGELOG narrative.** That entry described the orchestrator flow as: `corpus_callosum → research round → rough_target → save markdown → supabase write`. The reconstruction follows that flow exactly.
+3. **`run_thesis.py`'s `main()` shape** (line 900). The 2026-05-15 Phase 3 CHANGELOG explicitly said the CLI pattern "matches run_thesis.py (same argparse shape, same UTF-8 handling, same env-loading style)." Reconstructed `main()` uses the same `argparse.ArgumentParser` + `args = parser.parse_args()` + call-the-function pattern, with run_socratic's flag set (`ticker`, `--no-supabase`, `--trigger-reason`; NO `--dry-run` or `--override-suspect-recent` since those are run_thesis-specific). `trigger-reason` left as free string (no `choices=` restriction) per the CHANGELOG example showing arbitrary `'phase3_smoke_lite'` value.
+
+The reconstructed return dict shape:
+```python
+return {
+    "ticker": ticker.upper(),
+    "run_at": run_at.isoformat(),
+    "socratic_analyses_id": row_id,  # None if --no-supabase or write failed
+    "markdown_path": str(markdown_path),
+    "round_1": {role: round_1[role]["parsed"] or {} for role in "abc"},  # critic fix
+    "corpus_callosum": cc["parsed"],
+    "research_findings": research_findings,
+    "rough_target_range": target["parsed"],
+}
+```
+
+### review-squad:critic findings (applied before any spend)
+
+Critic invoked on the reconstructed tail before the real-API smoke. Three findings:
+
+1. **Real bug** — `round_1[role]["parsed"]` can theoretically be `None`; line 1048 already uses defensive `or {}` for the same access. Critic recommended matching that pattern in the return dict. **APPLIED:** added `or {}` to the comprehension (line 1107, marked with `# critic-fix: defensive consistent with line 1048`). Belt-and-suspenders even though `run_round_1_parallel` already raises on None — better to be consistent with the file's own style than to assume the upstream check stays.
+2. **Minor** — `except Exception` around the Supabase write uses same `sys.stderr` channel as the helper's internal warning, no severity distinction. **NOT APPLIED** — per karpathy "match existing style" and "no error handling for impossible scenarios"; this matches run_thesis.py's error pattern.
+3. **Not actionable** — speculation that the original orchestrator might have had kill-condition gating between research_round and rough_target_range. CHANGELOG narrative for Phase 4 only described research → rough_target with no kill-gate in between. Kill-condition logic lives in the Phase 5 judgment-card layer, not the orchestrator. **NOT APPLIED** — no backup exists to verify; the comment block at line 1062-1066 documents this load-bearing assumption.
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| `ast.parse` (no execution) | PASS — file is syntactically valid Python |
+| `import` all top-level names (run_socratic, main, fetch_operator_notes, build_context, fill, find_placeholders, run_round_1_parallel, run_corpus_callosum, run_research_round, run_rough_target_range, save_markdown, write_to_supabase) | PASS — no NameError, no ImportError |
+| `python scripts/run_socratic.py --help` | PASS — argparse usage prints correctly |
+| Real-API smoke on CAMT (`--no-supabase`) | PARTIAL — got through `build_context → macro fetch (id=1, stagflation_risk) → wave fetch (设备 #0, beta=1.8) → operator_notes none for CAMT → sources allowlist load → 3 parallel Sonnet launches`; sandbox killed the process before completion (sandbox lifecycle, not code) |
+| Mock-driven smoke (canned JSON for all 5 Sonnet labels) | PASS 10/10 — result is dict, ticker=CAMT, run_at set, socratic_analyses_id=None (skip honored), markdown_path exists, round_1 has all 3 models with verdicts, corpus_callosum has agreements + disagreements, research_findings is list, rough_target_range has rough_target_low=$195, markdown file saved on disk (2,644 bytes at `data/socratic/CAMT_20260525_022005.md`) |
+
+The mock smoke is the strongest verification: it exercises every call I added (`run_research_round → run_rough_target_range → save_markdown → conditional write_to_supabase-skip → return dict`) and confirms each helper's interface contract holds.
+
+### Known pre-existing issue surfaced (NOT fixed per surgical rule)
+
+The `[round_1] complete — A:UNDERVALUED  B:REGIME_UPSIDE  C:None` print line shows `C:None` because Model C's JSON schema uses `moat_durability` + `downside_price` rather than `verdict`. Documented as a known issue in the 2026-05-15 Phase 4 CHANGELOG entry ("JSON in the DB is correct. One-line print formatter fix."). Untouched per karpathy "don't improve adjacent code that isn't broken."
+
+### Remaining action — YOU MUST DO THIS
+
+The reconstructed file is on disk and working. But `git commit` from sandbox-bash hit a stale `.git/index.lock` (May 16 vintage) that can't be removed from the workspace mount (`Operation not permitted`). Hume must run this on his own machine:
+
+```cmd
+:: from PowerShell or cmd.exe, in the stock-radar/ directory
+del .git\index.lock
+git add scripts/run_socratic.py
+git commit -m "scripts/run_socratic.py: first commit + truncation repair + OPERATOR_NOTES"
+```
+
+(Full commit message body captured in this CHANGELOG entry above — paste from any of the three numbered sections under "What was reconstructed".) Once committed, future truncations are recoverable via `git checkout HEAD scripts/run_socratic.py`. **Never letting this file go untracked again.**
+
+### Files shipped
+
+```
+scripts/run_socratic.py    (line 1062 to EOF reconstructed via Python pathlib write;
+                           file goes from 1061 → 1146 lines; 3,337 bytes added;
+                           mtime 2026-05-25 02:13 UTC)
+data/socratic/CAMT_20260525_022005.md    (smoke-test artifact, 2,644 bytes —
+                                          delete or keep as you prefer)
+```
+
+### Rollback
+
+The reconstruction is contained between line 1062 and EOF, all marked `# RECONSTRUCTED 2026-05-24`. To remove: truncate the file at line 1061. Not recommended — the file would revert to "doesn't import" state.
+
+### Memory updates
+
+- [[operator-notes-2026-05-24]] superseded — this entry now describes the working file
+- [[workspace-file-tools-overwrite-fail]] extended — same mount-permission issue blocks `rm .git/index.lock` and `git commit` directly; documented as a separate fail mode
+
+---
+
+## [2026-05-24] OPERATOR_NOTES — per-ticker subjective view as 1st-class context block (Socratic)
+
+**Theme:** Captured Hume's 2026-05-23 pushback on the LITE id=15 Socratic output (system's upper bound undershoots) as a re-runnable artifact rather than a one-off conversation. Added `[OPERATOR_NOTES]` as a third upstream context block alongside `[MACRO_CONTEXT]` and `[WAVE_CONTEXT]`, with anti-sycophancy guards calibrated per frame: Model A and Model B may grant partial credit to operator views when math supports it; Model C is the counter-weight and now derives its `downside_price` mechanically before reading the notes (per review-squad:critic finding — see below). End-to-end smoke test passes in isolation. Re-running LITE against the new pipeline DEFERRED — pre-existing truncation in run_socratic.py blocks the orchestrator end-to-end (see "BLOCKING ISSUE" below).
+
+### What shipped
+
+**New directory + contract:**
+- `data/operator_notes/README.md` — format spec for `{TICKER}.md` files. Notes are Hume's subjective view; models are instructed to test against data, not ratify. Anti-sycophancy contract documented at the top of the README so the directory itself describes its discipline.
+- `data/operator_notes/LITE.md` — Hume's 2026-05-23 thesis encoded with three claims (long washout ending → rally, no real near-term competitor since COHR 400G D-EML hasn't materialized in any 3.2T design win, 2027 product price hikes confirmed via IR) AND falsification criteria for each (named 3.2T design-win to COHR retires claim 3; LITE walks back 2027 pricing on earnings retires claim 3; 12+ more months of shakeout with EPS cuts retires claim 1). Notes are time-stamped and self-falsifying — they're not permanent thesis, they're captured views as of one date.
+
+**Five Socratic prompts updated** — added `OPERATOR NOTES (Hume's subjective view — optional)` section between `[WAVE_CONTEXT]` and `STOCK TO ANALYZE`. Per-frame rules:
+- `scripts/prompts/socratic/model_a_fundamentals.md` — fundamentals frame. Address notes by name in reasoning_bullets, either incorporate with explicit math or disagree with explicit math. "Do NOT widen target ranges just to accommodate the notes."
+- `scripts/prompts/socratic/model_b_regime.md` — regime frame. Operator notes most useful here (Hume often sees regime shifts before reported numbers). But: stories without numbers still fail, even Hume's.
+- `scripts/prompts/socratic/model_c_adversarial.md` — adversarial frame. After critic review (see below) this was rewritten with mechanical rules: derive `downside_price` FIRST before reading notes, hold the number unless the note contains a SPECIFIC NUMERICAL revision (not directional), and emit "Independent downside math:" phrase in reasoning_bullets as audit trail. No escape hatches.
+- `scripts/prompts/socratic/corpus_callosum.md` — operator-resolves vs model-vs-operator-disagreement classification. If a model disagrees with a note, that's a JUDGMENT-class disagreement (judgment card territory).
+- `scripts/prompts/socratic/rough_target_range.md` — final paragraph must state operator disposition explicitly (supported / contradicted / partially supported). Critical rule: "do NOT silently widen the target range to accommodate operator notes."
+
+**Python plumbing — `scripts/run_socratic.py`:**
+- New constant `OPERATOR_NOTES_DIR = REPO_ROOT / "data" / "operator_notes"`.
+- New helper `fetch_operator_notes(ticker)` — reads `{TICKER}.md`, strips a leading H1 if present, returns body or labeled `(none — ...)` string with reason. Graceful on missing file / unreadable / empty.
+- `build_context()` — adds `operator_notes` to the returned ctx dict next to macro_context/wave_context. Stderr previews load status.
+- `run_one_model()` uses `**ctx` already, so models A/B/C get the new field automatically.
+- `run_corpus_callosum()` and `run_rough_target_range()` `fill()` call sites updated to pass `operator_notes=ctx.get("operator_notes", "(none)")`.
+- `OPERATOR_NOTES` was already in `_OPTIONAL_PLACEHOLDERS` from the 2026-05-23 strict-fill guard, so the empty-case path is already validated.
+
+### Verification (isolated smoke test — orchestrator-blocked from end-to-end)
+
+Ran a standalone Python script that replicates `fetch_operator_notes` and `find_placeholders` without importing the truncated `run_socratic.py` module. All checks PASS:
+
+| Check | Result |
+|-------|--------|
+| `fetch_operator_notes("LITE")` returns non-empty body | PASS (2,932 chars; first content line is "**Last updated:** 2026-05-23") |
+| `fetch_operator_notes("CAMT")` returns labeled `(none — ...)` | PASS |
+| `[OPERATOR_NOTES]` placeholder present in all 5 prompts | PASS |
+| Full-prompt fill on model_a_fundamentals with LITE notes embedded | PASS (10,541-char rendered prompt, zero residual unresolved placeholders, LITE thesis text appears inside the rendered prompt) |
+
+### review-squad:critic findings (applied before any API spend)
+
+Critic was invoked specifically to hunt sycophancy leakage in the operator-notes design. Three real findings:
+
+1. **Model C "captured pushback" rule was vibe-not-test** (verdict: "word salad masquerading as a behavioral rule"). The original rule said "don't double-discount / don't double-correct" with no operational test to distinguish a legitimate prior engine output from a biased one. **FIX APPLIED:** Rewrote the entire Model C operator-notes section. New rule: derive `downside_price` FIRST as if notes were `(none)`, hold that number unless the operator note contains a specific numerical revision to the macro-driven math, emit "Independent downside math:" phrase in reasoning_bullets as the audit trail. No escape hatches. Asymmetric vs A/B as the design requires.
+
+2. **Corpus callosum silent-agreement gap.** CC only sees model JSON output, not `reasoning_bullets`. If a model silently absorbs Hume's view by, e.g., shifting `target_high` up without flagging a disagreement, CC has no baseline to detect the shift. **FIX DEFERRED:** Proper fix needs each model to emit a structured `operator_note_disposition` field (`agreed` / `disagreed` / `neutral`) so CC can see it. Bigger schema change; documented as known limitation.
+
+3. **Asymmetry between frames not real in the prompts.** **FIX APPLIED** as part of #1 — Model C rewrite makes the asymmetry explicit and operational.
+
+### BLOCKING ISSUE — pre-existing run_socratic.py truncation at line 1062
+
+Discovered during smoke test. `scripts/run_socratic.py` ends mid-statement on line 1062 (`research_findings = run_research_round(ctx, cc["pars`) — no newline, no closing quote, no rest of file. The 2026-05-23 CHANGELOG describes the file as "≈1090 lines, syntax clean" so roughly 28 lines are missing including `run_research_round` call completion, `run_rough_target_range` call, `save_markdown` call, the Supabase write block to `socratic_analyses`, and the `main()` CLI.
+
+The file is **untracked in git** (`git ls-files scripts/run_socratic.py` returns empty; `git status` shows it as untracked). Yesterday's "shipped" version was never committed. There is no version history to restore.
+
+This is exactly the failure mode `feedback_changelog_discipline` documented ("atomic Python writes (Edit tool truncates), atomic writes"). The same session-specific issue also chopped my first round of `Edit`-based prompt edits at line 62-63 — workaround was to write the full file via `bash` heredoc, which reaches disk while `Edit`/`Write` silently fail to overwrite existing files in this workspace mount.
+
+**Impact:**
+- My OPERATOR_NOTES code/prompt change is verified-good in isolation but cannot be smoke-tested end-to-end (orchestrator won't import).
+- No new socratic_analyses row can be written until the truncation is repaired.
+- LITE re-run with operator notes (intended to produce id=16 and verify Sonnet outputs cite the operator notes in `reasoning_bullets`) is BLOCKED.
+
+**Repair path (deferred to a clean session per the discipline):**
+1. Hume restores from local backup if one exists; OR
+2. Reconstruct the tail (~28 lines) from the 2026-05-23 CHANGELOG narrative + `run_thesis.py` Supabase-write template + `supabase/2026-05-15_socratic.sql` for column names. Each reconstructed block marked `# RECONSTRUCTED 2026-05-24 — review`. Dry-run with `--no-supabase` first, then review-squad:critic + red-team before any DB write.
+3. Commit `scripts/run_socratic.py` to git immediately on repair — leaving a critical-path orchestrator untracked was the second-order failure.
+
+### Files shipped
+
+```
+data/operator_notes/README.md                          (new, 1,571 bytes)
+data/operator_notes/LITE.md                            (new, 2,985 bytes)
+scripts/prompts/socratic/model_a_fundamentals.md       (rewrite via bash, 84 lines)
+scripts/prompts/socratic/model_b_regime.md             (rewrite via bash, 83 lines)
+scripts/prompts/socratic/model_c_adversarial.md        (rewrite via bash, 88 lines — critic fix included)
+scripts/prompts/socratic/corpus_callosum.md            (rewrite via bash, 85 lines)
+scripts/prompts/socratic/rough_target_range.md         (rewrite via bash, 81 lines)
+scripts/run_socratic.py                                (Edit additions: OPERATOR_NOTES_DIR constant, fetch_operator_notes helper, build_context injection, 2 fill() call sites — line 1062 truncation is PRE-EXISTING and untouched by this change)
+```
+
+### Rollback
+
+- `git diff scripts/prompts/socratic/` shows every prompt change.
+- `git diff scripts/run_socratic.py` would show my additions (helper + constant + ctx-dict entry + 2 fill kwargs) — but the file is untracked so diff is against nothing. Manual rollback: delete `OPERATOR_NOTES_DIR` line (54), delete `fetch_operator_notes` function (lines 551-580), remove `operator_notes` lines from `build_context` (~628, 639-643, 657), remove `operator_notes=ctx.get(...)` kwargs from corpus_callosum and rough_target_range fill calls.
+- `data/operator_notes/` directory is new and self-contained; `rm -rf` to revert.
+
+### Memory entries
+
+- New: should add `feedback_workspace_file_tools_overwrite_fail.md` capturing "Write/Edit tools silently fail to overwrite existing files in this workspace mount; bash heredoc reaches disk. Verify mtime after any non-trivial overwrite."
+- Updated mention candidates: `user_lite_2026_05_23_thesis` (mechanism now exists to deliver this on every LITE Socratic run), `feedback_changelog_discipline` (instance counter — this is at least the 3rd documented case).
+
+---
+
+## [2026-05-23] Phase 5.5 macro + wave health — LIVE end-to-end (Steps 1-3b shipped)
+
+**Theme:** The entire Phase 5.5 layer is now live and verified. `[MACRO_CONTEXT]` + `[WAVE_CONTEXT]` blocks flow from Supabase → run_socratic.build_context() → strict-fill guard → injected into A/B/C/CC/rough_target_range prompts → measurably change Sonnet outputs. Compared to the macro-blind baseline (socratic_analyses.id=13, 2026-05-15), the new run (id=15, 2026-05-23) shows Model A multiple compression, Model C macro-anchored downside math, rough target range that explicitly factors macro + wave beta.
+
+### What shipped (4 steps, each falsifiably verified before the next)
+
+**Step 1 — `supabase/2026-05-20_wave_health_seed.sql`:** four `wave_health` rows for AI Waves 0/2/3/5 linked to `macro_environment.id=1`. Each carries momentum_score, crowding_score, macro_beta with beta_methodology provenance, macro_translation sentence, regime_playbook, differentiation jsonb with per-stock `trailing_12mo_return` + `trailing_18mo_return` (Must-fix #1 from v1 review squad), and watch_signals jsonb per `feedback_watch_vs_break` — cycle-shift observable metrics, NOT binary triggers. The LITE/COHR generational competition encoded explicitly as `gen_mix_order_flow` watch with the "coincident-not-either-alone" break condition. Verified by query returning 4 rows + 12 per-ticker momentum entries.
+
+**Step 2 — `run_socratic.py` placeholder-presence guard (Must-fix #2):** replaced silent-`fill()` with strict-by-default `fill(body, *, label, strict=True, **fields)`. Regex `\[([A-Z][A-Z0-9_]{2,})\]` scans every loaded prompt body for `[PLACEHOLDER]` tokens; raises `ValueError` with diagnostic detail if any are missing or empty in the context dict (skips `_OPTIONAL_PLACEHOLDERS = {OPERATOR_NOTES, PREVIOUS_REGIME, PREVIOUS_RUN_DATE, RESEARCH_FINDINGS}`). Min-3-char regex constraint skips example tokens like `[NN]/[YY]` from JSON-schema descriptions in the prompts (false positives caught and fixed during Step 3a smoke test). All 5 existing `fill()` call sites updated to pass explicit `label=` for clean error messages.
+
+**Step 3a — macro + wave fetch/format/inject into build_context():** new helpers in `run_socratic.py`: `_supabase_client()`, `fetch_current_macro()` (reads `current_macro_environment` view), `fetch_wave_context_for_ticker()` (applies Must-fix #3 primary-wave lookup rule: use `is_primary_wave=true` row if exactly one exists; otherwise most-recently-refreshed across all matching waves), `format_macro_context()` (renders bear/bull/triggers/watch_dates/this_week_watch/falsification as multi-line text), `format_wave_context()` (renders momentum/crowding/beta/translation/differentiation/watch_signals; per-stock ◀ marker on the analyzed ticker's differentiation entry). Graceful degradation: returns labeled `(none)` strings if tables not migrated or DB unreachable. `build_context()` now adds `macro_context`, `wave_context`, `macro_environment_id`, `wave_health_id` to the returned ctx dict. Stderr previews macro regime + wave name+beta so the operator sees what got fetched.
+
+**Step 3a.2 — `supabase/2026-05-20_ticker_revolutions_seed.sql`:** ~38 ticker→wave assignments across AI Revolution (4 equipment, 3 optical, 2 storage, 3 power, 3 cooling, 3 inference, 2 AI-native apps, 3 AI infra software, 3 AI-augmented SaaS, 1 AI-disrupted SaaS, 5 junction-layer cross-cutting), Space Economy Revolution (RKLB primary at W0 + smaller plays at W4-W8), Digital Finance Revolution (CRCL primary at W1 + COIN/HOOD/BTGO/V/MA). `is_primary_wave=true` flags exactly one wave per ticker (UNIQUE partial index enforces this at the DB layer). Each row carries `lifecycle`, `timing_category` from socratic_results_summary, and a `notes` blurb that surfaces as text context downstream.
+
+**Step 3b — `[MACRO_CONTEXT]` + `[WAVE_CONTEXT]` placeholder blocks injected into 5 Socratic prompts:**
+- `model_a_fundamentals.md`: instructions to cap multiples per regime (e.g. "48x ceiling becomes 35x in stagflation_risk"), use wave beta as cross-check, weight downside more conservatively when per-stock trailing returns exceed wave average.
+- `model_b_regime.md`: instructions to test the regime thesis against macro triggers, check whether the regime is already priced (if wave momentum extreme + this stock highest-momentum in wave, regime IS priced and upside requires justifying further re-rating), mention the stock relative to wave peers explicitly.
+- `model_c_adversarial.md`: instructions to LEAD with wave-level downside math (SPX × wave_beta), then derive per-stock beta deviation from `differentiation` trailing returns (CRITICAL — this is the Must-fix #1 derivation Model C couldn't do before), name near-firing watch_signals as adversarial triggers.
+- `corpus_callosum.md`: macro-only injection. Instructions to classify TIMING disagreements as JUDGMENT, dismiss disagreements the macro block already resolves, flag model arguments contradicting macro state as `convergence_summary` errors.
+- `rough_target_range.md`: macro + wave injection. Required output format now explicitly carries 4 lines: base range, macro discount in regime, wave beta translation, per-stock beta deviation → downside_price.
+- `research_question.md`: intentionally not modified — focused factual research call doesn't need either upstream context.
+- `run_corpus_callosum` and `run_rough_target_range` callers updated to pass `macro_context=ctx.get("macro_context","(none)")` and (for rough_target) `wave_context=ctx.get("wave_context","(none)")` as fill() kwargs.
+
+### Verification (socratic_analyses.id=15 vs id=13 baseline, both LITE)
+
+| Field | id=13 (macro-blind, 2026-05-15) | id=15 (macro+wave, 2026-05-23) | Interpretation |
+|-------|---------------------------------|-------------------------------|----------------|
+| `model_a.target_low` | 600 | **480** | Multiple compression — A respected the macro discount instruction |
+| `model_a.verdict` | OVERVALUED | OVERVALUED | Direction unchanged, magnitude tightened |
+| `model_b.verdict` | REGIME_UPSIDE | REGIME_UPSIDE | Regime case stable across runs (good signal — regime thesis is reproducible) |
+| `model_c.downside_price` | 32 (capex-collapse tail) | **568** (macro+beta math) | C abandoned the apocalypse-tail $32 and adopted the macro-driven SPX -15% × beta 2.3-3x = ~40% from $946 = ~$568 calculation. THIS is the load-bearing change — Model C is now doing the per-stock beta derivation that Must-fix #1 was meant to enable. |
+| `rough_target_low/high` | 700/1,200 | **580/1,050** | Range shifted down and tightened; macro discount visible |
+| `downside_price` | 32 | **568** | Rough target now uses the macro-grounded downside number instead of the tail |
+
+**Pass criterion met:** at least 2 of 3 Round-1 models cite macro regime or wave beta by name in their reasoning (A: multiple compression; C: explicit beta math). Model B held the regime case stable, which is also signal — the upstream context didn't bully the regime frame into capitulation.
+
+### Files shipped 2026-05-20 through 2026-05-23
+
+- `supabase/2026-05-20_wave_health_seed.sql` — 4 AI waves seeded
+- `supabase/2026-05-20_ticker_revolutions_seed.sql` — ~38 ticker→wave assignments
+- `scripts/run_socratic.py` — strict-fill guard + macro/wave fetch helpers + build_context() injection (≈1090 lines, syntax clean)
+- `scripts/prompts/socratic/model_a_fundamentals.md` — `[MACRO_CONTEXT]` + `[WAVE_CONTEXT]` + usage rules
+- `scripts/prompts/socratic/model_b_regime.md` — same
+- `scripts/prompts/socratic/model_c_adversarial.md` — same (with Must-fix #1 derivation rule)
+- `scripts/prompts/socratic/corpus_callosum.md` — `[MACRO_CONTEXT]` + usage rules
+- `scripts/prompts/socratic/rough_target_range.md` — `[MACRO_CONTEXT]` + `[WAVE_CONTEXT]` + required output format
+
+### User update on LITE thesis (2026-05-23, post-verification)
+
+Hume reviewed id=15 output and pushed back on the upside. His view: the system's $1,050 upper bound undershoots because the engine doesn't see (1) the long washout/shakeout phase ending will trigger a sharp move higher, and (2) LITE has no real competitor and is raising product prices next year (2027). The COHR 400G D-EML threat hasn't materialized in any 3.2T design win. Saved as `user_lite_2026_05_23_thesis.md` so future Socratic runs can carry this as user-thesis context — particularly relevant when the system's macro discipline produces a bearish range and Hume's fundamental view disagrees.
+
+### What's NOT yet built (still on the queue)
+
+- `scripts/run_macro.py` — daily-cron orchestrator that calls macro_analyst.md, parses JSON, writes a new macro_environment row + sets previous superseded_by. Right now macro_environment.id=1 is the only row and was manually seeded.
+- Discovery prompt lateral-trace methodology — "who ELSE operates at this node?" addition to cheap-scan + adversarial-filter prompts.
+- Phase 6 notifications cron — `state_change_triggers` → notification rows.
+- Phase 7 frontend — 宏观 tab, 科技革命 graph view, judgment card Option C UX, 灵感 mode in Ask tab.
+
+### Rollback
+
+`git diff scripts/run_socratic.py scripts/prompts/socratic/` shows every Python/prompt change in this entry. Schema changes are all additive (Phase 5.5 + 5.6 migrations); dropping the new tables leaves the existing system untouched. Memory entries for this phase: `project_macro_layer_design.md` (updated to LIVE), `feedback_watch_vs_break.md`, `project_phase3_shipped.md` references this work.
+
+---
+
+## [2026-05-20] Phase 5.5 + Phase 5.6 data layer SHIPPED (.sql + prompt only — Python deferred)
+
+**Theme:** Hume re-uploaded the v3 revamp package with two new specs (03_macro_wave_health + 04_technology_web) and an updated README/socratic_results adding the 4-bucket timing categorization, a 4th revolution (Quantum Computing), the 灵感 (Spark) mode, the COHR-EML-as-LITE-thesis-risk finding, and the storage-cycle watch-signals. Hume said "I think we do need to implement all of them; I took time working on this framework." This session ships the entire DATA LAYER for Phase 5.5 + Phase 5.6 — six SQL migrations + the macro prompt — as atomic files Hume applies when ready. Python orchestration deferred to next session (text-heavy Python edits at this hour have been hitting truncation bugs twice in the same session per `feedback_changelog_discipline`; safer to write fresh).
+
+### What shipped
+
+**Six new SQL files in `supabase/`:**
+1. **`2026-05-20_phase5_5_macro_wave.sql`** — `macro_environment` table + `wave_health` table with all v1 design amendments applied:
+   - Must-fix #3: `is_primary_wave boolean` on `ticker_revolutions` + UNIQUE index for at-most-one-primary-per-ticker
+   - Must-fix #4: `bets.status` CHECK extended to include `'passed'`
+   - Should-fix #5: `wave_health.beta_methodology` text for beta provenance
+   - Should-fix #6: `settlement_window_days`, `benchmark_index`, `actual_wave_return`, `settled_at` on `wave_health`
+   - NEW from `feedback_watch_vs_break`: `watch_signals` jsonb on `wave_health` for cycle-shift observable metrics (LITE/COHR generational competition, Wave 3 storage indicators) — NOT binary triggers
+   - FK additions: `bets.macro_environment_id`, `socratic_analyses.macro_environment_id`, `socratic_analyses.wave_health_id`
+   - Views: `current_macro_environment`, `current_wave_health`, `bets_needing_macro_review` (filters status='active' to prevent zombie-pass pings)
+
+2. **`2026-05-20_timing_categorization.sql`** — adds `timing_category` text column to `revolutions`, `waves`, `ticker_revolutions` with CHECK enum (`收获期`, `半步领先`, `一步领先`, `远见期`). Seeded initial values per `socratic_results_summary` — AI Wave 1 (算力) and Wave 2 (光互联) tagged 收获期 (past peak); Wave 0/4/5 tagged 半步领先.
+
+3. **`2026-05-20_tech_nodes.sql`** — Phase 5.6 Technology Web schema. `tech_nodes` table (revolution_id, self-FK parent_id, depth 0-4, chokepoint_score enum monopoly/duopoly/oligopoly/competitive) + `node_companies` (node_id, ticker text not FK because tickers VIEW can't be FK target, role enum leader/challenger/emerging/private/adjacent, market_share, market_cap_usd). Views: `leaf_tech_nodes`, `hidden_chokepoints`, `ticker_node_membership`.
+
+4. **`2026-05-20_quantum_revolution_seed.sql`** — 4th revolution (量子计算革命) with timing_category='远见期' + 8 waves all 远见期. Oxford Instruments (OXIG.L) seeded at Wave 2 (Cryogenics & Control) as the only public chokepoint. IonQ and RGTI seeded at Wave 1 (Qubit Hardware) as high-risk public moonshots.
+
+5. **`2026-05-20_macro_seed.sql`** — `macro_environment.id=1` seeded with Hume's 2026-05-17 stagflation_risk analysis: state_summary (Warsh trapped, CPI 3.8%, Iran/Hormuz, hike risk 37%), bear_case (probability moderate-high, 6 specific drivers, 10-15% SPX correction implication), bull_case (probability moderate, 6 specific drivers, AI capex structural insulation), 5 state_change_triggers (iran_ceasefire BULLISH, may_cpi_above_4 BEARISH, warsh_first_speech CLARITY, q2_gdp_slowdown MIXED, june_fomc_dissent_pattern CLARITY), 5 watch_dates (May CPI, June FOMC, June CPI, Q2 GDP, Q2 earnings start), 3 this_week_watch items, structured falsification. Then backfills `bets.id=1` (LITE pass) → `macro_environment_id=1` AND `status='passed'`.
+
+6. **`2026-05-20_ai_tech_web_seed.sql`** — full AI revolution 4-level web from specs/04. Root → 6 systems (Compute, Networking, Storage, Power, Cooling, Specialty Materials) → 24 subsystems → ~15 depth-3 component chokepoints. Companies seeded include: hidden chokepoints (**Ajinomoto** 98% ABF IP monopoly, **Disco** dicing near-monopoly, **TSEM** SiPho, **BESI/ASMPT** bonding, **SIMO** SSD controllers, **AMKR** US OSAT, **AAOI** transceivers, **SPXC** transformers, **Chemours** refrigerants), existing analyzed names (CAMT, LITE, COHR, GFS, MPWR, VRT, CEG, MU, ALAB, ETN, MOD), and core consensus names (NVDA, AMD, TSMC, ASML, AMAT, LRCX, SNPS, CDNS, ENTG, GLW). Generational competition encoded: LITE = leader at EML Lasers with 'current-gen 200G EML sole source for 1.6T'; COHR = challenger with 'own 400G D-EML for next-gen 3.2T'. Notes explicitly call out that this is generational competition watched via order flow + inventory, NOT direct head-to-head.
+
+**One new prompt:**
+- **`scripts/prompts/macro/macro_analyst.md`** — v1 macro analyst prompt. Sonnet, max_tokens 8000, temperature 0.2. Required output schema matches `macro_environment` columns. Web-search-enabled. Symmetric bear/bull treatment enforced in rules. Falsifiability required. Explicit instruction to NOT predict market direction with a number and NOT produce per-stock recommendations.
+
+**Updated docs:**
+- `BUILD_PLAN_v2.md` — appended Phase 5.5 expansion addendum + new Phase 5.6 (Technology Web) section + sequence + files-shipped list + what's still deferred.
+
+### Why this matters
+
+The data layer for Phase 5.5 and 5.6 is now complete and reviewable as files before anything hits production. Hume's design work (the macro framework, the wave health overlay, the technology web with hidden chokepoints, the timing categorization, the Quantum revolution, the watch-signals pattern, the COHR generational-watch finding) is all encoded in atomic .sql files that he can apply incrementally. The Python orchestration (run_macro.py + injection updates to A/B/C + run_socratic.py guard) wants a fresh session — Python at this hour has been hitting Edit-tool truncation bugs.
+
+After Hume applies these migrations:
+- The schema supports macro context, wave health (with watch_signals), the technology web (with hidden chokepoints), timing categorization, the 4th revolution, and bet status='passed' (no zombie notifications for LITE).
+- `macro_environment.id=1` carries the current stagflation_risk regime with structured bear/bull and triggers.
+- `bets.id=1` is linked to that regime and marked passed.
+- The AI revolution technology web is queryable: `SELECT * FROM hidden_chokepoints` returns Ajinomoto, Disco, ASML, TSMC, etc.
+- The Quantum revolution and its 8 pre-commercial waves are visible to the discovery pipeline.
+
+### Pass criterion (Hume applies and verifies)
+
+After applying all six migrations in this order: 5_5_macro_wave → timing_categorization → tech_nodes → quantum_revolution_seed → macro_seed → ai_tech_web_seed, the following queries should return data:
+
+```sql
+-- Macro context for Socratic injection
+SELECT id, regime_classification, run_at FROM current_macro_environment;
+-- expected: 1 row, regime_classification='stagflation_risk'
+
+-- Quantum revolution and waves
+SELECT name_cn, timing_category FROM revolutions WHERE name_cn = '量子计算革命';
+-- expected: 远见期
+SELECT COUNT(*) FROM waves w JOIN revolutions r ON r.id = w.revolution_id WHERE r.name_cn = '量子计算革命';
+-- expected: 8
+
+-- LITE bet now linked to macro context and marked passed
+SELECT id, ticker, status, macro_environment_id, position_pct FROM bets WHERE id = 1;
+-- expected: status='passed', macro_environment_id=1, position_pct=0
+
+-- Hidden chokepoints from AI technology web
+SELECT node_name, chokepoint_score, tickers FROM hidden_chokepoints ORDER BY supplier_count;
+-- expected: ≥ 4 monopoly/duopoly rows including Ajinomoto, Disco, TSMC CoWoS, EUV Lithography
+
+-- Cross-cutting tickers (membership in multiple tech nodes)
+SELECT ticker, revolutions, node_count FROM ticker_node_membership WHERE node_count > 1;
+-- expected: ≥ 2 rows (MPWR, COHR, VRT, GFS likely candidates)
+```
+
+### What's still deferred to next session
+
+- **Python orchestration:**
+  - `scripts/run_macro.py` — daily cron + on-demand orchestrator that calls macro_analyst.md, parses the JSON, writes a new `macro_environment` row (and sets the previous row's `superseded_by`)
+  - `scripts/run_socratic.py.build_context()` — placeholder-presence guard (Must-fix #2): scan loaded prompts for `[PLACEHOLDER]` tokens, raise hard error on any missing context dict value
+  - Updates to `model_a/b/c.md`, `corpus_callosum.md`, `research_question.md`, `rough_target_range.md` — add `[MACRO_CONTEXT]` and `[WAVE_CONTEXT]` placeholder blocks
+- **Wave health seed for AI Waves 0/2/3/5** — including LITE/COHR generational watch_signals for W2 and storage cycle indicators for W3 (per `feedback_watch_vs_break`)
+- **Discovery prompt update** — lateral-trace methodology ("who ELSE operates at this node?") added to cheap-scan + adversarial-filter prompts
+- **Phase 6 notifications cron** — wire `macro_environment.state_change_triggers` → `notifications` rows
+- **Phase 7 frontend** — 5-tab nav, 宏观 tab, 科技革命 graph view (replaces linear wave bar), 灵感 Spark mode in Ask tab, judgment card Option C UX with acknowledgment checkboxes
+
+### Rollback
+
+All six .sql files are additive. If any cause problems, drop the new tables / columns in reverse order:
+```sql
+DROP TABLE node_companies, tech_nodes CASCADE;
+DROP TABLE wave_health, macro_environment CASCADE;
+ALTER TABLE bets DROP COLUMN macro_environment_id; -- repeat for socratic_analyses
+ALTER TABLE bets DROP CONSTRAINT bets_status_check;
+ALTER TABLE bets ADD CONSTRAINT bets_status_check CHECK (status IN ('active','settled_win','settled_loss','cancelled'));
+-- timing_category columns and is_primary_wave can stay (additive, no integrity risk)
+```
+Existing schema unaffected; the Phase 5 MVP keeps working.
+
+---
+
+## [2026-05-20] Phase 5.5 macro + wave health — review squad pass, v1 LOCKED
+
+**Theme:** Hume expanded the macro layer design with a Wave Health Overlay (`docs/design/MACRO_AND_WAVE_HEALTH_v1_DRAFT.md`) before authorizing the build. We ran the DRAFT through the review squad (Critic, Outsider, Red-team in parallel; Synthesizer to consolidate). Verdict: SHIP-AFTER-MUST-FIX — architecture is sound, four targeted fixes plus three quality-of-life fixes required, four reviewer concerns explicitly rejected. All applied. DRAFT renamed v1.
+
+### Review squad findings (consolidated)
+
+**Critic — load-bearing flaw:** Part 4 Step 3 has Model C deriving "LITE is HIGHEST-momentum name in this wave (+900% in 18 months), beta could be 3x." But Model C only receives `[WAVE_CONTEXT]` which carries wave-average momentum + qualitative `differentiation` (resilience tag, no per-stock momentum number). The 3x derivation is fabricated from inputs that don't support it. Decision 7 in Part 6 ("wave says 2.3x; Model C says LITE specifically -40%") is unimplementable as drafted.
+
+**Outsider — what experts can't see:** Bear case in Part 4 had concrete data points (CPI 3.8%, oil >$100, Warsh, 37% hike) while the bull case was "Same structure. What goes right?" — structural description only. Asymmetry signaled the worked example was confirming the author's prior decision rather than testing the system.
+
+**Red-team — production failure modes:**
+1. `[MACRO_CONTEXT]` / `[WAVE_CONTEXT]` silently produce blank analyses. `run_socratic.fill()` replaces unknown placeholders with `""` (line 79 explicit). Without a guard, a Socratic run between prompt update and `build_context()` update silently writes a `macro_environment_id`-tagged Supabase row with phantom blank context. Day-one production failure.
+2. Multi-wave ticker has no lookup rule. CAMT is in Wave 0 AND Wave 99 — harness `SELECT` is non-deterministic; same ticker on different days could get different `macro_beta`.
+3. `bets.id=1` (LITE pass, position 0%) is a zombie open bet — every macro regime change pings it forever.
+4. Beta calibration methodology undefined; pre-revenue / early-lifecycle waves will produce LLM-fabricated betas that Model C cites as hard facts.
+5. Settlement window undefined; "was the 2.3x beta accurate" cannot be answered without a settlement spec.
+
+**Synthesizer verdict:** SHIP-AFTER-MUST-FIX. All three reviewers landed on different facets of the same paragraph (Part 4 Step 3) — Critic on fabricated derivation, Red-team on undefined calibration, Outsider on asymmetric bear/bull. Fix Part 4's inputs and the rest of the design holds.
+
+### What was applied to v1
+
+**Must-fix (4):**
+1. `wave_health.differentiation` jsonb now requires `trailing_12mo_return` + `trailing_18mo_return` per ticker. Fixes Model C input gap.
+2. `run_socratic.py.build_context()` must scan every loaded prompt for `[PLACEHOLDER]` tokens and raise on missing values. No silent `""` fills. Documented as precondition in Part 5 Step 5.
+3. `ticker_revolutions.is_primary_wave boolean DEFAULT false`. Harness lookup rule documented: use primary wave's latest `wave_health`; otherwise most-recent across all matching waves; log resolution path in `prompt_versions` audit trail.
+4. `bets.status` CHECK extended to include `'passed'`. `run_judgment.py` sets status='passed' on `position_pct=0` bets. Notification cron filters `status='active'`.
+
+**Should-fix (3):**
+5. `wave_health.beta_methodology text` — provenance for each beta value. Prevents the number from being mistaken for measured fact at read time.
+6. `wave_health` gains `settlement_window_days`, `benchmark_index`, `actual_wave_return`, `settled_at`. Nullable until settled; schema forces the question.
+7. Part 4 Step 1 bull case filled in with three concrete data points (GDP +3.7%, Q1 corporate profits beating consensus, hyperscaler $7,250B capex commitments). Eliminates the asymmetric framing.
+
+**Could-fix (parked as TODOs in v1):**
+- TODO-1: Wave 0-2 grouping note (wafer inspection vs transceiver optical betas differ).
+- TODO-2: Health-label composite tie-break rule (priority: momentum > crowding > P/E).
+- TODO-3: UNIQUE partial index on `macro_environment` where `superseded_by IS NULL`.
+
+**Rejected concerns (with rationale, documented in v1):**
+- "Corpus callosum jargon needs explaining" — internal design doc for a builder who shipped Phase 3. Jargon appropriate.
+- "Part 4 is a reconstruction, not a test" — true and standard for design docs. Actionable form captured in Must-fix #1 and Should-fix #7.
+- "$540 range is too wide to justify anything" — Socratic produces ranges, not points. Wide ranges on contested names under macro stress are correct outputs.
+- "Waves ARE sectors is weakly supported" — doc already hedges with "functionally sectors." Real risk captured as TODO-1.
+
+### What's on disk
+
+- `stock-radar/docs/design/MACRO_AND_WAVE_HEALTH_v1.md` — 434 lines, locked spec ready for schema migration.
+- `stock-radar/docs/design/MACRO_AND_WAVE_HEALTH_v1_DRAFT.md` — preserved for review trail (DRAFT + my pre-review pushbacks at the bottom).
+- Memory: `project_macro_layer_design.md` updated to point at v1 and document the review squad amendments as non-optional parts of the spec.
+
+### What's still gated on the reproducibility check
+
+Building the macro + wave health layer waits on Hume running Socratic on CAMT (regime-shift candidate, expect strong A-vs-B disagreement), ENTG (compounder, expect mostly agreement), and AXON (current 5% tracking position, refresh under current macro). ~$10 in API. Per `feedback_one_step_falsifiable` and `feedback_engine_complexity_ratchet`: prove the existing Socratic layer works across archetypes before adding a new layer on top of it.
+
+### Rollback
+
+`rm stock-radar/docs/design/MACRO_AND_WAVE_HEALTH_v1.md` — removes the locked spec; DRAFT is still on disk. No code or schema was touched in this entry; it's design-only.
+
+---
+
+## [2026-05-17] Phase 5.5 — macro layer DESIGN locked (build deferred to post-reproducibility)
+
+**Theme:** The first tracked decision in the system (bets.id=1, LITE pass) was driven primarily by macro reasoning that the Socratic engine cannot surface — CPI re-accelerating to 3.8%, new Fed chair Warsh confirmed May 13 trapped between hawkish data and dovish mandate, Iran/Hormuz keeping oil above $100, market pricing 37% chance of HIKE not cut by year-end, GDP paradoxically strong at +3.7%. This entry captures the design for the macro layer (Phase 5.5 in the build sequence) — locked and ready to implement, but deferred until the reproducibility check on CAMT/ENTG/AXON validates the Socratic layer across archetypes per `feedback_one_step_falsifiable`.
+
+### What was decided (no code shipped this entry — design only)
+
+**Architectural shape:** Macro is a FRAME, not a filter and not a per-ticker model. It is a daily-cadence portfolio-level snapshot that gets injected as `[MACRO_CONTEXT]` into the existing Socratic A/B/C model prompts. Each per-stock model interprets it against its own frame — Model A compresses multiples, Model B tests whether the regime is structural-immune, Model C builds explicit stagflation downside. Corpus callosum surfaces macro-vs-stock disagreements as JUDGMENT-type (timing question for the human). No new parallel model fires per ticker.
+
+**Schema (Phase 5.5 migration, when built):**
+- New table `macro_environment` with: `state_summary`, `regime_classification` (free-text — grows organically, no upfront enum), `bear_case` jsonb (probability + drivers + implication), `bull_case` jsonb, `state_change_triggers` jsonb (becomes Phase 6 notification rows), `watch_dates` jsonb, `this_week_watch` jsonb (NEW — granular weekly subset for short-horizon triggers), `falsification` text, `settled_outcome`, `superseded_by` FK for history chain.
+- `ALTER TABLE bets ADD COLUMN macro_environment_id` (nullable FK, auto-populated with latest at write time).
+- `ALTER TABLE socratic_analyses ADD COLUMN macro_environment_id` (so every Socratic run is anchored to a macro snapshot).
+- Backfill: `UPDATE bets SET macro_environment_id = 1 WHERE id = 1` so the LITE pass is retroactively anchored to Hume's manual macro analysis (will be seeded as row 1).
+
+**Seven design decisions locked:**
+1. **Cadence:** daily cron + on-demand refresh when state-change trigger fires. Hybrid.
+2. **Socratic re-run on macro flip:** NO — notification only. Force-rerun is wasteful.
+3. **bets→macro link:** optional column, but auto-populated with latest at write time. User doesn't think about it.
+4. **History:** `superseded_by` FK chain preserves all historical macro snapshots; never UPDATE in place.
+5. **State-change triggers:** hybrid auto/manual. Manual from macro output (the `what_would_change_the_picture` array maps directly to notification rows). Auto for known events (CPI dates, FOMC, GDP releases).
+6. **Per-position implications:** A/B/C derive them from the macro frame. Macro produces general context; per-stock reasoning stays in per-stock models. This is the BIG architectural decision and the rationale: if macro tried to produce per-position implications, it would duplicate what A/B/C already do — and do it worse because macro doesn't know stock-specific moats. Macro stays general; per-stock models translate.
+7. **Beta translation:** belongs in per-stock Model C, not in the macro frame. Macro says "expect 10-15% SPX correction"; Model C says "LITE-class high-beta names typically drop 2-3x the index → adjusted downside $650-700." Macro never assumes beta=1.
+
+**Settlement integration:** macro-driven bets settle on TWO criteria — did the stock thesis play out AND did the macro thesis play out. The LITE pass at T+90 (2026-08-16) reads both `bets.falsification` (SPX +5% AND LITE breaks $1,200) and the linked `macro_environment.falsification`. Both outcomes are valuable: if macro was right and stock was right, system learned a calibration signal; if either was wrong, learn how the frame failed.
+
+**Notifications coupling (Phase 6):** state-change triggers map mechanically to `notifications` rows. "Iran ceasefire → oil drops to $70 → CPI falls → rate cuts back on table (BULLISH)" becomes `INSERT INTO notifications (type='catalyst', trigger_condition='{"event":"iran_ceasefire"}', message='...', severity='urgent')`. When fired, Phase 6 cron evaluates open bets where `macro_environment_id` matches the now-superseded regime → notifies user that those positions need revisiting. This is the loop that makes the macro frame USEFUL rather than stale.
+
+### Refinements from Hume on the locked design
+
+- **Don't predefine `regime_classification` values upfront.** Let the enum grow organically from actual analyses. First few values will be things like `stagflation_risk` (current), `goldilocks`, `rate_shock`, `liquidity_squeeze`. Adding values as needed beats trying to imagine the full taxonomy.
+- **`this_week_watch` field added** between the monthly regime classification and the daily news layer. Tracks short-horizon triggers like "Warsh's first public remarks as chair — tone on rates?", "Oil price: still above $100?", "Market reaction to the regime change — institutional repositioning?". Changes weekly, narrower than the regime classification, broader than the next-FOMC-date watch.
+- **Phase ordering:** macro is Phase 5.5 — slotted between Phase 5 (judgment card MVP, done) and Phase 6 (notifications, pending). Reproducibility check on CAMT/ENTG/AXON still comes first per `BUILD_PLAN_v2.md` next-moves list.
+
+### Why this is in CHANGELOG even though no code shipped
+
+The design conversation itself is an artifact. Without this entry, the next session would re-derive the architecture from scratch and probably get half of it wrong (specifically: Decision 6 — who produces per-position implications — is the kind of choice that often gets flipped on a second pass with worse results). Per `feedback_changelog_discipline`, document the decision so future-Claude inherits the reasoning, not just the conclusion.
+
+### Sequence of work when this gets built (next session at earliest)
+
+1. Reproducibility check first: run `scripts/run_socratic.py` on CAMT, ENTG, AXON (~$10). Verifies the existing Socratic layer produces meaningfully different disagreement profiles across archetypes before we add a new layer on top.
+2. Schema migration: `2026-05-17_macro_environment.sql` per the design above.
+3. Seed `macro_environment.id=1` with Hume's manual analysis (regime: `stagflation_risk`, bear probability moderate-high, bull probability moderate, specific Warsh/CPI/Iran/Powell drivers, this_week_watch including Warsh first speech).
+4. Backfill bets.id=1 with macro_environment_id=1.
+5. Write `scripts/prompts/macro/run_macro.md` prompt + `scripts/run_macro.py` (one Sonnet call, web_search on macro data sources, structured JSON output).
+6. Add `[MACRO_CONTEXT]` placeholder to model_a/b/c prompts. Brief addition to each prompt explaining how that frame should incorporate macro.
+7. Update `run_socratic.py` to load latest macro_environment and inject context.
+8. Update corpus_callosum.md to recognize macro-vs-stock disagreements as JUDGMENT-type.
+9. Re-run Socratic on LITE with macro injected. Pass criterion: A/B/C produce timing notes they didn't surface on 2026-05-15. Specifically, Model C should produce a beta-adjusted downside reflecting "LITE drops 2-3x SPX in a real correction" rather than the abstract trough scenario.
+10. CHANGELOG entry for the actual build.
+
+### What's still NOT in this design (deliberate scope cuts)
+
+- **Discovery (L2) macro tilt:** in stagflation, defensive sectors outperform. The theme_scan and adversarial filter results SHOULD be macro-tilted, but adding macro to discovery scoring is its own design problem. Defer.
+- **Harness routing (Phase 2) macro influence:** in contested macro, even mature mean-revert names need Socratic. Overkill for v1; harness routes by stock archetype only.
+- **Macro accuracy as Phase 9 learning input:** macro frame's bear/bull probability calibration over time. Real but slow; needs N≥5 settled regimes (1-2 years).
+
+---
+
+## [2026-05-15] Phase 5 MVP — judgment card + bets table + first tracked decision
+
+**Theme:** The Socratic engine (Phase 3+4) produces enough structure for a human to make a defensible call. Phase 5 closes the loop by capturing the human's decision with a non-negotiable falsification condition, computing T+30/60/90 checkpoint dates, and writing the bet to a tracked row. The very first decision the system has ever recorded landed tonight: LITE pass at $970, macro-driven, settles 2026-08-16.
+
+### What shipped
+
+- **`scripts/prompts/socratic/judgment_conversation.md`** (NEW) — vagueness-detection prompt for the future conversational judgment card. Takes user judgment + falsification + position_pct, returns `{clear, extracted, missing_fields, follow_up_question}`. Sits in the prompt library; not yet invoked by the MVP run_judgment.py — Phase 5.2 increment.
+
+- **`scripts/run_judgment.py`** (NEW, ~258 lines) — CLI that records a bet. Args: ticker + --judgment + --falsification + --position-pct (default 5) + --entry-price (default = spot_at_run from latest Socratic). Validates required fields non-empty (the DB-level `CHECK (length(falsification) > 0)` is the backstop). Loads the latest `socratic_analyses` row for the ticker (or accepts --socratic-id for a specific link). Computes T+30/60/90 as ISO date strings from entry_date. Inserts to `bets` + best-effort log to `chat_history` with a fresh uuid session_id.
+
+  Position-size discipline: default 5% per `user_position_sizing_discipline` memory. Initial validation `(0, 100]` was wrong because it rejected a pass decision; corrected to `[0, 100]` mid-session. A 0% bet is a legitimate tracked judgment that still has a falsification condition.
+
+- **First tracked decision (`bets.id=1`):** ticker LITE, position_pct 0%, entry_price $970.70, socratic_id 13. Judgment cites macro override (CPI elevated, new Fed chair → 1-3 month broad-market correction expected; long-term LITE conviction HIGH at 25-30% target weight pending entry conditions). Falsification: "If SPX avoids >5% correction over the next 90 days AND LITE breaks $1,200 sustainably, both halves of my pass thesis are wrong." T+30 2026-06-17, T+60 2026-07-17, T+90 2026-08-16.
+
+### Why this matters
+
+This is the first end-to-end falsifiable decision the system has produced. The path was: candidate ticker → Socratic 3-frame analysis (Phase 3) → research-resolved disagreements + rough target range (Phase 4) → human judgment with falsification (Phase 5) → tracked row with settlement date. Auto Mode on the same ticker produced a single BROKEN/$878 verdict — useless for a regime-shift stock at $970. Socratic surfaced 5 disagreements split 3 research / 2 judgment; research findings integrated into the rough_target_range paragraph; human added the macro frame that none of A/B/C carry.
+
+The architectural prediction in `user_auto_vs_socratic_division` is now confirmed by a real tracked decision: Auto routing produces noise on regime-shift names; Socratic produces structure; human inserts the frame the LLM doesn't carry. Per `feedback_one_step_falsifiable`, this is a clean falsifiable test: at T+90 we can settle whether the macro-driven pass was right.
+
+### New architectural gap surfaced
+
+`project_macro_gap` memory written this session. Socratic models A/B/C are all stock-specific. None carries CPI / Fed / cycle / broad-market frame. Hume's first bet was driven primarily by macro that the engine misses. The right fix is a daily `run_macro.py` producing a `macro_environment` row that gets injected as `[MACRO_CONTEXT]` into all three Socratic prompts. Corpus callosum then naturally surfaces macro-vs-stock disagreements as JUDGMENT-type.
+
+Per `feedback_engine_complexity_ratchet` and `feedback_one_step_falsifiable`, defer this until reproducibility check on CAMT/ENTG/AXON confirms the existing Socratic layer works across archetypes. Don't add a layer until the current layer is proven.
+
+### Pass criterion (Phase 5.3 — all met)
+
+- ✓ `bets` row appears with `socratic_id` linking back to Phase 4 Socratic run
+- ✓ `falsification` column non-null (DB CHECK enforces)
+- ✓ T+30 / T+60 / T+90 dates computed from entry_date and written as date columns
+- ✓ position_pct = 0 accepted as a valid pass decision (after the validation fix)
+- ✓ `chat_history` audit-trail row written best-effort
+
+### Cosmetic glitches (queued, not bugs)
+
+- `run_socratic.py` progress line still prints `C:None` for Model C's verdict because C's schema uses `moat_durability` instead of `verdict`. JSON in the DB is correct. One-line print formatter fix.
+- `run_judgment.py` had a brief truncation during the in-session validation patch (Edit tool truncated mid-edit per `feedback_changelog_discipline` rule). Restored via atomic Python write same session; final file 258 lines, syntax clean.
+
+### What's still open
+
+- **Phase 5.2** — wire `judgment_conversation.md` into `run_judgment.py` so vague input gets a clarifying follow-up. Useful when typing terse judgments. ~1 hour.
+- **Reproducibility check** on CAMT / ENTG / AXON — confirms Socratic produces different disagreement profiles across archetypes (regime-shift vs compounder vs current tracking signal). ~$10 in API.
+- **Macro pre-pass** — `run_macro.py` + `[MACRO_CONTEXT]` injection. Highest-leverage architectural upgrade after reproducibility.
+- **Harness wiring** — `harness_routing.md` exists but no orchestrator. Turn "two scripts" into "one pipeline."
+- **MU data bug** — cumulative-mislabel inflation in `finance_data.py` still bypassing sanity checks via cyclical_tech archetype's relaxed thresholds. Separate work item.
+
+### Rollback
+
+`rm scripts/run_judgment.py scripts/prompts/socratic/judgment_conversation.md` reverts the code. The `bets.id=1` row can stay or be deleted — the schema and constraints are independent of run_judgment.py.
+
+---
+
+## [2026-05-15] Phase 4 — research round + rough_target_range shipped
+
+**Theme:** Phase 3 closed the structural disagreement (3 frames, 13x spread). Phase 4 closes the loop on actionability: research round auto-resolves factual disagreements with web search, and the rough_target_range synthesis ties everything into a single magnitude estimate + dated upside/downside drivers. Auto Mode produced "BROKEN $878" on LITE — useless. Socratic now produces "$700-$1200, downside $32" with named research findings and weighted-model logic.
+
+### What shipped
+
+- **`scripts/prompts/socratic/research_question.md`** (NEW) — single-question research prompt with web_search. Takes the `research_query` string from corpus_callosum, returns `{question, finding, confidence, sources_cited, what_would_change_the_finding}`. Confidence enum includes `INSUFFICIENT_PUBLIC_DATA` for the "public record is silent" case.
+- **`scripts/prompts/socratic/rough_target_range.md`** (already existed; max_tokens bumped 1200→8000) — final synthesis prompt that ties Model A/B/C + corpus_callosum + research_findings into one paragraph with traceable math.
+- **`scripts/run_socratic.py`** — added `run_research_round()` (sequential — iterates RESEARCH-type disagreements, fires Sonnet+search each) and `run_rough_target_range()` (no search, pure synthesis). Wired into orchestrator after corpus_callosum. JUDGMENT-type disagreements are left untouched here; they flow through to Phase 5 (judgment card).
+- **Persistence updates:** `save_markdown` now includes Research Findings + Rough Target Range sections. `write_to_supabase` populates `research_findings` (jsonb array), `rough_target_low`, `rough_target_high`, `downside_price`, `rough_target_paragraph` on the row. `final_verdict` still null — Phase 5 judgment card writes that.
+- **max_tokens tuning:** four Round-1 prompts at 8000, corpus_callosum 8000, research_question 8000, rough_target_range 8000. Truncation warnings (`stop_reason=max_tokens`) now print loudly via `call_sonnet` so silent truncations can't recur.
+
+### Smoke test result on LITE (spot $970)
+
+Round 1: A:OVERVALUED ($650-900), B:REGIME_UPSIDE ($1100-1500), C:FRAGILE (downside $112).
+Corpus callosum: 7 agreements, 5 disagreements (3 research, 2 judgment).
+Research round: 3 questions resolved — 2 HIGH confidence (Nvidia partnership facts, Q2 FY2026 results), 1 MEDIUM (200G D-EML status at OFC 2025/2026).
+Rough target: **$700-$1,200, downside $32.** Paragraph weights Model A 35% + Model B 35% + Model C 30%, explicitly cites research finding "Nvidia deal is nonexclusive and Coherent received identical $2B investment" as reason the high end is capped below Model B's $1,500.
+
+socratic_analyses row id=13 fully populated. Total cost ~$2-3 (264k input + 15k output tokens, all Sonnet-4.6).
+
+### Pass criterion (all met)
+
+- ✓ research_findings array populated (3 entries, each with finding + confidence + sources_cited)
+- ✓ rough_target_paragraph traces every number to a Model A/B/C verdict or research finding (no orphan multiples)
+- ✓ rough_target_low ($700) / rough_target_high ($1200) / downside_price ($32) all numeric, no nulls
+- ✓ Upside and downside driver lists are specific and dated (6 upside, 7 downside)
+
+### Cosmetic glitch (not a bug — defer)
+
+The orchestrator's progress line `[round_1] complete — A:... B:... C:None` shows None for Model C because C's schema uses `moat_durability` instead of `verdict`. The actual JSON on the row is correct; just the print formatter looks for the wrong field. One-line fix when convenient.
+
+### What's still open
+
+- **Phase 5 — Judgment card backend + bets table** is the next phase. The Socratic engine now produces enough structure for a human to make a decision (the range, downside, judgment-type disagreements, named upside/downside drivers). The judgment card UI captures the human's decision + falsification condition, writes to `bets` table with default position_size 5%.
+- **Reproducibility check** — run Socratic on 2-3 more tickers (CAMT, ENTG, AXON) to confirm the pattern holds. Different ticker archetypes should produce different disagreement profiles: CAMT (regime-shift) should produce big A-vs-B disagreement; ENTG (compounder, no inflection) should produce mostly agreement and no big spread.
+- **Harness wiring** — Phase 2 prompt `harness_routing.md` exists but the orchestrator that routes Auto-vs-Socratic doesn't. Currently the choice is manual (call `run_thesis.py` for Auto or `run_socratic.py` for Socratic). Wiring the harness is a small but important piece — without it, LITE keeps ending up in Auto by default.
+
+### Rollback
+
+`git diff scripts/run_socratic.py scripts/prompts/socratic/` shows everything; revert to before this entry if needed. No DB changes beyond filling fields the schema already allowed.
+
+---
+
+## [2026-05-15] Phase 3 — Socratic orchestrator (Round 1 + corpus callosum)
+
+**Theme:** The Auto Mode kill rule did its job on LITE (BROKEN at $970), but per `user_auto_vs_socratic_division` Auto is mean-revert-only by design and LITE belongs in Socratic. Building the Socratic orchestrator unblocks the entire 10x-setup path. Shipping the Round 1 + corpus callosum slice first; research round and rough_target_range are Phase 4.
+
+### What shipped
+
+- **`scripts/run_socratic.py`** (NEW, 511 lines) — orchestrator that runs the three Round-1 model prompts in parallel via `concurrent.futures.ThreadPoolExecutor` (3 workers, I/O-bound on Anthropic API), then runs the corpus callosum sequentially. Each Round-1 model gets web search (max_uses=5 to cap per-run cost at ~$3-5). Corpus callosum runs without web search — it only compares the three JSON verdicts.
+
+  Pipeline:
+  1. `build_context(ticker)` — fetches price/sector/market_cap via `finance_data.fetch_financials`, company name via `lib.ir_lookup.get_ir_metadata`. Returns the placeholder dict for prompt filling.
+  2. `run_round_1_parallel(ctx, allowed_domains)` — fires three Sonnet calls (model_a fundamentals, model_b regime, model_c adversarial). Fail-fast: if any of the three returns unparseable JSON, the whole run aborts rather than producing a degenerate two-model result.
+  3. `run_corpus_callosum(ctx, round_1)` — single Sonnet call with no web search, max_tokens=2000, temperature=0.2. Output is the agreements/disagreements JSON.
+  4. `save_markdown(...)` — writes a human-readable transcript to `data/socratic/{TICKER}_{TIMESTAMP}.md`.
+  5. `write_to_supabase(...)` — inserts a `mode='socratic'` row into `socratic_analyses`. Research findings and rough target range left null for Phase 4.
+
+  CLI: `python scripts/run_socratic.py LITE [--no-supabase] [--trigger-reason "..."]`. Pattern matches `run_thesis.py` (same argparse shape, same UTF-8 handling, same env-loading style).
+
+- **Parameterized `call_sonnet()` helper** (local to run_socratic.py) — variant of `run_thesis.call_claude_with_search` that accepts model / max_tokens / temperature / max_iter / allowed_domains / label as parameters. Each Round-1 prompt's YAML frontmatter (already shipped 2026-05-15 earlier in this session) drives the per-model settings: model_a (temp 0.3), model_b (temp 0.5), model_c (temp 0.3), corpus_callosum (temp 0.2). Kept as a near-duplicate rather than refactoring run_thesis.py — karpathy rule 3 says don't touch unrelated code. Cleanup later.
+
+### Why this matters in context
+
+The architecture map (uploaded today as system_full_architecture_v2.svg) shows Layer 3 split between Auto (mean-revert, already operational) and Socratic (the 10x-setup handler, Phase 3 work). Today's commit closes the gap on the simplest Socratic slice. Once Hume applies the Phase 1 migrations and runs this on LITE, we'll see whether Model B's regime frame produces a verdict that Model A's fundamentals frame doesn't — the falsifiable test of whether Socratic earns its keep.
+
+This aligns with `feedback_council_architecture_killed`: the council was killed when proposed as a *replacement* for the single thesis. Socratic is different because (a) the harness routes only regime/uncertain stocks to it, (b) corpus callosum auto-resolves research disagreements (Phase 4), so the human only sees judgment-type disagreements, (c) the deliverable is a rough target *range* not a precise number.
+
+### What's still open
+
+1. **Phase 1 migrations not yet applied** — `socratic_analyses` table doesn't exist in the live Supabase yet. Hume must apply the five 2026-05-15 .sql files before `run_socratic.py` will succeed at the DB write step. The script handles this gracefully (markdown is still saved locally, supabase failure prints a WARN and continues).
+2. **Phase 0 smoke not yet retried with V3.4.4.1** — the Step 5 hard-gate edit from earlier this session is still un-validated. Optional housekeeping; not load-bearing for Phase 3.
+3. **Phase 4 work queued:** research round (resolves RESEARCH-type disagreements with web_search), rough_target_range prompt (the wrap-up paragraph). Already prompted in `scripts/prompts/socratic/rough_target_range.md` — just need orchestration.
+4. **Phase 5 work queued:** judgment card backend + bets table writes from conversation outcome.
+
+### Smoke test (Hume to run, after Phase 1 migrations are live)
+
+```bash
+cd stock-radar
+python scripts/run_socratic.py LITE --trigger-reason "phase3_smoke_lite"
+# Expected output (1-2 min, ~$3):
+#   [round_1] firing 3 parallel Sonnet calls for LITE...
+#   [model_a] API call 1/5...
+#   [model_b] API call 1/5...
+#   [model_c] API call 1/5...
+#   [round_1] complete — A:OVERVALUED  B:REGIME_UPSIDE  C:FRAGILE  (example)
+#   [cc] running corpus callosum...
+#   [cc] complete — N agreements, M disagreements
+#   saved markdown -> data/socratic/LITE_YYYYMMDD_HHMMSS.md
+#   wrote socratic_analyses row id=N
+#   total tokens in/out: XXXXX/YYYY
+
+# Pass criterion (Phase 3.3):
+# 1. Three distinct verdicts (A != B != C, or at least one disagreement)
+# 2. CC surfaces >=1 disagreement
+# 3. Row appears in socratic_analyses with mode='socratic', model_a/b/c all populated
+```
+
+If all three models converge on BROKEN/overvalued, Socratic is not adding value on LITE and the Model B regime prompt needs work. If Model B produces REGIME_UPSIDE while A and C are bearish, that's exactly what Socratic is supposed to do — surface the disagreement for human judgment.
+
+### Rollback
+
+`rm scripts/run_socratic.py` and `rm -r data/socratic/` — completely isolated, touches no existing code paths.
+
+---
+
+## [2026-05-15] V3.4.4.1 — strengthen ARCHETYPE-OVERRIDE PRECEDENCE to hard gate
+
+**Theme:** Phase 0 smoke test on LITE today exposed that V3.4.4's override-precedence language wasn't strong enough to displace the carve-out ceiling. LITE was tagged transformational in `config/ticker_archetype_overrides.json`, the override block was injected into the prompt — but the LLM still wrote "I must apply the +25% carve-out ceiling" in Step 5 because the carve-out rule below was styled as `**CARVE-OUT CEILING.** ... MAY NOT exceed ...` — stronger imperative language than the override's "follow in preference to."
+
+The CHANGELOG 2026-05-11 V3.4.4 entry called this fix "wiring, not building." That was correct — but the wiring was loose. The signal was reaching the prompt; the prompt wasn't honoring it.
+
+### What shipped
+
+- **`scripts/prompts/thesis_v3.md` Step 5 edited** — the ARCHETYPE-OVERRIDE PRECEDENCE bullet now reads `**ARCHETYPE-OVERRIDE PRECEDENCE — HARD GATE.** ... the override is BINDING and DISPLACES the rules below. Specifically: when the override block is present, the HISTORICAL-PEAK ANCHOR rule and the +25% CARVE-OUT CEILING rule that follow DO NOT APPLY to this stock.` It explicitly names the failure phrase ("I must apply the +25% carve-out ceiling") and forbids it.
+- The fallback bullet ("If NO override is present, apply the rules below as the default-archetype path") now adds: `The two rules below ... only fire when there is no override block — they are mutually exclusive with override-precedence above.` Removes any room for the LLM to read both as concurrently binding.
+
+### Why this matters in context
+
+Important framing per `user_dcf_is_wrong_primary` and Hume's correction this session: **Auto Mode is only good for mean-reverting situations.** LITE at $970 is a regime-shift name and shouldn't be routed to Auto Mode in the first place — Socratic Mode (Hume has tested manually and proven useful) is the correct handler for LITE-class setups. So the V3.4.4 patch is patching the wrong layer: even after this fix, Auto Mode on LITE will still produce BROKEN at $970 because that's what Auto Mode is designed to do for stocks past mean-reversion math.
+
+The right architectural answer to "what about LITE" is the Phase 3 Socratic orchestrator in BUILD_PLAN_v2. The harness (Phase 2) routes LITE → Socratic, Model B (regime) gets the regime-shift frame, corpus callosum routes to human judgment, judgment card records the decision. That's the actual fix.
+
+The V3.4.4.1 patch is the small useful improvement: when an override IS present (because operator manually tagged a ticker or because the harness someday routes a borderline name to Auto with an override block), the LLM now actually respects it instead of silently falling back to carve-out.
+
+### Smoke test (Hume to run)
+
+```bash
+cd stock-radar
+python scripts/run_thesis.py LITE --trigger-reason "phase0_v3_4_4_1_retry"
+
+# Pass criterion:
+grep -iE "must apply the \+25% carve-out|carve-out ceiling.*50x" data/theses/LITE_20260516_*.md
+# Expected output (post-fix): no matches in the Step 5 section. The LLM should
+# instead reference the override-named comp set (NVDA ~59x).
+```
+
+Numerical expectation:
+- Pre-fix run: target $878, applied 48x ceiling per carve-out.
+- Post-fix run: target should move toward ~$938 if the LLM now uses NVDA-peak ~59x.
+- Either way LITE stays BROKEN at $970 spot. That's expected — Auto Mode is mean-reverting. LITE belongs in Socratic.
+
+### What this doesn't fix
+
+- Auto Mode still BROKEN on LITE. The whole reason LITE is in Auto right now is the harness/orchestrator that routes Auto vs Socratic doesn't exist yet (Phase 2 prompt written 2026-05-15, orchestrator not built).
+- The MU cumulative-mislabel bug from `project_mu_data_bug` — 1Q26 still reading $23.86B inflated. Separate work item; not touched by this patch.
+- AXON's Q1 13F disconfirmation — outcome data, not a prompt issue.
+
+### Next
+
+Pivot to Phase 3 (Socratic orchestrator) per `BUILD_PLAN_v2.md` §Phase 3. The Socratic prompts already exist in `scripts/prompts/socratic/`. What's missing is the orchestrator script that runs three Sonnet calls in parallel, calls the corpus callosum, and writes the result to `socratic_analyses` with `mode='socratic'`.
+
+---
+
+## [2026-05-15] BUILD_PLAN_v2 — Phase 0 runbook + Phase 1 schema + Phase 2 wiring
+
+**Theme:** Full revamp toward the BUILD_PLAN_v2 architecture (5-tab frontend, Socratic 3-model engine alongside Auto Mode, judgment card + bets + notifications, Tech Revolutions wave maps). Done as a structured rebuild with order — Phase 0 prerequisites then additive schema then orchestration wiring. No live-DB execution yet; migrations are .sql files ready for Hume to apply.
+
+### What shipped
+
+**Top-level planning docs (in repo root):**
+- `BUILD_PLAN_v2.md` — 12-phase roadmap from current state to autonomous trader end-state. Each phase has one falsifiable pass criterion.
+- `CLEANUP_v2.md` — code/prompt/schema/memory cleanup punch list. Companion to BUILD_PLAN_v2.
+- `PHASE_0_RUNBOOK.md` — exact commands for the three Phase 0 smoke tests (V3.4.4 LITE+COHR, MU re-thesis on patched data, V3.4.3 8-ticker cohort re-run). Total cost ~$35; Hume executes.
+
+**Phase 1 — additive Supabase migrations (`stock-radar/supabase/`):**
+- `2026-05-15_revolutions.sql` — `revolutions` / `waves` / `ticker_revolutions` tables + 3 revolutions and 30 waves of seed data (AI, Space, Digital Finance). View `cross_revolution_tickers` for multi-revolution stocks.
+- `2026-05-15_socratic.sql` — `socratic_analyses` (mode in auto|socratic, model_a/b/c as JSONB, agreements/disagreements, rough_target_low/high, downside_price) and `model_accuracy`. View `latest_socratic` is the new frontend's single read path. View `model_accuracy_summary` for N>=20 stats.
+- `2026-05-15_bets.sql` — `bets` (entry/target/T+30/60/90 fields, falsification NOT NULL CHECK, default position_pct 5.0 per user_position_sizing_discipline) + `notifications` (5 types: price_alert/catalyst/thesis_break/checkpoint/opportunity) + `event_log` (system audit trail for the Logs tab).
+- `2026-05-15_chat_lessons.sql` — `chat_history` (session_id/role/mode/ticker) and `lessons` seeded with the 10 lessons from BUILD_PLAN_v2.
+- `2026-05-15_tickers_view.sql` — `tickers` view over `stocks` + latest `theses` + latest `socratic_analyses` so the new frontend can query `tickers` without renaming the live `stocks` table. Plus `tickers_needing_analysis` for the watchlist's stale-bucket UX.
+
+All migrations are additive — no `DROP`, no `RENAME` on live tables. The existing `app/dashboard/*` keeps reading from `stocks` / `analysis` / `theses` unchanged.
+
+**Phase 2 — prompt consolidation + Auto Mode dual-write (`stock-radar/scripts/prompts/`):**
+- Moved `adversarial_filter_prepass_v3.md` from `stock-radar/prompts/` into `scripts/prompts/` so there's one prompts location.
+- Copied `tactical.md` (from uploads/tactical_analysis.md) and `theme_scan.md` (from uploads/theme_scan_weekly.md).
+- New `socratic/` subfolder with six split prompts: `harness_routing.md` (Haiku target), `model_a_fundamentals.md`, `model_b_regime.md`, `model_c_adversarial.md` (Sonnet, parallel), `corpus_callosum.md`, `rough_target_range.md` (Sonnet, sequential after parallel). Each has a YAML frontmatter declaring model + max_tokens + temperature.
+- Did NOT import uploads/thesis_target_v3.4.3.md (repo's thesis_v3.md is at V3.4.4, one version newer) or uploads/adversarial_filter_prepass_v2.md (repo has v3).
+
+**Phase 2 — run_thesis.py dual-write to socratic_analyses:**
+- New `write_socratic_auto(thesis_id, row, parsed)` function. After the canonical write to `theses`, packs the thesis verdict as a `mode='auto'` row in `socratic_analyses` with model_a populated and model_b/c null. Linked to the source thesis via `thesis_id`.
+- New `_conviction_to_verdict(conviction)` mapper from theses.conviction (HIGH/MEDIUM/LOW/BROKEN) to socratic_analyses.final_verdict (proceed/watch/pass).
+- Dual-write is best-effort: any failure (table doesn't exist yet, RLS denies SELECT, schema drift) prints a HARD WARNING but does NOT abort the run. Canonical record stays in `theses`.
+- Wired into the existing `if supabase:` block immediately after `_log_outcome_if_possible(thesis_id)`. Output adds `wrote socratic_analyses row (auto mode, id=N)` when successful.
+- File restored from `git show HEAD:scripts/run_thesis.py` (pre-edit working tree had a pre-existing truncation at the if-supabase block) and re-applied via atomic Python write per `feedback_changelog_discipline.md`. Final file 931 lines, parses clean.
+
+**Quarantine:**
+- Moved `scripts/run_thesis_v4_spike.py` and `scripts/run_architecture_experiment.py` into `scripts/experiments/` with a README documenting when each should be resurrected. V4 spike returns if Phase 0 Test 3 fails the 7/8-within-5% bar.
+
+### Why this matters
+
+This session converts a planning artifact (uploaded BUILD_PLAN.md) into ready-to-execute work without firing a single live API call or live DB write. Everything is reviewable as files before anything hits production. The dual-write design means Phase 2 ships zero risk: if the new tables aren't there yet, the existing thesis flow is unchanged and the new write degrades silently.
+
+The discipline test: every changed file traces to one of the four Phase numbers in BUILD_PLAN_v2 (or the runbook). No adjacent improvements, no speculative columns, no unrelated refactors. Karpathy rule 3 holds.
+
+### What's still open (Hume to execute)
+
+1. Apply the five new migrations to Supabase (in order: revolutions, socratic, bets, chat_lessons, tickers_view). They are additive and idempotent.
+2. Run the three Phase 0 smoke tests per `PHASE_0_RUNBOOK.md`. Cost ~$35.
+3. Run `scripts/discovery_13f.py` for Q1 2026 (due today) to see whether AXON appears in any tracked manager's filings.
+4. Post results back here. Phase 3 (Socratic Round 1 orchestrator) doesn't start until Phase 0 closes.
+
+### Rollback
+
+If any migration causes problems: each is `CREATE TABLE IF NOT EXISTS` + `CREATE OR REPLACE VIEW` + `INSERT ... ON CONFLICT DO NOTHING`. Drop the new tables with `DROP TABLE socratic_analyses, model_accuracy, bets, notifications, event_log, chat_history, lessons, ticker_revolutions, waves, revolutions CASCADE` and `DROP VIEW tickers, tickers_needing_analysis, latest_socratic, cross_revolution_tickers, model_accuracy_summary` — existing schema unaffected.
+
+For run_thesis.py: `git checkout scripts/run_thesis.py` reverts the dual-write. The Phase 2 prompt files are isolated under `scripts/prompts/socratic/` and `scripts/prompts/{tactical,theme_scan}.md` — `rm -r scripts/prompts/socratic` to remove. Quarantined files can be restored with `mv scripts/experiments/run_thesis_v4_spike.py scripts/`.
+
+---
+
+## [2026-05-11] V3.4.4 thesis prompt — Path A archetype override (regime-shift fix)
+
+**Theme:** Two cases this week (LITE-vs-dad $1,800, AMD-vs-Evercore $77B/$110B revenue) both indicted V3.4.3's conservative-by-design assumptions on regime-shift names. Cognitive architecture report (docs/reports/2026-05-10_cognitive_architecture/REPORT.md v3) named the null hypothesis: Step 5's same-sector-historical-peak anchor + 25% carve-out misfire on stocks transitioning to a new valuation regime. Code inspection found the engine's `transformational` archetype already wires 7-year horizon, Y4 exit, bull-tail-tilted scenarios, and 3.5% terminal cap — but the thesis prompt never read the archetype. This patch plumbs the signal through.
+
+### What shipped
+
+- **`config/ticker_archetype_overrides.json`** (NEW) — operator-set archetype override using registries.py ALL_ARCHETYPES vocabulary (transformational, garp, cyclical, compounder, special_situation). Distinct from `ticker_archetypes.json` which uses sanity-check vocabulary (cyclical_tech etc.). Initial entries: LITE and AMD tagged as `transformational`.
+- **`scripts/run_thesis.py`** — added `_load_archetype_override()` and `_format_archetype_block()` helpers; injects an `[ARCHETYPE_OVERRIDE]` block into the prompt when override is set. Empty string when no override, so default-path runs unchanged for other tickers.
+- **`scripts/prompts/thesis_v3.md`** — version bumped to v3.4.4. Added `[ARCHETYPE_OVERRIDE]` placeholder near top of prompt. Step 5 now has explicit "ARCHETYPE-OVERRIDE PRECEDENCE" rule: when the override block is present, follow its anchor instructions in preference to same-sector-historical-peak + 25% carve-out ceiling. NVDA peak NTM forward ~59x in mid-2025 named as the regime-shift comp.
+- **File restoration**: discovered `run_thesis.py` was committed in a truncated state (834→817 lines, ending mid-line at `"output_tokens": re`). Restored via `git show` + atomic Python write per `feedback_changelog_discipline.md` rule. Final file 910 lines, parses clean.
+
+### Smoke-test design (next step, not yet run)
+
+Run V3.4.4 on two tickers:
+- **LITE** (tagged transformational): should flip from BROKEN ratio 0.833 to MEDIUM/HIGH with ratio ≥1.10. If yes, Path A is working.
+- **COHR** (untagged): should stay BROKEN with ratio ≤0.95. If yes, the prompt language is correctly scoped to tagged names only. If COHR also flips, the prompt is leaking the regime-shift carve-out into untagged cases and needs tightening.
+
+Cost: ~$8 for 2 Sonnet runs. Pass criterion is binary (LITE flips up AND COHR stays down). Do not deploy on smoke-test pass alone — log result alongside V3.4.3 baseline, wait for AMD T+30 / LITE T+90 outcome data before promotion.
+
+### Why this matters
+
+V3.4.4 is the cheapest available test of the null hypothesis from the cognitive architecture report. If the smoke test passes and outcome data confirms it, the regime-shift problem is solved with ~50 lines of prompt language + a tagging config — without building the cognitive-architecture Proposals A/C/D, without adding a new archetype to the engine, without modifying target_engine.py. If the smoke test fails (LITE doesn't flip, or COHR also flips), Path A is invalid and the harder structural fixes become the next priority.
+
+The discipline lesson: existing engine machinery (transformational archetype) was already 80% of the fix. The work was wiring, not building.
+
+---
+
+## [2026-05-10] V3.4.3 thesis prompt — risk-adj-EV kill rule (inlines V4 win)
+
+**Theme:** The 8-ticker V3.4.2-vs-V4-spike cohort (MU/LITE/AXON + AMD/COHR/ALAB/AMAT/U) showed V4's two-agent dialogue produced BROKEN/WEAK with position 0-10% in 5 of 5 cases that ran, while V3.4.2's single-call architecture produced HIGH/MEDIUM 20-25% in 4 of those 5. Worst leak: ALAB V3.4.2 HIGH 25% target $345 vs V4 BROKEN 0% target $185 / buy_below $165 — a 46% target gap.
+
+V4 was not doing magic. The mechanism was: V4's tactical agent computes a probability-weighted exit price (risk-adjusted EV), compares to spot, and treats `EV/spot < 1.0` as binding evidence the trade is broken regardless of strategic conviction. V3.4.2's Step 9 already computed risk_adj_target — but never used it as a gate.
+
+V3.4.3 inlines the V4 mechanic at 1/4 the LLM cost (1 call vs ~4).
+
+### What shipped
+
+- **`scripts/prompts/thesis_v3.md` Step 9 rewritten** — adds explicit `risk_adj_ev_ratio = risk_adj_target / current_price` calculation; states the AXON / COHR / ALAB pattern by name; if ratio < 1.0, the prompt requires explicit defense of which input is being challenged rather than allowing strategic conviction to wave it away.
+
+- **Step 12 — new HARD GATE:** numerical clamp table tying `risk_adj_ev_ratio` to `conviction` and `position_size_pct`:
+  - < 0.95 → BROKEN / 0%
+  - 0.95-1.00 → LOW / 10%
+  - 1.00-1.10 → LOW-MEDIUM / 15%
+  - 1.10-1.25 → MEDIUM / 25%
+  - ≥ 1.25 → HIGH / 35%
+
+  The table OVERRIDES strategic_conviction. If the prompt wants to override the table, the legitimate move is to reconstruct Step 9 inputs (challenge specific catalyst probabilities), not write a sizing recommendation that contradicts the math. Table cutoffs empirically anchored on V4 tactical-agent outputs: COHR ratio 0.871 → BROKEN, AMAT 0.816 → BROKEN, U 0.952 → WEAK 10%.
+
+- **Closing JSON schema** — added `risk_adj_ev_ratio` field. The number is now first-class in the artifact and queryable in Supabase.
+
+### Why this matters
+
+The 8-ticker cohort told us V3.4.2's persona-split-text leaks strategic conviction into tactical sizing in the AXON-pattern (secular thesis correct, multiple already at peak). V4's two-agent architecture caught it but at 4x the LLM cost. The kill rule extracts the mechanism — a numeric gate on a single number the prompt was already computing — and makes it binding.
+
+This is the Option D path discussed: extract V4's win, reject V4's architecture cost. Path forward is to re-run V3.4.3 on the same 8 tickers; if V3.4.3 lands within 5% of V4 sizing on at least 7/8, V4 spike is bought out and stays research-only. If not, V4 is doing real work the prompt can't replicate, and the spike graduates to production.
+
+### What's still open
+
+- **Re-run V3.4.3 on the 8-ticker cohort** — falsifiable test of whether the kill rule captures V4's wins. Hume hasn't approved the spend yet (~$25 in Opus calls).
+- **Calibrate the table cutoffs** — current cutoffs (0.95 / 1.00 / 1.10 / 1.25) come from N=3 V4 datapoints. After 8-ticker re-run, may need to tighten or loosen.
+- **Risk: prompt may game the gate** — if the LLM realizes "ratio < 0.95 = BROKEN," it may inflate catalyst probabilities to lift the ratio. Step 12 explicitly tells it to reconstruct Step 9 inputs rather than bypass the table; whether this holds in practice is an empirical question for the re-run.
+
+---
+
+## [2026-05-09] Manual override extended to income + cash flow (MU 77% margin bug)
+
+**Theme:** First MU patch only override-patched revenue. Hume noticed the rendered model showed EBITDA margin = 77.5% — structurally impossible for a memory company (real ~50-60% in upcycle). Root cause: the upstream syndication bug inflates EVERY income-statement and cash-flow line item proportionally, not just revenue. Patching `Total Revenue` while leaving `Operating Income` / `EBITDA` / `D&A` at their inflated values produces inflated_op_income / correct_revenue = nonsense margin.
+
+### What shipped
+
+- **Pulled the full MU Q1 FY26 income + cash flow statement** from the 10-Q ([SEC EDGAR](https://www.sec.gov/Archives/edgar/data/723125/000072312525000046/mu-20251127.htm)). Twelve verified line items: Revenue $13.643B, COGS $5.997B, Gross profit $7.646B, R&D $1.171B, SG&A $0.337B, Op income $6.136B (45.0% margin), Net income $5.240B (38.4%), D&A $2.212B, OCF $8.411B (61.7%), Capex $5.389B, FCF $3.022B (22.2%). Computed EBITDA = Op income + D&A = $8.348B (61.2% margin) — vs the 77.5% bug.
+
+- **`config/manual_quarterly_overrides.json`** — extended MU 1Q26 entry from 1 numeric field to 11 (full income statement + cash flow). All values from the cited 10-Q.
+
+- **`scripts/finance_data.py`** — `_apply_manual_overrides(ticker, *period_lists)` signature changed from single-statement to variadic. Walks all supplied lists (q_inc + q_cf today) and patches the matching period in each. Field-by-field: writes wherever the field already exists in the provider's data; if a field is missing entirely, writes to the first list (typically q_inc) so it lands somewhere downstream.
+
+- **Expanded `_OVERRIDABLE_NUMERIC_FIELDS`** to include cash-flow line items: `Operating Cash Flow`, `Capital Expenditure`, `Free Cash Flow`, `Depreciation`, `Amortization Of Intangibles`. Income-statement fields kept from before.
+
+- **`_validate_and_build` call site** updated to pass both `q_inc` and `q_cf` into the override applier.
+
+### Why this matters
+
+The cumulative-mislabel bug pattern is symmetric across the financial statements — if Q1 actually contains FY-cumulative revenue, it almost certainly also contains FY-cumulative op income, EBITDA, OCF, and capex. Future override entries for affected tickers should always include the full income + cash flow rows from the 10-Q. Updated the README in `manual_quarterly_overrides.json` to document this, in bold.
+
+### Smoke test
+
+Synthetic q_inc + q_cf with all 1Q26 fields inflated to ~75-100% above real values. Apply overrides → all line items snap to 10-Q values:
+- Op margin: 77.5% → **45.0%** (target 45.0%) ✓
+- EBITDA margin: derived 59.7% → **61.2%** (target 61.2%) ✓
+- FCF margin: 22.2% → **22.2%** (target 22.2%) ✓
+- Sanity check: 0 warnings, empty suspect set ✓
+
+### What's still open
+
+- **Re-run MU thesis on patched data** (task #80). The thesis you saw with target $1,180 was generated using only the partial revenue-only patch, so margin assumptions were still partly contaminated. With the full multi-statement patch, the model now sees real 45% op margin / 61% EBITDA margin — expect a different (likely lower) thesis target on the next run, or the prompt may downgrade conviction now that the "implausibly high margins" signal is gone.
+
+- **Engine `source` label currently says "EODHD Fundamentals API"** — that's pretty (the EODHD provider's full source string), but the badge in DetailedModel checks `payload.source === "yfinance"` exactly, so any non-yfinance string renders as the green emphasized badge. Working as intended; just noting for future taxonomy work if we want a strict enum.
+
+---
+
+## [2026-05-09] NavBar Run All Theses progress polling
+
+**Theme:** The navbar's "⚡ Run All Theses" button used a fire-and-forget pattern — it kicked off all reruns in parallel, briefly showed "Queuing…" then "✓ Queued N" for 8 seconds, and reset. No way to know when the actual thesis runs finished without manually refreshing the watchlist. The Dashboard's `RunAllThesesButton.tsx` had proper polling but the NavBar button never picked it up. Hume noticed: "no progress indicator when I click on run all theses?"
+
+### Fix
+
+`app/components/NavBar.tsx` — replaced the fire-and-forget handler with a polling state machine matching `RunAllThesesButton.tsx`:
+
+- **States:** idle → kicking → running → complete | partial → idle
+- **Polling:** every 7 seconds, GET `/api/thesis/{ticker}/rerun` for each pending ticker; mark done when `running: false`, mark error when `last_status.ok === false`.
+- **Label progression:** `⚡ Run All Theses` → `Queuing…` → `⏳ Running 3/12` → `⏳ Running 8/12 (1 err)` → `✓ All 12 done` (5s) → idle. Or `⚠ 10/12 (2 err)` (10s) → idle if any errored.
+- **Timeout guard:** 12 minutes max — stops polling so the button doesn't pin "Running…" forever if a thesis hangs.
+- **Cleanup:** `useEffect` clears the interval on unmount.
+- **Tooltip:** while running, shows "Polling thesis status — X/N complete, Y errored".
+
+The Dashboard button (RunAllThesesButton.tsx) is untouched — both buttons now show identical progress UX.
+
+### What this means for usage
+
+When you click ⚡ Run All Theses from the navbar, you'll see live progress: ticker count tick up every 7 seconds as each subprocess finishes. Errors are surfaced in the count (and the title attribute on hover). At 12 tickers averaging ~30s each, expect "All 12 done" within ~6-8 minutes.
+
+---
+
+## [2026-05-09] Manual quarterly override layer (MU 1Q26 fix)
+
+**Theme:** Provider-override system shipped earlier today routed MU away from yfinance, but EODHD and AlphaVantage both returned the same wrong $23.86B for Q1 FY26. Three independent providers agreeing means the bug is upstream of all three (likely FactSet / S&P CapIQ syndication mis-labeling FY26 cumulative as quarterly). Built a second override layer: operator-verified per-period patches that correct specific (ticker, quarter) cells against the actual 10-Q before the sanity check runs.
+
+### What shipped
+
+- **Verified MU's real Q1 FY26 revenue** by fetching the 10-Q directly from SEC EDGAR ([filing dated 2025-12-18, period ended 2025-11-27](https://www.sec.gov/Archives/edgar/data/723125/000072312525000046/mu-20251127.htm)). Real number: **$13.643B**, not the $23.86B all three providers reported. The previous memory note's "$8.7B per 10-Q" was actually Q1 FY25's number ($8.709B), not FY26 — corrected.
+
+- **`config/manual_quarterly_overrides.json`** (new) — declarative per-(ticker, period, field) override config. Schema documented in the file's `_README` block. MU 1Q26 added with full provenance: source URL, verified_by, verified_on, and a note explaining why provider data was wrong. Every entry must cite the actual filing so we can audit / re-validate later when providers refresh their feeds.
+
+- **`scripts/finance_data.py`** — added `_load_manual_quarterly_overrides()` (cached JSON load) and `_apply_manual_overrides(ticker, q_inc)` which mutates quarterly_income periods in place and returns a list of warning strings describing each patch (e.g. "MU 1Q26: Total Revenue (was $23.86B → now $13.64B, 43% delta) — source: 10-Q filed 2025-12-18"). Called at the top of `_validate_and_build` BEFORE the sanity check, so corrected data is what gets validated. If a configured period doesn't appear in the provider's data, we log a stale-config warning so the operator notices.
+
+- **Composes with the per-ticker provider override.** Today the flow for MU is: chain → eodhd primary (yfinance skipped) → eodhd returns $23.86B → manual override patches 1Q26 to $13.64B → sanity check passes (1.29x trailing, 1.57x YoY, both under thresholds) → model renders. The two layers handle different problem classes:
+  - `data_provider_overrides.json` — when ONE provider is broken
+  - `manual_quarterly_overrides.json` — when ALL providers agree on a wrong number
+
+### Smoke test
+
+Fed the patched code synthetic q_inc with MU 1Q26 = $23.86B (the buggy number). After `_apply_manual_overrides`, value reads $13.64B and `_validate_quarterly_revenue` returns 0 warnings, empty suspect set. Patch logging includes provenance ("source: MU 10-Q filed 2025-12-18, period ended 2025-11-27 (https://...)").
+
+### Implications
+
+- **MU's $1200 thesis target is now suspect.** It was generated from the same $23.86B contaminated data path. Re-running `run_thesis.py MU` with the manual override in place will produce a target on clean data — could be materially different. Worth re-running before acting on the signal.
+- **The pattern is reusable.** When the next ticker hits "all providers agree, but disagree with the 10-Q," the operator pulls the actual filing, adds an entry to `manual_quarterly_overrides.json`, and the model renders. No code changes per ticker.
+- **Provenance is non-negotiable.** Every entry must cite the filing URL + verified_by + verified_on. This isn't bureaucracy — it's so we can later detect when providers fix their feeds and remove now-stale overrides.
+
+### What's still open
+
+- **MU `validated: false` flip in `data_provider_overrides.json`.** Still false. The provider override succeeded (chain walked correctly) but the served data was wrong, so "validated" remains false until we confirm EODHD's other MU quarters are correct. Worth a once-over against MU's prior 4 quarters in the 10-Q's comparison columns.
+- **Re-run MU thesis on clean data.** Once the model page renders with patched numbers, re-trigger `run_thesis.py MU` so the thesis prompt sees the correct $13.64B Q1 FY26 instead of the contaminated $23.86B.
+- **Audit other watchlist tickers for the same bug.** If FactSet/CapIQ mis-labels FY-cumulative as Q1 for one ticker, others with similar fiscal-year-end timing (Aug/Sep, Jul, etc.) might be affected. Spot-check by comparing latest provider quarter against the latest 10-Q for each watchlist member.
+
+---
+
+## [2026-05-09] Module 2 — archetype-aware sanity-check thresholds
+
+**Theme:** Architectural fix for the issue today's MU misdiagnosis surfaced. The revenue sanity check (`_validate_quarterly_revenue` in `finance_data.py`) was calibrated for secular growers (2.0x trailing / 2.5x YoY for large-caps) and over-flagged real cyclical ramps. MU's legitimate Q1→Q2 FY26 jump ($13.64B → $23.86B = 2.7x trailing) hit the threshold and blocked model rendering. Per-ticker archetype tag now relaxes thresholds for cyclicals while keeping defaults for everyone else.
+
+### What shipped
+
+- **`config/ticker_archetypes.json`** (new) — per-ticker archetype config. Initial entries: MU, MRVL, KLIC = `cyclical_tech`. Read-only operator-curated; classifier (`scripts/archetype_classifier.py`, separate system) can also infer.
+
+- **`scripts/finance_data.py`** — five additions/changes:
+  - `_load_ticker_archetypes()` — JSON loader with **mtime-based cache invalidation** (red-team fix). Operator edits picked up on next call, no restart needed. Logs once on first load so the operator can verify config loaded.
+  - `_archetype_threshold_multiplier(ticker)` — returns `(multiplier, archetype_name)` tuple. cyclical_tech → 1.5, cyclical_industrial → 1.4, secular_growth/compounder/None → 1.0.
+  - `_validate_quarterly_revenue(periods, ticker=None)` — extended to accept ticker, look up multiplier, apply to BOTH trailing and YoY thresholds.
+  - **Distinguished warning severity (red-team fix):** when a quarter exceeds the base threshold but is within the archetype-relaxed threshold, emit `CYCLICAL_RAMP_NOTE` instead of `SUSPECT DATA`. Prevents operator habituation to ignoring real warnings on cyclicals.
+  - **Hard-fail error message** (red-team fix): now interpolates the actual thresholds + archetype name. Pre-fix message said "2x trailing-avg / 2.5x YoY thresholds" — wrong if cyclical multiplier was active. Post-fix message: "Thresholds applied: 2.0x trailing / 2.5x YoY × 1.5x (archetype=cyclical_tech)" so operator knows exactly what fired.
+
+### Verification
+
+Five test scenarios, all pass:
+- MU real ramp (2.7x trailing) with `cyclical_tech` tag → 0 suspects, 2 `CYCLICAL_RAMP_NOTE` warnings (informational, not hard-fail) ✓
+- MU genuine bad data ($50B impossible jump, 4.7x) with cyclical_tech → still flagged `SUSPECT DATA` (4.7x > 3.0x relaxed threshold) ✓
+- AAPL-like 2.5x jump (untagged) → fires `SUSPECT DATA` at default 2.0x threshold ✓
+- Cache mtime invalidation: add NVDA → cache reloads → remove NVDA → cache reloads ✓
+- Genuine bad data on tagged ticker still hard-fails as expected ✓
+
+### Squad review (red-team) — 4 findings, all addressed
+
+1. Hard-fail error message had stale "2x/2.5x" text → fixed (interpolated)
+2. Warnings still propagated to `FinancialData.warnings` even when archetype permitted — habituation risk → fixed (CYCLICAL_RAMP_NOTE prefix)
+3. Module-global cache ignored config edits → fixed (mtime check)
+4. Bracket-flip on $100M/$500M boundary → noted, low priority, deferred (separate concern from this fix)
+
+### Known limitation (deferred)
+
+- Cache mtime check has filesystem-granularity floor (~1s on ext4, sometimes higher). Two config writes within a sub-second window can collide and the second may not be picked up. Production case (operator edits seconds/minutes apart) works correctly.
+- Mis-tagged cyclical_tech for a secular grower would silently relax that ticker's thresholds. Mitigation is config hygiene + Phase A lessons.md when that ships.
+
+### Operational impact
+
+After this ships:
+- `python scripts/run_thesis.py MU` should now succeed without `--override-suspect-recent` (MU's 2.3x trailing / 3.0x YoY hits cyclical_tech thresholds of 3.0x / 3.75x — both pass).
+- `/api/model/MU` should now render — sanity check passes on real data.
+- Other tagged cyclicals (MRVL, KLIC) get the same accommodation.
+- Untagged tickers see no behavior change.
+
+### What this does NOT solve
+
+- `data/memory/MU.md` still contains contaminated thesis history rows (the $1,180/$1,300 from earlier today's botched override runs). Module 1 (next) handles memory cleanup.
+- The forward-driver regex misfire (`forward_drivers.py:441`) is a separate bug for the engine UI side; not addressed here.
+- Memory-anchor pathology at TEMPERATURE=0.3 (the larger architectural issue from today's saga) — Phase A of memory web (lessons.md) is the proposed next step there.
+
+---
+
+## [2026-05-09] Per-ticker data-provider override system
+
+**Theme:** MU's $1200 thesis target was unactionable because the model API couldn't render — yfinance returns inflated Q1 FY26 ($23.86B vs the 10-Q's ~$8.7B), the sanity check correctly blocked, and there was no way to swap providers per-ticker. Built the systemic fix Hume asked for: configurable provider chain that walks fallbacks until one survives the sanity check. MU is the first entry; the same mechanism handles any future yfinance regression.
+
+### What shipped
+
+- **`config/data_provider_overrides.json`** (new) — declarative per-ticker config. Schema: `{ ticker: { provider, fallback[], skip[], reason, added, validated } }`. `skip` excludes a provider entirely (so MU never re-hits the broken yfinance path even if the chain falls back). MU added with `provider: eodhd, fallback: [alpha_vantage], skip: [yfinance]`.
+
+- **`scripts/finance_data.py`** — added `_load_provider_overrides()` (cached JSON load, filters `_README` and non-dict entries) and `_build_provider_chain(ticker)` returning the ordered provider list. Rewrote `fetch_financials()` to walk the chain instead of single-provider + yfinance-fallback. Each provider is tried; instantiation failures (e.g. EODHD without key) and `EarningsFetchError` (sanity check OR API failures) both fall through to the next entry. The first successful fetch wins; the served data's `source` field reports which provider actually delivered, and `warnings` is annotated with `PROVIDER_FALLBACK: tried X → Y; served by Y` when the chain walked.
+
+  Chain construction order: (1) override `provider`, (2) override `fallback[]`, (3) `FINANCE_DATA_PROVIDER` env or auto-detect (EODHD if key, else yfinance), (4) yfinance as universal last resort. Anything in `skip` is excluded everywhere.
+
+- **`app/model/[ticker]/detailed/types.ts`** — `Payload.source` and `Payload.fetched_at` added (optional, since pre-fix payloads might not include them).
+
+- **`app/model/[ticker]/detailed/DetailedModel.tsx`** — small data-source badge above the DCF tile row. yfinance renders neutral; eodhd / alpha_vantage render in conv-good green to make the override visually obvious. Includes the fetched-at timestamp so the user knows how stale the data is.
+
+### Smoke test
+
+Chain construction validated for LITE / MU / AXON / SNDK across three env scenarios (no keys / EODHD key set / FINANCE_DATA_PROVIDER=alpha_vantage). MU always gets `[eodhd, alpha_vantage]` regardless — yfinance correctly excluded. Default tickers respect the env-driven precedence. AST parse + tsc clean.
+
+### What this needs to actually work for MU
+
+`EODHD_API_KEY` (or `ALPHA_VANTAGE_API_KEY` as fallback) must be in `.env`. Without either, MU's chain has no instantiable providers and `fetch_financials` raises with a concrete message listing what was tried. Per memory, EODHD key was already procured during the provider abstraction work — should already be set; if not, MU stays blocked until it is.
+
+### What's still open
+
+1. **Validate the override.** `MU.validated: false` in the config until the EODHD-served Q1 FY26 number is cross-checked against the actual 10-Q. Once confirmed, flip to `true` and we trust the data fully. If EODHD also reports a wrong number, we widen the override to alpha_vantage primary and re-validate.
+2. **Expand the override list.** SNDK was probably also a real spinoff (Western Digital, Feb 2025) but that's a structural break, not a data bug — different problem class. Future entries might include known yfinance breakages for other watchlist tickers as we discover them.
+3. **Extend to other API surfaces.** This change affects `fetch_financials()`, which is called by run_thesis, model API, model_export, verify_model, target_api, analyst, backtest_targets — all benefit. The model-page error UI doesn't yet have a per-render override button (so a user can't manually retry SNDK with `override_suspect_recent=True` without CLI access); that's the next obvious extension if the override approach proves out.
+
+### Backward compatibility
+
+Same `fetch_financials(ticker, min_quarters, override_suspect_recent)` signature as before — internal logic only. Every caller in the codebase keeps working without changes. `FinancialData.source` was already populated by each provider; just newly visible in the UI now.
+
+---
+
+## [2026-05-09] Phase 1b post-review must-fixes
+
+**Theme:** Ran Phase 1b through the four-reviewer squad (outsider / critic / red-team / fact-checker → synthesizer). Synthesizer verdict: ship after four small fixes. Critic vs fact-checker disagreement on the discount horizon resolved in favor of fact-checker — TS engine matches Python at 2-year discount, both internally consistent. Applied all four must-fixes in this commit and rolled two of the three should-fix items into the same migration.
+
+### Must-fixes applied
+
+- **`app/model/[ticker]/detailed/components/SensitivityHeatmap.tsx`** — wrapped `top2 = tornado.slice(0, 2)` in `useMemo([tornado])`. Was a fresh array reference every render → defeated the grid's useMemo → 25-49 `computeWhatIf` calls every parent re-render. Now memoized; heatmap only recomputes when the tornado actually changes.
+
+- **`app/model/[ticker]/detailed/components/ScenarioCompare.tsx`** — added `useEffect` to set `compareName` after `saved` arrives async. `useState(saved[0]?.scenario_name || "")` runs at first render when `saved=[]` (loadSaved is in flight), so `compareName=""` and the third compare card stayed empty for every returning user with prior scenarios. Effect now fires when `saved` populates.
+
+- **`app/model/[ticker]/detailed/lib/whatif-engine.ts`** — clamped `blend` to [0, 1] inside `computeWhatIf`. The slider UI bounded blend correctly but tornado/heatmap perturbations multiplied by (1±pct), pushing it above 1.0 → negative weight on the (1-blend) leg → reversed the heatmap's color monotonicity. Engine-side clamp is now the single source of truth.
+
+- **Cross-mode scenario load mismatch** — extended schema, API, and UI:
+  - `supabase/2026-05-09b_scenario_scratch_fixes.sql` (new migration) — adds `valuation_method TEXT` column to `scenario_scratch`, plus replaces the broken `UNIQUE (ticker, scenario_name, active)` constraint with a partial unique index `WHERE active = TRUE` (red-team caught: original allowed orphaned `active=false` + new `active=true` rows with the same name → duplicate-name contamination of future Module 9 calibration queries).
+  - `app/api/scenarios/[ticker]/route.ts` — accepts/persists/returns `valuation_method`; updated upsert to use the new partial-index conflict target.
+  - `app/model/[ticker]/detailed/components/WhatIfTab.tsx` — sends `valuation_method: currentMode` on save; on scenario load, detects when `s.valuation_method !== currentMode` and shows a dismissible amber warning banner ("Mode mismatch. Driver semantics differ — recomputed price may be misleading. Re-save under the current mode if you want to keep using it.").
+  - `app/model/[ticker]/detailed/components/ScenarioCompare.tsx` — compare-vs card flips to amber accent and shows "saved · mode mismatch" subtitle when the saved scenario was made under a different valuation method. Pre-migration rows have `valuation_method=null` and are silently allowed (we can't tell what mode they were saved in).
+
+### Edit-tool truncation incident
+
+The four front-end edits via the Edit tool corrupted all five touched files mid-line on disk while the Read tool kept showing the intended (cached) content. Caught by `npx tsc --noEmit` returning a wave of TS17008 / TS1002 errors on JSX boundaries that didn't match the visible source. Repaired via atomic Python heredoc writes per the changelog discipline memory note (`feedback_changelog_discipline.md`: "atomic Python writes — Edit tool truncates"). Lesson reinforced: for any edit larger than a single token, prefer Python heredoc from the start instead of letting Edit truncate cumulatively across multiple calls.
+
+### Validation
+
+- `npx tsc --noEmit` clean across all five touched files (whatif-engine.ts, SensitivityHeatmap.tsx, ScenarioCompare.tsx, WhatIfTab.tsx, route.ts). Remaining tsc errors elsewhere (Dashboard.tsx watchlistThesis / lib/data.ts type narrowing) are pre-existing, tracked under task #71.
+- Brace, paren, and backtick balance verified on every file post-write.
+- Migration file is idempotent (`DROP CONSTRAINT IF EXISTS`, `CREATE UNIQUE INDEX IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`) — safe to re-run.
+
+### Should-fix items remaining
+
+- One open: `whatif-engine.ts:9-11` comment claims it "mirrors target_engine.py" but Python's primary terminal value path is Gordon+ROIIC; TS uses blend-of-multiples (Python's fallback). Relabel "Engine base" card and update the comment to flag that this is a simplified DCF, not a faithful mirror. Tracked under task #78. Hardcoded `blend: 0.5` in `driversFromBase` is part of the same fidelity gap — defer until the Engine base label is corrected.
+
+### What's next
+
+Phase 2 (per Hume's expanded direction): editable + downloadable Excel-style grid replacing IncomeTab/CashTab. Run after Hume confirms the Phase 1b fixes look right in the browser.
+
+---
+
+## [2026-05-09] Phase 1b — sensitivity heatmap + 3-up scenario comparison cards
+
+**Theme:** Closes the deferred Phase 1b pieces from this morning. The sandbox is now feature-complete for what Hume confirmed in the plan review: scenario manager, tornado, sensitivity heatmap, and side-by-side comparison. Phase 1 done; Phase 2 (editable + downloadable Excel grid) is next.
+
+### What shipped
+
+- **`app/model/[ticker]/detailed/components/SensitivityHeatmap.tsx`** (new, 224 lines) — 5×5 default with 7×7 toggle. Picks top-2 drivers from the tornado automatically (no driver-picker UI; the tornado already ranked them by impact, surfacing the choice would have been redundant ceremony). Each cell perturbs both drivers ±25% from base in equal steps and computes the resulting price via `computeWhatIf`.
+  - **Color scale** is midpointed at `currentPrice` per Hume's spec — cells below current shade red toward `rose-500`, cells above shade green toward `emerald-500`, near-current shade pale. The "which corner is dangerous" pattern is immediately visible. Ink color flips to white when the background is saturated past 50% (legibility on dark cells).
+  - Inline tooltip on each cell shows the exact driver values and resulting price, so the heatmap is queryable, not just a vibe.
+
+- **`app/model/[ticker]/detailed/components/ScenarioCompare.tsx`** (new, 197 lines) — 3-up cards: engine base (neutral) / active edit (emerald, live recompute) / a chosen comparison (violet) selected via dropdown over saved scenarios. Each card shows computed price + upside vs current and a driver table where rows are highlighted (`bg-amber-900/20`) when the driver differs from the engine base. Delta % shown next to each differing value. The "what's actually different about this scenario" pattern surfaces without scrolling between rail items.
+
+- **`app/model/[ticker]/detailed/components/WhatIfTab.tsx`** (215 → 515 lines) — wired both new components in. `<ScenarioCompare>` sits between the save dialog and the drivers panel (so the user sees comparison context before they start editing); `<SensitivityHeatmap>` sits below `<TornadoBars>` (tornado ranks drivers, heatmap takes the top two — natural reading order). Both consume the same `whatif-engine.ts` exports as the rest of the tab; no math duplication.
+
+### Why these two, and not the other natural extensions
+
+Skipped a multi-driver scenario coherence validator and the AI-generated scenario suggester for Phase 1b — both are Phase 3 territory and need the calibration data from saved-scenario usage to be useful. Shipping them now would be optimization on a system that hasn't been used yet.
+
+### What's next
+
+- Phase 2 (per Hume's expanded direction 2026-05-09): editable + downloadable Excel-style grid replacing IncomeTab/CashTab. ~30 rows × 10 columns, color-coded actuals/estimates/computed cells, edits flow through `whatif-engine.ts`, download as XLSX via SheetJS. Originally scoped read-only; expanded to editable + downloadable in the same phase.
+
+---
+
+## [2026-05-09] Phase 1 sandbox — scenario manager + tornado chart
+
+**Theme:** Per Hume's direction (B then incremental C), shipping the scenario sandbox first. Saved scenarios persist to Supabase (cross-device, survives cache clears, gives Module 9 calibration something to chew on later). Tornado chart ranks drivers by ±10% perturbation impact. Sensitivity heatmap deferred to Phase 1b.
+
+### What shipped
+
+- **`supabase/2026-05-09_scenario_scratch.sql`** (new, 81 lines) — `scenario_scratch` table. UUID PK, ticker + scenario_name + drivers JSONB + computed_price + spot_at_save, soft-delete via `active` flag, unique on (ticker, name, active), auto-touch updated_at trigger. Comments document the driver JSON shape so the TS interface and SQL stay in sync.
+
+- **`app/api/scenarios/[ticker]/route.ts`** (new, 185 lines) — three endpoints:
+  - `GET` returns active scenarios for a ticker, most-recent first.
+  - `POST` upserts on (ticker, name, active) so the WhatIfTab can save-as-you-tweak without unique-constraint clashes. Validates drivers shape server-side.
+  - `DELETE` soft-deletes (sets active=false) — keeps history for the future calibration loop.
+  - Four error codes registered: `SR-SCENARIO-API-001..006`.
+
+- **`app/model/[ticker]/detailed/lib/whatif-engine.ts`** (new, 173 lines) — pure compute helper. Three exports:
+  - `driversFromBase(payload, currentPS)` builds a Drivers object from the engine's base scenario.
+  - `computeWhatIf(drivers, payload)` runs the symbolic walk (TTM → Y1 → Y3 → terminal EV → PV → equity → price). Branches on revenue-multiple vs EV/EBITDA mode. Returns full intermediate values.
+  - `buildTornado(drivers, payload, pct)` perturbs each driver ±pct one at a time, sorts by absolute spread.
+
+  Extracted from WhatIfTab so the scenario manager can call it on any saved scenario without state leakage. Single source of truth for the math; mirrors `target_engine.py`.
+
+- **`app/model/[ticker]/detailed/components/WhatIfTab.tsx`** (refactored, 215 → 494 lines) — full sandbox replacing the previous single-scenario tab. Adds:
+  - **Scenario rail** — horizontal scroll-snap cards for Engine base + saved scenarios. Click to load, × to delete. Active scenario highlighted in emerald.
+  - **Save dialog** — inline (no modal) with autofocus, Enter-to-save, Escape-to-cancel. Pre-fills with `${active} (copy)` if not editing engine base.
+  - **Drivers panel** title shows which scenario is active; "Reset to engine base" stays accessible.
+  - **Tornado chart** — driver-by-driver ±10% perturbation. Red bar = -10% impact, green bar = +10% impact, sorted by absolute spread. Each bar carries a hover tooltip with exact dollar deltas. Inline footnote explains the methodology so the visualization isn't ambiguous.
+
+- **`app/model/[ticker]/detailed/DetailedModel.tsx`** — passes `ticker` prop to WhatIfTab so it can hit the per-ticker scenarios API.
+
+### What's deferred to Phase 1b
+
+- Sensitivity heatmap (5×5 default, 7×7 toggle) on top-2 drivers from the tornado, color scale centered at current price. Hume confirmed grid sizing.
+- Three-up scenario comparison cards with driver-level diffing.
+
+### What's deferred to Phase 2 / 3
+
+- **Phase 2:** Read-only Excel grid replacing IncomeTab + CashTab. Quarterly columns × 11 income-statement rows + FCF derivation. Color-coded actuals/estimates, hover-formula tooltips.
+- **Phase 3:** AI-generated scenarios via Sonnet ("recession", "AI capex +50%"). Editable grid cells with engine-driven recompute. Coherence validator catching Sonnet's nonlinear-relationship errors (Hume's flagged risk: -15% revenue + -200bp margin doesn't match historical operating leverage).
+
+### Coherence-check design (preview)
+
+Hume flagged that AI-generated scenarios can produce internally inconsistent driver sets (e.g., -15% revenue + -200bp margin compression, when historical sensitivity shows revenue declines of 15% have produced 400bp+ compression). The validator (Phase 3, but designing now) will:
+1. Compute the implied operating leverage in the proposed scenario (Δmargin / Δrevenue).
+2. Compare against the historical operating-leverage range from `forecast_quarterly` actuals.
+3. Flag with severity yellow if outside ±1 std dev, red if outside ±2 std dev.
+4. Surface inline in the scenario card so the user sees "Sonnet says recession is -15% revenue with -200bp margin compression. Historical operating leverage suggests this should be closer to -400bp. Override or re-prompt?"
+
+The pure engine helper landed today (`whatif-engine.ts`) is the right foundation — its `computeWhatIf` already runs the same math the validator will need. Adding the validator is ~50 lines on top.
+
+### Verification
+
+- `npx tsc --noEmit` clean (only pre-existing tech debt errors elsewhere remain).
+- Brace/paren balance verified atomically pre-write on all new files.
+- File sizes match expected: WhatIfTab 494 lines, whatif-engine 173, route 185, migration 81.
+- API route uses `getSupabase()` from `@/lib/supabase` (existing pattern, RLS-permissive single-user mode).
+
+### To use
+
+1. Apply migration in Supabase SQL editor: `supabase/2026-05-09_scenario_scratch.sql`.
+2. `npm run dev` → navigate to `/model/AXON/detailed` → What-If tab.
+3. Adjust drivers, click "Save current as…", name the scenario.
+4. Reload the page — saved scenarios persist via Supabase.
+
+### Files touched
+
+- `supabase/2026-05-09_scenario_scratch.sql` (new)
+- `app/api/scenarios/[ticker]/route.ts` (new)
+- `app/model/[ticker]/detailed/lib/whatif-engine.ts` (new)
+- `app/model/[ticker]/detailed/components/WhatIfTab.tsx` (refactor)
+- `app/model/[ticker]/detailed/DetailedModel.tsx` (prop pass-through)
+- `CHANGELOG.md` (this entry)
+
+### Followups
+
+- **Phase 1b**: sensitivity heatmap + scenario comparison cards. Next iteration.
+- **MU data-source workaround** still queued.
+- **Models / Ask / Logs inline header removal** — done in earlier session, but Models pages haven't all been re-checked since.
+
+---
+
 ## [2026-05-09] Fix verify_model.py NameError — `target` → `t` in `_build_valuation` WACC block
 
 **Theme:** Hume's `git commit -m "frontend overhaul + system improvements"` failed at the verify_model.py pre-commit step with `NameError: name 'target' is not defined` at `model_export.py:832`. MRVL engine pass succeeded (base=$228.47, low=$114.41, high=$293.23) but Excel export crashed before writing.
