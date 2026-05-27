@@ -1038,6 +1038,14 @@ class ScenarioResult:
     price_from_ebitda: float
     price_from_fcf_sbc: float
     forecast_annual: list[ForecastPeriod]
+    # 2026-05-26 — DCF role contextual routing (C1 v1, --dcf-as-floor flag).
+    # "primary"          : current behavior — Gordon Growth blended with exit multiples (default)
+    # "downside_floor"   : exit multiples drive primary terminal_ev; Gordon kept as floor reference
+    # When role == "downside_floor", `dcf_floor_terminal_ev` and `dcf_floor_price` store the
+    # Gordon-derived numbers for display ("fair-value floor: $X from DCF, downside scenario only").
+    dcf_role: str = "primary"
+    dcf_floor_terminal_ev: float | None = None
+    dcf_floor_price: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -1471,6 +1479,7 @@ def _scenario_price(
     base_year_label: str,
     discount_years: int = DISCOUNT_YEARS,
     archetype: str | None = None,
+    dcf_role: str = "primary",
 ) -> ScenarioResult:
     """Compute PV target price for one scenario.
 
@@ -1505,7 +1514,55 @@ def _scenario_price(
     ev_from_ebitda = terminal.ebitda * d["ev_ebitda_multiple"]
     ev_from_fcf = terminal.fcf_sbc * d["ev_fcf_sbc_multiple"]
 
-    if gordon_ev is not None and gordon_ev > 0:
+    # 2026-05-26 — DCF role contextual routing (C1 v1).
+    # When dcf_role == "downside_floor", Gordon Growth is demoted from primary
+    # to a floor reference: exit multiples drive terminal_ev; gordon_ev is kept
+    # for the "fair-value floor: $X" display. This addresses the failure mode
+    # where Gordon's <=4.5% perpetuity cap structurally undershoots secular
+    # winners (memory: user_dcf_is_wrong_primary, 2026-05-01).
+    dcf_floor_terminal_ev: float | None = None  # populated when role=downside_floor
+
+    # 2026-05-26 — Red-team finding #1: track whether Gordon-fallback fired
+    # so the returned dcf_role reflects ACTUAL behavior, not the requested
+    # behavior. If exit multiples are unavailable and we fall back to Gordon,
+    # the result is effectively primary-mode — say so in the output.
+    gordon_fallback_fired = False
+    if dcf_role == "downside_floor":
+        # Exit multiples drive primary; Gordon kept as floor reference.
+        if ev_from_ebitda > 0 and ev_from_fcf > 0:
+            terminal_ev = (ev_from_ebitda + ev_from_fcf) / 2
+        elif ev_from_ebitda > 0:
+            terminal_ev = ev_from_ebitda
+        elif ev_from_fcf > 0:
+            terminal_ev = ev_from_fcf
+        elif gordon_ev is not None and gordon_ev > 0:
+            # Degenerate case: no exit multiples available. Fall back to Gordon
+            # as primary. Track that this happened so we can DOWNGRADE the
+            # returned dcf_role to "primary" — the contract is "dcf_role describes
+            # what drove the number," not "what was requested."
+            terminal_ev = gordon_ev
+            gordon_fallback_fired = True
+            print(
+                f"  [engine] {scenario}: --dcf-as-floor flag set but no exit multiples "
+                f"available; falling back to Gordon (${gordon_ev / 1e9:.2f}B) as primary. "
+                f"Returned dcf_role will be downgraded to \"primary\" to reflect actual behavior.",
+                file=sys.stderr,
+            )
+        else:
+            terminal_ev = 0.0  # nothing usable
+        # Store Gordon result as floor reference ONLY when exit multiples drove the result
+        # (i.e., NOT when Gordon-fallback fired). Use boolean tracking rather than
+        # numeric identity to avoid float-equality control flow (critic finding #2).
+        if not gordon_fallback_fired and gordon_ev is not None and gordon_ev > 0:
+            dcf_floor_terminal_ev = gordon_ev
+            print(
+                f"  [engine] {scenario}: dcf_role=downside_floor → terminal_ev "
+                f"${terminal_ev / 1e9:.2f}B from exit multiples; "
+                f"Gordon ${gordon_ev / 1e9:.2f}B kept as floor reference",
+                file=sys.stderr,
+            )
+    elif gordon_ev is not None and gordon_ev > 0:
+        # ── dcf_role == "primary" (default) — existing behavior unchanged ──
         # Cross-check: compare to exit multiples
         exit_mult_ev = (
             (ev_from_ebitda + ev_from_fcf) / 2
@@ -1581,6 +1638,17 @@ def _scenario_price(
     price_ebitda = max(0.0, equity_ebitda_only / shares_t) if shares_t > 0 else 0.0
     price_fcf = max(0.0, equity_fcf_only / shares_t) if shares_t > 0 else 0.0
 
+    # 2026-05-26 — DCF floor price derived from Gordon-only terminal_ev (when role=downside_floor)
+    dcf_floor_price: float | None = None
+    if dcf_floor_terminal_ev is not None and shares_t > 0:
+        pv_floor = dcf_floor_terminal_ev / discount
+        equity_floor = pv_floor - net_debt
+        dcf_floor_price = max(0.0, equity_floor / shares_t)
+
+    # 2026-05-26 — Red-team finding #1: dcf_role describes ACTUAL driver, not request.
+    # If Gordon-fallback fired in downside_floor mode, downgrade returned role to "primary".
+    effective_dcf_role = "primary" if gordon_fallback_fired else dcf_role
+
     return ScenarioResult(
         scenario=scenario,
         price=price,
@@ -1604,6 +1672,9 @@ def _scenario_price(
         price_from_ebitda=price_ebitda,
         price_from_fcf_sbc=price_fcf,
         forecast_annual=annual,
+        dcf_role=effective_dcf_role,
+        dcf_floor_terminal_ev=dcf_floor_terminal_ev,
+        dcf_floor_price=dcf_floor_price,
     )
 
 
@@ -2798,6 +2869,7 @@ def build_target(
     horizon_months: int = 12,
     archetype: str | None = None,
     analyst_confidence: float | None = None,
+    dcf_role: str = "primary",
 ) -> TargetResult:
     """Construct a three-scenario price-target range.
 
@@ -3028,7 +3100,7 @@ def build_target(
                 # Transition zone: compute both methods and blend
                 ev_result = _scenario_price(
                     fin, d, name, base_year_label, discount_years=discount_years,
-                    archetype=archetype,
+                    archetype=archetype, dcf_role=dcf_role,
                 )
                 ps_result = _scenario_price_revenue_multiple(
                     fin, d, name, base_year_label, discount_years=discount_years,
@@ -3060,11 +3132,26 @@ def build_target(
                     price_from_ebitda=ev_result.price_from_ebitda,
                     price_from_fcf_sbc=ev_result.price_from_fcf_sbc,
                     forecast_annual=ev_result.forecast_annual,
+                    dcf_role=ev_result.dcf_role,
+                    dcf_floor_terminal_ev=ev_result.dcf_floor_terminal_ev,
+                    # 2026-05-26 — Red-team finding #3: in PS-blend zone, the
+                    # ev_result.dcf_floor_price was computed relative to the
+                    # pure-EV equity/shares math, NOT the blended price. Copying
+                    # it as-is can produce dcf_floor_price > blended_price
+                    # (logically inverted "floor"). Null it when blended_price
+                    # is lower than the stored floor — the floor framing doesn't
+                    # apply cleanly in the blend zone.
+                    dcf_floor_price=(
+                        ev_result.dcf_floor_price
+                        if (ev_result.dcf_floor_price is None
+                            or ev_result.dcf_floor_price < blended_price)
+                        else None
+                    ),
                 )
             else:
                 scenarios[name] = _scenario_price(
                     fin, d, name, base_year_label, discount_years=discount_years,
-                    archetype=archetype,
+                    archetype=archetype, dcf_role=dcf_role,
                 )
 
     # ─── Scenario monotonicity enforcement ───
