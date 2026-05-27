@@ -2,6 +2,93 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-05-26] target_engine.py: DCF role contextual routing (C1) + archetype override loader (D-v1)
+
+**Theme:** Closes 25-day architectural debt from memory `user_dcf_is_wrong_primary` (2026-05-01). Forward DCF was producing primary engine targets that structurally undershot regime-shift candidates (Gordon Growth ≤4.5% perpetuity cap). This change demotes DCF to a downside-floor role for regime-shift archetypes; exit multiples drive the primary target.
+
+Bundled with D-v1: built the missing `_load_archetype_override()` loader for `config/ticker_archetype_overrides.json`. Config has existed since 2026-05-11 (LITE + AMD tagged "transformational") but had NO engine-side loader — only `analyst.py` consumed archetype state, via Supabase. Other callers (`test_dcf_floor.py`, `verify_model.py`, `model_export.py`) passed `archetype=None` which triggered the auto-promote-to-cyclical heuristic. That misrouted LITE through normalized-earnings math (~15% EBIT) and produced trough-anchored targets ($202 target_high vs spot $911 in initial validation).
+
+### What shipped
+
+**`scripts/target_engine.py`** (153,519 → 161,757 bytes; +8,238 bytes total across both ships):
+
+C1 ship (8 edits + 3 squad-cycle fixes):
+1. `ScenarioResult` dataclass +3 fields: `dcf_role: str = "primary"`, `dcf_floor_terminal_ev: float | None = None`, `dcf_floor_price: float | None = None`
+2. `_scenario_price` signature +1 param: `dcf_role: str = "primary"`
+3. Branched the Gordon-vs-exit blending logic on `dcf_role`. When `"downside_floor"`: exit multiples drive `terminal_ev = (ev_from_ebitda + ev_from_fcf) / 2`; Gordon kept as floor reference. When `"primary"` (default): existing growth-aware blend unchanged.
+4. `dcf_floor_price` derived from `dcf_floor_terminal_ev` via same discount/equity/shares chain.
+5. Return statement carries the 3 new fields.
+6. `build_target` signature +1 param: `dcf_role: str = "primary"`. Both internal `_scenario_price` call sites pass through.
+7. P/S blend `ScenarioResult` reconstruction carries new fields. Per red-team finding #3, `dcf_floor_price` is null-gated when ≥ `blended_price` (avoids floor > primary inversion).
+8. Squad-cycle fixes: `gordon_fallback_fired` boolean replaces float-equality control flow; returned `effective_dcf_role = "primary"` when Gordon-fallback fires (field describes actual driver, not request).
+
+D-v1 ship (2 edits):
+9. New module-level helper `_load_archetype_override(ticker)` reading `config/ticker_archetype_overrides.json` with module-level caching, underscore-prefix-key filtering, case-insensitive lookup, graceful FileNotFoundError handling.
+10. `build_target` consults the override when `archetype is None`. Stdout logs `[target_engine] {TICKER}: archetype override loaded from config: '{archetype}'` when fired.
+
+**`scripts/test_dcf_floor.py`** (NEW, ~7.9KB): V1 validation CLI with `--dcf-as-floor` and `--archetype` flags. Path-dependent 5-check pass criterion for LITE (target_high >= $580 AND dcf_role on upside+base AND dcf_floor_price populated AND floor < target_high AND gap ratio >= 1.5x).
+
+### Verification
+
+C1 ship: full 7-step workflow per `feedback_change_workflow`. Self-review pass; review-squad (critic + red-team in parallel) found 3 sound issues, all fixed in one iteration. Validation iter 1 FAILED informatively (LITE auto-promoted to cyclical, `_scenario_price_normalized` not reached). Validation iter 2 with `--archetype=secular_growth` override PASSED all 5 checks: target_high $1,121.22, gap ratio 7.64x.
+
+D-v1 ship: light loop (single helper + one-line hook). Smoke test confirmed: `_load_archetype_override("LITE") == "transformational"`, case-insensitive, returns None for untagged tickers. Validation run with NO `--archetype` override: `[target_engine] LITE: archetype override loaded from config: 'transformational'` fired correctly, `[routing] LITE: early auto-promote to cyclical` suppressed, all 5 PASS checks resolved. target_high $1,501.37 (using transformational archetype's 7-year Y4-exit horizon vs the secular_growth 5-year Y3-exit in iter 2).
+
+### Behavior change for other callers
+
+`verify_model.py`, `model_export.py`, and any other code that calls `build_target(fin)` without archetype will now load from `config/ticker_archetype_overrides.json`. For LITE and AMD specifically, those callers will now route through "transformational" archetype instead of falling through to auto-promote. This is the INTENDED fix — the override existed to address the regime-shift failure mode but had no engine-side consumer until today.
+
+### What's NOT in this change (deferred)
+
+- **V2: config-routed dcf_role per archetype.** Currently flag-gated only via `--dcf-as-floor`. V2 adds `dcf_role` field to `ticker_archetype_overrides.json` schema and defaults per archetype.
+- **`_scenario_price_cyclical` dcf_role wiring.** Investigated and skipped — cyclical mode uses normalized EBIT × through-cycle multiple, NOT Gordon Growth. There's no DCF to demote on that path. The real fix for the LITE-as-cyclical case was D-v1 (the override loader), not this wiring.
+- **D-v2: full archetype auto-promote audit.** The heuristic at `target_engine.py:2983` uses historical CV + sign-changes + prior-negative-margin signals that don't account for regime change. D-v1 lets operators sidestep it via explicit config tagging; D-v2 (deferred) would make the heuristic itself regime-aware.
+- **D1: V3.4.3 kill rule audit.** Was blocked on C1; now unblocked. Need to re-run V3.4.3 against new dcf_role-aware engine_target and check if it stops firing BROKEN on regime-shift candidates.
+- **D2: EDGAR validation rewrite** (Module 1 split per filter audit).
+
+### Memory captures from this cycle
+
+- `feedback_change_workflow`: 7-step canonical workflow Hume specified during the cycle.
+- `feedback_audit_verification`: lesson from the orphan-call near-miss earlier in the session.
+- `feedback_regime_shift_vs_historical_math`: unifying observation across DCF, V3.4.3 kill rule, archetype auto-promote — same Category-2-acting-like-Category-1 bug in 3 places.
+- `feedback_filter_philosophy`: canonical 3-category framework (Hard Gates / Contextual Routing / Informational Signals).
+- `feedback_commit_cadence`: milestone-by-milestone commits, not per-edit.
+- `project_future_pricing_validated`: §7b shipped + LITE id=21 verdict-flip.
+- `project_anti_sycophancy_pattern_validated`: §7 shipped + LITE id=19 anchor rejection.
+
+### Cycle report
+
+Full 7-step report at `data/change_cycles/2026-05-26_dcf_reposition_v1.md` covering C1 application + squad cycle + iter-1 failure + iter-2 PASS. D-v1 amendment appends as part of the same cycle (foundation work, same architectural fix expressed in 2 places).
+
+---
+
+## [2026-05-26] Session-wide documentation + memory layer
+
+**Theme:** Documentation and memory layer caught up to the session's code changes. None of these are code ships — they're the foundation layer for everything above.
+
+### Files added/updated (all in `data/` or memory)
+
+- **`data/validated_corrections.md`** (new, ~4.3KB): cross-ticker engine-verified fact layer. 3 seed corrections (LITE backlog $42B → $420.7M; COHR 200G EML at 1.6T disclosed at OFC 2026; NVIDIA partnership non-exclusivity for both LITE and COHR). Loaded into every Socratic run as `[VALIDATED_CORRECTIONS]` context block. Fixes silent contamination bug surfaced by COHR id=23 (engine cited `$42B` LITE backlog with HIGH confidence despite LITE id=16 having research-corrected it).
+- **`scripts/run_socratic.py`** + 5 socratic prompts: wired `[VALIDATED_CORRECTIONS]` placeholder into all 5 prompts + `fetch_validated_corrections()` helper + ctx dict + 2 explicit fill() calls. Validated on COHR id=25: verdict flipped REGIME_UPSIDE → NO_REGIME_SHIFT once the bogus competitive-asymmetry argument was removed.
+- **`scripts/prompts/socratic/model_b_regime.md`**: anti-sycophancy hard rules (mirrors Model C) + §7b future-pricing analysis conditional block. Validated on LITE id=19 (target_low $850 → $620 via independent macro-beta math) and LITE id=21 (verdict flipped REGIME_UPSIDE → REGIME_DOWNSIDE via PV math: 5-6 years priced vs 2-3 years actual = NEGATIVE 2-3yr gap = SELL signal).
+- **`data/operator_notes/LITE.md`**: annotated with id=21 verdict-flip findings. Preserves historical chain 2026-05-23 → 2026-05-25 → 2026-05-26.
+- **`data/filter_audit_2026_05_26.md`** (new, ~22KB): full audit of ~25 named filters across data/discovery/analysis/routing/prompt layers with KEEP/FIX/KILL/INVESTIGATE verdicts. Correction addendum after orphan-deletion near-miss (convergence_detector.py is active in frontend, adversarial_filter_prepass_v3 is dormant-by-design).
+- **`data/filter_philosophy.md`** (new, Hume's design intent, saved verbatim): canonical 3-category framework. Open questions section captures Claude's pushbacks (Max 30% / leverage hard gates may be Category 2 in disguise; "<10 hard gates" count is arbitrary; insider-selling should surface deviation not raw count).
+- **`data/todo_master_2026_05_26.md`** (new, ~12KB): comprehensive synthesis across session 2 doc / filter audit / philosophy / accumulated memory. Tier 1: DCF reposition (now CLOSED). 9 deferred items with explicit re-entry triggers.
+- **`data/change_cycles/2026-05-26_dcf_reposition_v1.md`** (new): full 7-step cycle report.
+
+### Memory entries created (canonical references)
+
+7 new memory files in `MEMORY.md` index:
+
+- `feedback_filter_philosophy` — categorization framework
+- `feedback_change_workflow` — 7-step process for non-trivial changes
+- `feedback_audit_verification` — cross-language grep + read-file-before-delete
+- `feedback_commit_cadence` — milestone-by-milestone commits
+- `feedback_regime_shift_vs_historical_math` — unifying bug across DCF / kill rule / archetype heuristic
+- `project_anti_sycophancy_pattern_validated` — pattern works, LITE id=19
+- `project_future_pricing_validated` — §7b works, LITE id=21 verdict flip
+
 ## [2026-05-26] validated_corrections.md: cross-ticker fact layer (fixes contamination bug)
 
 **Theme:** COHR id=23 surfaced a silent contamination bug. Both Model B and Model C cited LITE's "$42B contracted backlog" with HIGH confidence as evidence that COHR is the disadvantaged challenger. But that figure was research-corrected to $420.7M in LITE id=16 (Form ARS June 29 2024). The correction lived only in `data/operator_notes/LITE.md`, scoped to LITE-as-target runs. When COHR is the target ticker, LITE's operator notes do not load, and the engine re-cites the wrong figure as if it's still a fact.

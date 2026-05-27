@@ -20,8 +20,16 @@ Why a dedicated script for V1:
 After C1 validates that the math works, V2 wires the flag into the production
 paths (analyst.py / model_export.py / target_api.py). V1 stays surgical.
 
-Pass criterion for C1.5: LITE with --dcf-as-floor must produce target_high
->= $580 (2x the pure-DCF $290-$350 figure from Socratic id=21 §7b math).
+Pass criterion for C1.5 (5 path-dependent checks per squad cycle iter 1):
+    [1] target_high >= $580 (2x the pure-DCF $290-$350 figure from Socratic id=21)
+    [2] dcf_role='downside_floor' on upside+base scenarios (rules out Gordon-fallback)
+    [3] upside.dcf_floor_price is populated and > 0 (Gordon kept as floor reference)
+    [4] floor < target_high (Gordon is lower bound, not driver)
+    [5] target_high / floor >= 1.5x (the gap is meaningful, not coincidental)
+
+A single-check pass (target_high >= $580 alone) is insufficient — it could be
+met by coincidentally inflated exit multiples without proving the dcf_role
+routing actually demoted Gordon. The 5-check criterion catches that case.
 """
 from __future__ import annotations
 

@@ -2861,6 +2861,54 @@ def _validate_inputs(fin: FinancialData, drivers: dict[str, float]) -> list[str]
 
 
 
+# ---------------------------------------------------------------------------
+# Archetype override loader (D-v1, 2026-05-26)
+#
+# Reads operator-set archetype overrides from config/ticker_archetype_overrides.json.
+# The config existed since 2026-05-11 (LITE + AMD tagged "transformational") but had
+# NO engine-side loader — analyst.py consumes archetypes from Supabase models.archetype,
+# and other callers (test_dcf_floor.py, verify_model.py, model_export.py) passed
+# archetype=None which then auto-promoted regime-shift names like LITE to cyclical.
+#
+# This loader fixes that gap. When archetype is None, build_target consults the
+# config first. Behavior change: callers that previously got archetype=None now
+# get whatever's tagged in the config (None still possible for untagged tickers).
+# ---------------------------------------------------------------------------
+import json as _json_for_overrides
+from pathlib import Path as _Path_for_overrides
+
+_ARCHETYPE_OVERRIDES_PATH = _Path_for_overrides(__file__).resolve().parent.parent / "config" / "ticker_archetype_overrides.json"
+_ARCHETYPE_OVERRIDES_CACHE: dict | None = None
+
+
+def _load_archetype_override(ticker: str) -> str | None:
+    """Load operator-set archetype override from config/ticker_archetype_overrides.json.
+
+    Schema: {TICKER: archetype_string, ...}. Keys starting with underscore (e.g. "_README")
+    are skipped. Returns the override (lowercased) or None.
+
+    The cache is populated on first call and reused — config changes require restart.
+    """
+    global _ARCHETYPE_OVERRIDES_CACHE
+    if _ARCHETYPE_OVERRIDES_CACHE is None:
+        try:
+            with open(_ARCHETYPE_OVERRIDES_PATH, "r", encoding="utf-8") as f:
+                raw = _json_for_overrides.load(f)
+            _ARCHETYPE_OVERRIDES_CACHE = {
+                k: v for k, v in raw.items() if not k.startswith("_")
+            }
+        except FileNotFoundError:
+            _ARCHETYPE_OVERRIDES_CACHE = {}
+        except Exception as e:
+            print(
+                f"  [target_engine] WARN: failed to load ticker_archetype_overrides.json: {e}",
+                file=sys.stderr,
+            )
+            _ARCHETYPE_OVERRIDES_CACHE = {}
+    val = _ARCHETYPE_OVERRIDES_CACHE.get(ticker.upper())
+    return val.lower() if isinstance(val, str) else None
+
+
 def build_target(
     fin: FinancialData,
     drivers: dict[str, float] | None = None,
@@ -2898,6 +2946,22 @@ def build_target(
     _validate_inputs(fin, drivers or {})
 
     discount_years = _discount_years_for_horizon(horizon_months)
+
+    # D-v1 (2026-05-26): if caller didn't pass archetype, consult the operator
+    # override config. Closes the gap where analyst.py loaded archetype from
+    # Supabase but other callers (test_dcf_floor.py, verify_model.py,
+    # model_export.py) passed archetype=None and triggered the auto-promote
+    # heuristic. The override config has existed since 2026-05-11 (LITE/AMD
+    # tagged transformational) but had no engine-side loader until now.
+    if archetype is None:
+        override = _load_archetype_override(fin.ticker)
+        if override:
+            archetype = override
+            print(
+                f"  [target_engine] {fin.ticker}: archetype override loaded from config: '{archetype}'",
+                file=sys.stderr,
+            )
+
     # Try to enrich with forward-looking drivers from scout signals.
     if forward is None and load_forward:
         try:
