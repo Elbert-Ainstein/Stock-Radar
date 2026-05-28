@@ -1,0 +1,24 @@
+{
+  "_README": [
+    "Operator override for engine-side archetype assignment.",
+    "Different from ticker_archetypes.json (which controls sanity-check thresholds in",
+    "_validate_quarterly_revenue and uses cyclical_tech/cyclical_industrial/secular_growth/compounder).",
+    "",
+    "This file uses the registries.py ALL_ARCHETYPES vocabulary:",
+    "  garp, cyclical, transformational, compounder, special_situation",
+    "",
+    "When set, this override is injected into the thesis prompt and (separately)",
+    "consumed by the engine via _load_archetype_override(ticker).",
+    "",
+    "INTRODUCED 2026-05-11: Path A pre-spec fix for the regime-shift failure mode.",
+    "LITE and AMD tagged transformational because (a) two cases (LITE-vs-dad, AMD-vs-Evercore)",
+    "both indicted the system's Step 4/5 conservative-by-design assumptions on regime-shift names,",
+    "(b) the existing transformational archetype already provides the right engine treatment",
+    "(7-year forecast horizon, Y4 exit, bull-tail-tilted scenarios, 3.5% terminal cap when",
+    "growth signals > 30%), (c) the thesis prompt just needs to read it.",
+    "",
+    "Schema: { TICKER: <archetype_string> }. Tickers not listed get default behavior."
+  ],
+  "LITE": "transformational",
+  "AMD": "transformational"
+}

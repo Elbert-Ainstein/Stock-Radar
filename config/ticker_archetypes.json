@@ -1,0 +1,25 @@
+{
+  "_README": [
+    "Per-ticker archetype config consumed by finance_data.py for sanity-check threshold tuning.",
+    "",
+    "Archetypes recognized:",
+    "  cyclical_tech: memory chips, semis equipment, networking \u2014 peak/trough revenue swings 2-3x",
+    "  cyclical_industrial: autos, chemicals, materials \u2014 slower 1.5-2x cycles",
+    "  cyclical_normalized: handled at engine level (target_engine.py) for normalized-earnings DCF",
+    "  secular_growth: software, fintech, secular-trend-only \u2014 no cycle assumed",
+    "  compounder: stable margin business \u2014 minimal sequential variance expected",
+    "",
+    "Threshold multiplier applied in _validate_quarterly_revenue():",
+    "  cyclical_tech / cyclical_industrial / cyclical_normalized \u2192 1.5x trailing+YoY thresholds",
+    "  secular_growth / compounder / unset \u2192 1.0x (default)",
+    "",
+    "Schema: { TICKER: <archetype_string> }.",
+    "Tickers not listed get default thresholds.",
+    "",
+    "INCIDENT 2026-05-09: MU misdiagnosis (calendar-vs-fiscal quarter trap + sanity check too tight for real cyclical ramps) led to architectural fix. MU = cyclical_tech (memory chips, HBM cycle, AI capex peak).",
+    "Future tickers: add as observed. The classifier in scripts/archetype_classifier.py (per project_archetype_system memory) can also infer; this file is for explicit operator overrides."
+  ],
+  "MU": "cyclical_tech",
+  "MRVL": "cyclical_tech",
+  "KLIC": "cyclical_tech"
+}
