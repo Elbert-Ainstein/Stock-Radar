@@ -1,0 +1,434 @@
+# Stock Radar Discovery Universe
+# One ticker per line. Lines starting with # are comments.
+# This is the broad universe to scan for 10x candidates.
+# ~600 tickers: Mega/large caps + NASDAQ high-growth + semis + AI infra + small/mid cap niche leaders
+#
+# Categories:
+# [MEGA] Mega caps for reference/context
+# [SEMI] Semiconductors & AI chips
+# [AI] AI infrastructure & cloud
+# [SAAS] High-growth SaaS
+# [FINTECH] Fintech & payments
+# [HEALTH] Biotech & health tech
+# [ENERGY] Energy & renewables
+# [CONSUMER] Consumer & e-commerce
+# [INDUSTRIAL] Industritic/defense/infra
+# [OTHER] Other high-growth
+
+# ─── MEGA CAPS (reference) ───
+AAPL
+MSFT
+GOOGL
+AMZN
+NVDA
+META
+TSLA
+BRK-B
+TSM
+AVGO
+
+# ─── SEMICONDUCTORS & AI CHIPS ───
+AMD
+INTC
+QCOM
+MU
+MRVL
+ON
+SWKS
+QRVO
+LSCC
+MPWR
+MCHP
+TXN
+ADI
+NXPI
+ARM
+SNDK
+LITE
+CIEN
+COHR
+II-VI
+IPGP
+ANET
+KEYS
+TER
+KLAC
+LRCX
+AMAT
+ASML
+ACLS
+ONTO
+WOLF
+SLAB
+DIOD
+
+# ─── AI INFRASTRUCTURE & DATA CENTER ───
+SMCI
+VRT
+DELL
+HPE
+NTAP
+PSTG
+IONQ
+RGTI
+QUBT
+PLTR
+AI
+BBAI
+PATH
+SNOW
+DDOG
+NET
+ZS
+CRWD
+S
+PANW
+FTNT
+OKTA
+
+# ─── HIGH-GROWTH SOFTWARE / SAAS ───
+CRM
+NOW
+WDAY
+SHOP
+TTD
+DKNG
+RBLX
+U
+SQ
+COIN
+APP
+MNDY
+HUBS
+TEAM
+ZM
+DOCU
+VEEV
+PAYC
+BILL
+TOST
+ESTC
+MDB
+CFLT
+DOCN
+GTLB
+IOT
+SAMSARA
+BRZE
+
+# ─── CLOUD & DATA ───
+ORCL
+IBM
+CSCO
+AKAM
+FSLY
+DT
+NEWR
+SPLK
+TWLO
+API
+
+# ─── FINTECH & PAYMENTS ───
+V
+MA
+PYPL
+GPN
+FIS
+FISV
+ADYEN
+INTU
+AXP
+COF
+SYF
+AFRM
+UPST
+SOFI
+NU
+HOOD
+MARA
+RIOT
+HUT
+
+# ─── BIOTECH & HEALTH TECH ───
+LLY
+UNH
+JNJ
+ABBV
+MRK
+PFE
+BMY
+AMGN
+GILD
+REGN
+VRTX
+BIIB
+MRNA
+ISRG
+DXCM
+VEEV
+TDOC
+HIMS
+DOCS
+SDGR
+RXRX
+DNLI
+BEAM
+CRSP
+NTLA
+EDIT
+EXAS
+
+# ─── ENERGY & RENEWABLES ───
+XOM
+CVX
+OXY
+SLB
+COP
+EOG
+FSLR
+ENPH
+SEDG
+RUN
+PLUG
+BE
+CHPT
+NEE
+CEG
+VST
+NRG
+TLN
+OKLO
+SMR
+NNE
+LEU
+
+# ─── EV & MOBILITY ───
+RIVN
+LCID
+LI
+NIO
+XPEV
+QS
+CHPT
+BLNK
+UBER
+LYFT
+GRAB
+
+# ─── CONSUMER / E-COMMERCE ───
+COST
+WMT
+TGT
+HD
+LOW
+BABA
+JD
+PDD
+MELI
+SE
+ETSY
+W
+CHWY
+DG
+DLTR
+LULU
+NKE
+DECK
+CROX
+ELF
+CELH
+MNST
+
+# ─── DEFENSE / AEROSPACE ───
+LMT
+RTX
+NOC
+GD
+BA
+LHX
+RKLB
+LUNR
+RDW
+ASTS
+IRDM
+
+# ─── INDUSTRIALS / INFRASTRUCTURE ───
+CAT
+DE
+GE
+HON
+MMM
+ETN
+EMR
+ROK
+AME
+GNRC
+PWR
+PRIM
+
+# ─── MEDIA / ENTERTAINMENT ───
+DIS
+NFLX
+SPOT
+ROKU
+WBD
+PARA
+LYV
+IMAX
+RCAT
+
+# ─── TELECOM / CONNECTIVITY ───
+T
+VZ
+TMUS
+AMT
+CCI
+SBAC
+
+# ─── REAL ESTATE / DATA CENTERS ───
+EQIX
+DLR
+PLD
+AMT
+O
+
+# ─── CRYPTO / WEB3 ADJACENT ───
+COIN
+MSTR
+MARA
+RIOT
+HUT
+BITF
+CLSK
+CIFR
+
+# ─── CHINA / INTERNATIONAL HIGH-GROWTH ───
+BABA
+JD
+PDD
+BIDU
+BILI
+TME
+IQ
+XPEV
+NIO
+LI
+SE
+GRAB
+NU
+MELI
+
+# ─── SMALL/MID CAP — NICHE MONOPOLIES & HIGH-GROWTH ───
+# Semiconductor equipment & test (AEHR-like niche dominance)
+AEHR
+ACMR
+UCTT
+CEVA
+SITM
+AMBA
+POWI
+INDI
+OLED
+MKSI
+ICHR
+FORM
+
+# Photonics, optics, laser & specialty components
+IIVI
+LASR
+NOVT
+CGNX
+TDY
+FLIR
+IIVI
+LUNA
+
+# Defense/space small-cap
+KTOS
+AVAV
+SPIR
+BWXT
+IIIV
+MAXR
+
+# Industrial tech / automation niche leaders
+AZTA
+TNDM
+BRKS
+ENTG
+CCMP
+MTSI
+
+# Cybersecurity small/mid
+TENB
+VRNS
+CYBR
+SAIL
+QLYS
+RDWR
+
+# Specialty biotech / med-tech small-cap
+AXNX
+INSP
+GKOS
+NVCR
+TGTX
+PCVX
+LEGN
+SMMT
+KRYS
+IOVA
+ARQT
+
+# Specialty materials & chemicals
+MP
+LTHM
+ALB
+LAC
+SQM
+FREY
+NNOX
+
+# Small-cap fintech & insuretech
+AFRM
+UPST
+LMND
+ROOT
+OPEN
+RELY
+PSFE
+
+# Edge AI / embedded systems
+AAOI
+VIAV
+CALX
+INFN
+SILC
+SYNA
+
+# Small-cap data & analytics
+FOUR
+DV
+SEMR
+BRZE
+BASE
+ZI
+
+# Robotics & automation
+IRBT
+ISRG
+TER
+IIVI
+RBOT
+
+# ─── SPECULATIVE / EARLY-STAGE ───
+IONQ
+RGTI
+QUBT
+RKLB
+LUNR
+ASTS
+OKLO
+SMR
+RXRX
+SDGR
