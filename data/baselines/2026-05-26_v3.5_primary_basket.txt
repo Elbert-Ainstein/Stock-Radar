@@ -1,0 +1,178 @@
+  [finance_data] trying eodhd for LITE...
+  [finance_data] ticker_archetypes loaded: 3 entries
+  [finance_data] LITE served by eodhd (chain: ['eodhd', 'yfinance'])
+  [target_engine] LITE: archetype override loaded from config: 'transformational'
+  [routing] LITE: BLEND mode — routing score 0.38 (P/S weight 38%, EBITDA yield 0.77%, sector=semiconductors, archetype=transformational)
+  [engine] downside: blending Gordon ($9.0B, w=25%) with exit-mult ($80.7B, w=75%) → $62.4B (gap was 89%, g1=45%)
+  [engine] base: blending Gordon ($23.8B, w=25%) with exit-mult ($177.3B, w=75%) → $138.9B (gap was 87%, g1=51%)
+  [engine] upside: blending Gordon ($28.7B, w=25%) with exit-mult ($227.9B, w=75%) → $178.1B (gap was 87%, g1=56%)
+  [finance_data] trying eodhd for CAMT...
+  [finance_data] CAMT served by eodhd (chain: ['eodhd', 'yfinance'])
+  [routing] CAMT: BLEND mode — routing score 0.30 (P/S weight 30%, EBITDA yield 1.57%, sector=semiconductors, archetype=None)
+  [engine] downside: blending Gordon ($0.9B, w=59%) with exit-mult ($5.1B, w=41%) → $2.6B (gap was 82%, g1=11%)
+  [engine] base: blending Gordon ($1.5B, w=58%) with exit-mult ($9.4B, w=42%) → $4.8B (gap was 84%, g1=12%)
+  [engine] upside: blending Gordon ($1.6B, w=57%) with exit-mult ($11.0B, w=43%) → $5.7B (gap was 86%, g1=13%)
+  [finance_data] trying eodhd for COHR...
+  [finance_data] COHR served by eodhd (chain: ['eodhd', 'yfinance'])
+  [routing] COHR: BLEND mode — routing score 0.30 (P/S weight 30%, EBITDA yield 1.54%, sector=semiconductors, archetype=None)
+  [engine] downside: blending Gordon ($9.2B, w=55%) with exit-mult ($52.5B, w=45%) → $28.8B (gap was 83%, g1=15%)
+  [engine] base: blending Gordon ($17.9B, w=53%) with exit-mult ($107.6B, w=47%) → $60.5B (gap was 83%, g1=17%)
+  [engine] upside: blending Gordon ($19.3B, w=51%) with exit-mult ($127.0B, w=49%) → $72.3B (gap was 85%, g1=19%)
+  [finance_data] trying eodhd for SIMO...
+  [finance_data] SIMO served by eodhd (chain: ['eodhd', 'yfinance'])
+  [routing] SIMO: BLEND mode — routing score 0.29 (P/S weight 29%, EBITDA yield 1.73%, sector=semiconductors, archetype=None)
+  [engine] downside: blending Gordon ($2.0B, w=46%) with exit-mult ($8.2B, w=54%) → $5.4B (gap was 76%, g1=24%)
+  [engine] base: blending Gordon ($3.8B, w=42%) with exit-mult ($16.9B, w=58%) → $11.4B (gap was 78%, g1=28%)
+  [engine] upside: blending Gordon ($4.5B, w=40%) with exit-mult ($21.0B, w=60%) → $14.5B (gap was 78%, g1=30%)
+  [circuit-breaker] SIMO: EXTREME_TARGET: base target $1082 is 3.8x current price $285 (>3.0x)
+  spot:        $    902.31
+  target_low:  $    416.09
+  target_base: $    933.72
+  target_high: $   1250.53
+  net_debt:    $      0.68B
+
+  --- downside scenario ---
+    price:                  $    416.09
+    dcf_role:               primary
+    g1 / g_terminal:         44.6% /  13.4%
+    ebitda_mt / fcf_mt:      29.0% /   6.0%
+    ev_ebitda / ev_fcf mult:  46.3x /  57.1x
+    terminal_ev_blended:    $     62.43B
+    ev_from_ebitda:         $    128.54B
+    ev_from_fcf_sbc:        $     32.78B
+
+  --- base scenario ---
+    price:                  $    933.72
+    dcf_role:               primary
+    g1 / g_terminal:         50.7% /  16.7%
+    ebitda_mt / fcf_mt:      33.5% /  12.0%
+    ev_ebitda / ev_fcf mult:  61.7x /  80.0x
+    terminal_ev_blended:    $    138.90B
+    ev_from_ebitda:         $    242.19B
+    ev_from_fcf_sbc:        $    112.35B
+
+  --- upside scenario ---
+    price:                  $   1250.53
+    dcf_role:               primary
+    g1 / g_terminal:         55.7% /  19.2%
+    ebitda_mt / fcf_mt:      33.5% /  12.0%
+    ev_ebitda / ev_fcf mult:  69.4x /  91.4x
+    terminal_ev_blended:    $    178.12B
+    ev_from_ebitda:         $    309.83B
+    ev_from_fcf_sbc:        $    146.03B
+
+=== test_dcf_floor: CAMT (dcf_role=primary) ===
+  spot:        $    169.62
+  target_low:  $     37.43
+  target_base: $     75.27
+  target_high: $     95.13
+  net_debt:    $      0.29B
+
+  --- downside scenario ---
+    price:                  $     37.43
+    dcf_role:               primary
+    g1 / g_terminal:         10.7% /   6.4%
+    ebitda_mt / fcf_mt:      22.4% /  11.5%
+    ev_ebitda / ev_fcf mult:  46.4x /  44.1x
+    terminal_ev_blended:    $      2.60B
+    ev_from_ebitda:         $      6.81B
+    ev_from_fcf_sbc:        $      3.33B
+
+  --- base scenario ---
+    price:                  $     75.27
+    dcf_role:               primary
+    g1 / g_terminal:         12.2% /   8.0%
+    ebitda_mt / fcf_mt:      26.9% /  17.5%
+    ev_ebitda / ev_fcf mult:  61.8x /  61.8x
+    terminal_ev_blended:    $      4.81B
+    ev_from_ebitda:         $     11.36B
+    ev_from_fcf_sbc:        $      7.39B
+
+  --- upside scenario ---
+    price:                  $     95.13
+    dcf_role:               primary
+    g1 / g_terminal:         13.4% /   9.2%
+    ebitda_mt / fcf_mt:      26.9% /  17.5%
+    ev_ebitda / ev_fcf mult:  69.6x /  70.7x
+    terminal_ev_blended:    $      5.65B
+    ev_from_ebitda:         $     13.21B
+    ev_from_fcf_sbc:        $      8.72B
+
+=== test_dcf_floor: COHR (dcf_role=primary) ===
+  spot:        $    380.18
+  target_low:  $    150.74
+  target_base: $    288.04
+  target_high: $    364.67
+  net_debt:    $      1.65B
+
+  --- downside scenario ---
+    price:                  $    150.74
+    dcf_role:               primary
+    g1 / g_terminal:         15.4% /   6.4%
+    ebitda_mt / fcf_mt:      16.5% /   7.6%
+    ev_ebitda / ev_fcf mult:  46.1x /  43.9x
+    terminal_ev_blended:    $     28.84B
+    ev_from_ebitda:         $     72.92B
+    ev_from_fcf_sbc:        $     32.16B
+
+  --- base scenario ---
+    price:                  $    288.04
+    dcf_role:               primary
+    g1 / g_terminal:         17.5% /   8.0%
+    ebitda_mt / fcf_mt:      21.0% /  13.6%
+    ev_ebitda / ev_fcf mult:  61.4x /  61.4x
+    terminal_ev_blended:    $     60.51B
+    ev_from_ebitda:         $    130.43B
+    ev_from_fcf_sbc:        $     84.78B
+
+  --- upside scenario ---
+    price:                  $    364.67
+    dcf_role:               primary
+    g1 / g_terminal:         19.2% /   9.2%
+    ebitda_mt / fcf_mt:      21.0% /  13.6%
+    ev_ebitda / ev_fcf mult:  69.1x /  70.2x
+    terminal_ev_blended:    $     72.32B
+    ev_from_ebitda:         $    153.01B
+    ev_from_fcf_sbc:        $    101.05B
+
+=== test_dcf_floor: SIMO (dcf_role=primary) ===
+  spot:        $    284.98
+  target_low:  $    570.64
+  target_base: $   1082.15
+  target_high: $   1444.14
+  net_debt:    $     -0.14B
+
+  --- downside scenario ---
+    price:                  $    570.64
+    dcf_role:               primary
+    g1 / g_terminal:         24.3% /   7.3%
+    ebitda_mt / fcf_mt:      17.4% /   8.3%
+    ev_ebitda / ev_fcf mult:  35.2x /  33.5x
+    terminal_ev_blended:    $      5.37B
+    ev_from_ebitda:         $     11.36B
+    ev_from_fcf_sbc:        $      5.12B
+
+  --- base scenario ---
+    price:                  $   1082.15
+    dcf_role:               primary
+    g1 / g_terminal:         27.6% /   9.1%
+    ebitda_mt / fcf_mt:      21.9% /  14.3%
+    ev_ebitda / ev_fcf mult:  46.9x /  46.9x
+    terminal_ev_blended:    $     11.35B
+    ev_from_ebitda:         $     20.50B
+    ev_from_fcf_sbc:        $     13.33B
+
+  --- upside scenario ---
+    price:                  $   1444.14
+    dcf_role:               primary
+    g1 / g_terminal:         30.4% /  10.5%
+    ebitda_mt / fcf_mt:      21.9% /  14.3%
+    ev_ebitda / ev_fcf mult:  52.8x /  53.6x
+    terminal_ev_blended:    $     14.48B
+    ev_from_ebitda:         $     25.31B
+    ev_from_fcf_sbc:        $     16.71B
+
+============================================================
+SUMMARY: 4 ticker(s), 0 failure(s)
+
+=== test_dcf_floor: LITE (dcf_role=primary) ===

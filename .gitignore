@@ -3,6 +3,15 @@ node_modules
 .env
 .env.local
 out
-data/
 __pycache__/
 *.pyc
+*.tsbuildinfo
+*.backup-*
+data/*
+!data/operator_notes/
+!data/baselines/
+!data/change_cycles/
+!data/validated_corrections.md
+!data/filter_audit_*.md
+!data/filter_philosophy.md
+!data/todo_master_*.md

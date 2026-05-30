@@ -1,0 +1,210 @@
+  [finance_data] trying eodhd for LITE...
+  [finance_data] ticker_archetypes loaded: 3 entries
+  [finance_data] LITE served by eodhd (chain: ['eodhd', 'yfinance'])
+  [target_engine] LITE: archetype override loaded from config: 'transformational'
+  [routing] LITE: BLEND mode — routing score 0.38 (P/S weight 38%, EBITDA yield 0.77%, sector=semiconductors, archetype=transformational)
+  [engine] downside: dcf_role=downside_floor → terminal_ev $80.66B from exit multiples; Gordon $8.95B kept as floor reference
+  [engine] base: dcf_role=downside_floor → terminal_ev $177.27B from exit multiples; Gordon $23.76B kept as floor reference
+  [engine] upside: dcf_role=downside_floor → terminal_ev $227.93B from exit multiples; Gordon $28.70B kept as floor reference
+  [finance_data] trying eodhd for CAMT...
+  [finance_data] CAMT served by eodhd (chain: ['eodhd', 'yfinance'])
+  [routing] CAMT: BLEND mode — routing score 0.30 (P/S weight 30%, EBITDA yield 1.57%, sector=semiconductors, archetype=None)
+  [engine] downside: dcf_role=downside_floor → terminal_ev $5.07B from exit multiples; Gordon $0.90B kept as floor reference
+  [engine] base: dcf_role=downside_floor → terminal_ev $9.37B from exit multiples; Gordon $1.48B kept as floor reference
+  [engine] upside: dcf_role=downside_floor → terminal_ev $10.96B from exit multiples; Gordon $1.58B kept as floor reference
+  [finance_data] trying eodhd for COHR...
+  [finance_data] COHR served by eodhd (chain: ['eodhd', 'yfinance'])
+  [routing] COHR: BLEND mode — routing score 0.30 (P/S weight 30%, EBITDA yield 1.54%, sector=semiconductors, archetype=None)
+  [engine] downside: dcf_role=downside_floor → terminal_ev $52.54B from exit multiples; Gordon $9.16B kept as floor reference
+  [engine] base: dcf_role=downside_floor → terminal_ev $107.60B from exit multiples; Gordon $17.95B kept as floor reference
+  [engine] upside: dcf_role=downside_floor → terminal_ev $127.03B from exit multiples; Gordon $19.28B kept as floor reference
+  [finance_data] trying eodhd for SIMO...
+  [finance_data] SIMO served by eodhd (chain: ['eodhd', 'yfinance'])
+  [routing] SIMO: BLEND mode — routing score 0.29 (P/S weight 29%, EBITDA yield 1.73%, sector=semiconductors, archetype=None)
+  [engine] downside: dcf_role=downside_floor → terminal_ev $8.24B from exit multiples; Gordon $1.95B kept as floor reference
+  [engine] base: dcf_role=downside_floor → terminal_ev $16.91B from exit multiples; Gordon $3.79B kept as floor reference
+  [engine] upside: dcf_role=downside_floor → terminal_ev $21.01B from exit multiples; Gordon $4.53B kept as floor reference
+  [circuit-breaker] SIMO: EXTREME_TARGET: base target $1450 is 5.1x current price $285 (>3.0x)
+  spot:        $    902.31
+  target_low:  $    507.63
+  target_base: $   1126.45
+  target_high: $   1500.66
+  net_debt:    $      0.68B
+
+  --- downside scenario ---
+    price:                  $    507.63
+    dcf_role:               downside_floor
+    g1 / g_terminal:         44.6% /  13.4%
+    ebitda_mt / fcf_mt:      29.0% /   6.0%
+    ev_ebitda / ev_fcf mult:  46.3x /  57.1x
+    terminal_ev_blended:    $     80.66B
+    ev_from_ebitda:         $    128.54B
+    ev_from_fcf_sbc:        $     32.78B
+    dcf_floor_terminal_ev:  $      8.95B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $     65.86  ← what Gordon alone would imply
+
+  --- base scenario ---
+    price:                  $   1126.45
+    dcf_role:               downside_floor
+    g1 / g_terminal:         50.7% /  16.7%
+    ebitda_mt / fcf_mt:      33.5% /  12.0%
+    ev_ebitda / ev_fcf mult:  61.7x /  80.0x
+    terminal_ev_blended:    $    177.27B
+    ev_from_ebitda:         $    242.19B
+    ev_from_fcf_sbc:        $    112.35B
+    dcf_floor_terminal_ev:  $     23.76B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $    186.18  ← what Gordon alone would imply
+
+  --- upside scenario ---
+    price:                  $   1500.66
+    dcf_role:               downside_floor
+    g1 / g_terminal:         55.7% /  19.2%
+    ebitda_mt / fcf_mt:      33.5% /  12.0%
+    ev_ebitda / ev_fcf mult:  69.4x /  91.4x
+    terminal_ev_blended:    $    227.93B
+    ev_from_ebitda:         $    309.83B
+    ev_from_fcf_sbc:        $    146.03B
+    dcf_floor_terminal_ev:  $     28.70B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $    226.27  ← what Gordon alone would imply
+
+  PASS CRITERION (LITE / downside_floor mode):
+    [1] target_high $1500.66 >= $580 ........... ✓
+    [2] dcf_role='downside_floor' on upside+base .. ✓  (rules out Gordon-fallback)
+    [3] upside.dcf_floor_price populated .......... ✓  (Gordon kept as reference)
+    [4] floor < target_high ....................... ✓  (Gordon is lower bound, not driver)
+    [5] target_high / floor >= 1.5x ............... ✓  (gap is meaningful, ratio=6.63x)
+    OVERALL: ✓ PASS
+
+=== test_dcf_floor: CAMT (dcf_role=downside_floor) ===
+  spot:        $    169.62
+  target_low:  $     63.92
+  target_base: $    124.16
+  target_high: $    152.06
+  net_debt:    $      0.29B
+
+  --- downside scenario ---
+    price:                  $     63.92
+    dcf_role:               downside_floor
+    g1 / g_terminal:         10.7% /   6.4%
+    ebitda_mt / fcf_mt:      22.4% /  11.5%
+    ev_ebitda / ev_fcf mult:  46.4x /  44.1x
+    terminal_ev_blended:    $      5.07B
+    ev_from_ebitda:         $      6.81B
+    ev_from_fcf_sbc:        $      3.33B
+    dcf_floor_terminal_ev:  $      0.90B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $      8.25  ← what Gordon alone would imply
+
+  --- base scenario ---
+    price:                  $    124.16
+    dcf_role:               downside_floor
+    g1 / g_terminal:         12.2% /   8.0%
+    ebitda_mt / fcf_mt:      26.9% /  17.5%
+    ev_ebitda / ev_fcf mult:  61.8x /  61.8x
+    terminal_ev_blended:    $      9.37B
+    ev_from_ebitda:         $     11.36B
+    ev_from_fcf_sbc:        $      7.39B
+    dcf_floor_terminal_ev:  $      1.48B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $     17.23  ← what Gordon alone would imply
+
+  --- upside scenario ---
+    price:                  $    152.06
+    dcf_role:               downside_floor
+    g1 / g_terminal:         13.4% /   9.2%
+    ebitda_mt / fcf_mt:      26.9% /  17.5%
+    ev_ebitda / ev_fcf mult:  69.6x /  70.7x
+    terminal_ev_blended:    $     10.96B
+    ev_from_ebitda:         $     13.21B
+    ev_from_fcf_sbc:        $      8.72B
+    dcf_floor_terminal_ev:  $      1.58B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $     18.69  ← what Gordon alone would imply
+
+=== test_dcf_floor: COHR (dcf_role=downside_floor) ===
+  spot:        $    380.18
+  target_low:  $    234.54
+  target_base: $    454.59
+  target_high: $    558.16
+  net_debt:    $      1.65B
+
+  --- downside scenario ---
+    price:                  $    234.54
+    dcf_role:               downside_floor
+    g1 / g_terminal:         15.4% /   6.4%
+    ebitda_mt / fcf_mt:      16.5% /   7.6%
+    ev_ebitda / ev_fcf mult:  46.1x /  43.9x
+    terminal_ev_blended:    $     52.54B
+    ev_from_ebitda:         $     72.92B
+    ev_from_fcf_sbc:        $     32.16B
+    dcf_floor_terminal_ev:  $      9.16B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $     35.98  ← what Gordon alone would imply
+
+  --- base scenario ---
+    price:                  $    454.59
+    dcf_role:               downside_floor
+    g1 / g_terminal:         17.5% /   8.0%
+    ebitda_mt / fcf_mt:      21.0% /  13.6%
+    ev_ebitda / ev_fcf mult:  61.4x /  61.4x
+    terminal_ev_blended:    $    107.60B
+    ev_from_ebitda:         $    130.43B
+    ev_from_fcf_sbc:        $     84.78B
+    dcf_floor_terminal_ev:  $     17.95B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $     80.61  ← what Gordon alone would imply
+
+  --- upside scenario ---
+    price:                  $    558.16
+    dcf_role:               downside_floor
+    g1 / g_terminal:         19.2% /   9.2%
+    ebitda_mt / fcf_mt:      21.0% /  13.6%
+    ev_ebitda / ev_fcf mult:  69.1x /  70.2x
+    terminal_ev_blended:    $    127.03B
+    ev_from_ebitda:         $    153.01B
+    ev_from_fcf_sbc:        $    101.05B
+    dcf_floor_terminal_ev:  $     19.28B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $     87.39  ← what Gordon alone would imply
+
+=== test_dcf_floor: SIMO (dcf_role=downside_floor) ===
+  spot:        $    284.98
+  target_low:  $    760.60
+  target_base: $   1449.75
+  target_high: $   1875.89
+  net_debt:    $     -0.14B
+
+  --- downside scenario ---
+    price:                  $    760.60
+    dcf_role:               downside_floor
+    g1 / g_terminal:         24.3% /   7.3%
+    ebitda_mt / fcf_mt:      17.4% /   8.3%
+    ev_ebitda / ev_fcf mult:  35.2x /  33.5x
+    terminal_ev_blended:    $      8.24B
+    ev_from_ebitda:         $     11.36B
+    ev_from_fcf_sbc:        $      5.12B
+    dcf_floor_terminal_ev:  $      1.95B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $    197.42  ← what Gordon alone would imply
+
+  --- base scenario ---
+    price:                  $   1449.75
+    dcf_role:               downside_floor
+    g1 / g_terminal:         27.6% /   9.1%
+    ebitda_mt / fcf_mt:      21.9% /  14.3%
+    ev_ebitda / ev_fcf mult:  46.9x /  46.9x
+    terminal_ev_blended:    $     16.91B
+    ev_from_ebitda:         $     20.50B
+    ev_from_fcf_sbc:        $     13.33B
+    dcf_floor_terminal_ev:  $      3.79B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $    368.92  ← what Gordon alone would imply
+
+  --- upside scenario ---
+    price:                  $   1875.89
+    dcf_role:               downside_floor
+    g1 / g_terminal:         30.4% /  10.5%
+    ebitda_mt / fcf_mt:      21.9% /  14.3%
+    ev_ebitda / ev_fcf mult:  52.8x /  53.6x
+    terminal_ev_blended:    $     21.01B
+    ev_from_ebitda:         $     25.31B
+    ev_from_fcf_sbc:        $     16.71B
+    dcf_floor_terminal_ev:  $      4.53B  ← Gordon (downside floor reference)
+    dcf_floor_price:        $    437.15  ← what Gordon alone would imply
+
+============================================================
+SUMMARY: 4 ticker(s), 0 failure(s)
+
+=== test_dcf_floor: LITE (dcf_role=downside_floor) ===
