@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" font-family="ui-sans-serif, system-ui, sans-serif">
+  <defs>
+    <style>
+      .center { fill: #1c1a17; stroke: #847e6f; stroke-width: 2; }
+      .center-text { fill: #fcfcfa; font-size: 18px; font-weight: 700; }
+      .center-sub { fill: #aaa28e; font-size: 13px; }
+
+      .branch-good { fill: #f0fdf4; stroke: #16a34a; stroke-width: 1.5; }
+      .branch-bad { fill: #fef2f2; stroke: #dc2626; stroke-width: 1.5; }
+      .branch-warn { fill: #fffbeb; stroke: #d97706; stroke-width: 1.5; }
+      .branch-info { fill: #eff6ff; stroke: #2563eb; stroke-width: 1.5; }
+      .branch-neutral { fill: #f5f5f4; stroke: #57534e; stroke-width: 1.5; }
+
+      .branch-title { font-size: 14px; font-weight: 700; fill: #0a0a09; }
+      .branch-text { font-size: 11.5px; fill: #1c1a17; }
+      .branch-mono { font-family: ui-monospace, monospace; font-size: 10.5px; fill: #525252; }
+
+      .connector { stroke: #847e6f; stroke-width: 1.2; fill: none; }
+      .connector-bad { stroke: #dc2626; stroke-width: 2; fill: none; stroke-dasharray: 4 3; }
+      .connector-good { stroke: #16a34a; stroke-width: 2; fill: none; }
+
+      .heading { font-size: 22px; font-weight: 700; fill: #1c1a17; }
+      .subheading { font-size: 13px; fill: #57534e; font-style: italic; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#fcfcfa"/>
+
+  <!-- Header -->
+  <text x="800" y="38" text-anchor="middle" class="heading">MU thesis pipeline contamination — diagnostic mindmap</text>
+  <text x="800" y="60" text-anchor="middle" class="subheading">Pipeline says $1,180 (HIGH 30%). Hand-paste of same prompt says $855 (+14.5%). Gap = $325 = real contamination.</text>
+
+  <!-- Center node -->
+  <g transform="translate(800,500)">
+    <rect class="center" x="-180" y="-70" width="360" height="140" rx="10"/>
+    <text class="center-text" text-anchor="middle" x="0" y="-32">MU thesis gap</text>
+    <text class="center-sub" text-anchor="middle" x="0" y="-10">Pipeline output: $1,180 (+58%, HIGH 30%)</text>
+    <text class="center-sub" text-anchor="middle" x="0" y="8">Hand-paste output: $855 (+14.5%, modest)</text>
+    <text class="center-sub" text-anchor="middle" x="0" y="32" font-size="14" font-weight="700" fill="#fef3c7">Gap = $325 (38%)</text>
+    <text class="center-sub" text-anchor="middle" x="0" y="52">3 contamination paths layered</text>
+  </g>
+
+  <!-- Connectors from center (drawn first so they're behind boxes) -->
+  <path class="connector-bad" d="M 712 460 Q 480 360 280 240"/>     <!-- to Path 1 (top-left) -->
+  <path class="connector-bad" d="M 800 430 Q 800 250 800 165"/>      <!-- to Path 2 (top) -->
+  <path class="connector-bad" d="M 888 460 Q 1120 360 1320 240"/>    <!-- to Path 3 (top-right) -->
+  <path class="connector" d="M 712 540 Q 480 640 280 740"/>          <!-- to What I got wrong (bottom-left) -->
+  <path class="connector-good" d="M 888 540 Q 1120 640 1320 740"/>   <!-- to Action plan (bottom-right) -->
+  <path class="connector" d="M 800 570 Q 800 720 800 830"/>          <!-- to Squad findings (bottom-center) -->
+
+  <!-- Path 1: Memory file anchor (TOP-LEFT) -->
+  <g transform="translate(70,140)">
+    <rect class="branch-bad" x="0" y="0" width="420" height="200" rx="8"/>
+    <text class="branch-title" x="14" y="24">[1] Memory file anchor — biggest LLM impact</text>
+    <text class="branch-mono" x="14" y="46">data/memory/MU.md line 19</text>
+    <text class="branch-text" x="14" y="68">• Prior thesis "$1,180 | HIGH | 30%" baked into</text>
+    <text class="branch-text" x="14" y="84">  Thesis History table</text>
+    <text class="branch-text" x="14" y="102">• Trajectory paragraph quotes "$1,180 (58% upside)"</text>
+    <text class="branch-text" x="14" y="118">  and "13x NTM EPS of ~$90.92"</text>
+    <text class="branch-text" x="14" y="138">• run_thesis.py:656-659 reads file → injects at</text>
+    <text class="branch-text" x="14" y="154">  [MEMORY_SECTION] in prompt</text>
+    <text class="branch-text" x="14" y="174">• At T=0.3, LLM treats prior thesis as anchoring</text>
+    <text class="branch-text" x="14" y="190">  prior context → drifts toward $1,180</text>
+  </g>
+
+  <!-- Path 2: Forward-driver regex misfire (TOP-CENTER) -->
+  <g transform="translate(560,80)">
+    <rect class="branch-warn" x="0" y="0" width="480" height="200" rx="8"/>
+    <text class="branch-title" x="14" y="24">[2] Forward-driver regex misfire — engine UI side</text>
+    <text class="branch-mono" x="14" y="46">forward_drivers.py:441 — bound 0 &lt; mid &lt; 100</text>
+    <text class="branch-text" x="14" y="68">• Pattern matches "(?:operating|op)\s+margin" + "77%"</text>
+    <text class="branch-text" x="14" y="84">• MU's DRAM gross margins legitimately run 70%+</text>
+    <text class="branch-text" x="14" y="100">  → false-positive captured as "guided op margin = 77%"</text>
+    <text class="branch-text" x="14" y="120">• target_engine.py:833 blends 77% with historical 45%</text>
+    <text class="branch-text" x="14" y="136">  → ~73% blended margin → ~$230/share phantom value</text>
+    <text class="branch-text" x="14" y="156">• Affects DCF UI + warnings panel; does NOT flow into</text>
+    <text class="branch-text" x="14" y="172">  the LLM thesis prompt (per critic)</text>
+    <text class="branch-text" x="14" y="190" fill="#dc2626" font-weight="700">⚠ Re-running scout is non-idempotent — same news, different</text>
+  </g>
+
+  <!-- Path 3: Partial-patch at run time (TOP-RIGHT) -->
+  <g transform="translate(1110,140)">
+    <rect class="branch-warn" x="0" y="0" width="430" height="200" rx="8"/>
+    <text class="branch-title" x="14" y="24">[3] Partial patch at run time — historical</text>
+    <text class="branch-mono" x="14" y="46">Run @ 14:09:54 vs multi-stmt patch shipped later</text>
+    <text class="branch-text" x="14" y="68">• Thesis ran when only revenue was patched</text>
+    <text class="branch-text" x="14" y="84">  ($23.86B → $13.64B), but op income / EBITDA / FCF</text>
+    <text class="branch-text" x="14" y="100">  still inflated</text>
+    <text class="branch-text" x="14" y="120">• [VERIFIED_FINANCIALS] block presented impossible</text>
+    <text class="branch-text" x="14" y="136">  77.5% TTM op margin to the LLM as "verified"</text>
+    <text class="branch-text" x="14" y="156">• Output anchored to those margins → $1,180 target</text>
+    <text class="branch-text" x="14" y="180" fill="#16a34a" font-weight="700">✓ Auto-fixed by multi-stmt patch (now in place);</text>
+    <text class="branch-text" x="14" y="196" fill="#16a34a" font-weight="700">  but its OUTPUT contaminates Path [1] memory.</text>
+  </g>
+
+  <!-- What I got wrong (BOTTOM-LEFT) -->
+  <g transform="translate(70,720)">
+    <rect class="branch-neutral" x="0" y="0" width="420" height="200" rx="8"/>
+    <text class="branch-title" x="14" y="24">What I told Hume — RETRACTED</text>
+    <text class="branch-text" x="14" y="48">✗ "Forward-driver scout signal contaminates the</text>
+    <text class="branch-text" x="14" y="64">  thesis prompt"</text>
+    <text class="branch-mono" x="14" y="80" fill="#dc2626">  → False. Critic verified run_thesis.py never reads</text>
+    <text class="branch-mono" x="14" y="96" fill="#dc2626">  forward_drivers.py. The 77% is a UI artifact.</text>
+    <text class="branch-text" x="14" y="120">✗ "Trust the fresh-paste output as a benchmark"</text>
+    <text class="branch-mono" x="14" y="136" fill="#dc2626">  → Reverses pipeline purpose (outsider's punch).</text>
+    <text class="branch-mono" x="14" y="152" fill="#dc2626">  Both LLM outputs; neither is a ground-truth oracle.</text>
+    <text class="branch-text" x="14" y="176">✗ Fix path (a): "Delete Supabase scout signal record"</text>
+    <text class="branch-mono" x="14" y="192" fill="#dc2626">  → Wouldn't close gap; non-idempotent re-runs.</text>
+  </g>
+
+  <!-- Squad findings (BOTTOM-CENTER) -->
+  <g transform="translate(560,840)">
+    <rect class="branch-info" x="0" y="0" width="480" height="140" rx="8"/>
+    <text class="branch-title" x="14" y="24">Review squad — three converging takedowns</text>
+    <text class="branch-text" x="14" y="48"><tspan font-weight="700">Critic:</tspan> diagnosis pointed at wrong mechanism;</text>
+    <text class="branch-text" x="14" y="62">memory file is the actual contaminant.</text>
+    <text class="branch-text" x="14" y="86"><tspan font-weight="700">Red-team:</tspan> 3 failure modes — regex, memory anchor,</text>
+    <text class="branch-text" x="14" y="100">engine amplifier; non-idempotent re-runs.</text>
+    <text class="branch-text" x="14" y="124"><tspan font-weight="700">Outsider:</tspan> "trust the fresh one" reverses</text>
+    <text class="branch-text" x="14" y="138">the entire purpose of having a pipeline.</text>
+  </g>
+
+  <!-- Action plan (BOTTOM-RIGHT) -->
+  <g transform="translate(1110,720)">
+    <rect class="branch-good" x="0" y="0" width="430" height="200" rx="8"/>
+    <text class="branch-title" x="14" y="22">Action plan v2 — 8 steps (post-pushback)</text>
+    <text class="branch-text" x="14" y="42">0. Print actual prompt; verify 3 paths exhaustive</text>
+    <text class="branch-text" x="14" y="58">1. Architectural memory-write hygiene (gate quarantine)</text>
+    <text class="branch-text" x="14" y="74">2. Audit ALL watchlist tickers for memory contamination</text>
+    <text class="branch-text" x="14" y="90">3. Surgically clean all flagged memory files (batch)</text>
+    <text class="branch-text" x="14" y="106">4. Tighter regex + sector-aware op-margin cap</text>
+    <text class="branch-text" x="14" y="122">5. Re-run thesis on all flagged tickers in clean pass</text>
+    <text class="branch-text" x="14" y="138">6. Controlled comparison: pipeline pre-fix vs post-fix</text>
+    <text class="branch-text" x="14" y="154">7. Squad review of MU + AXON specifically</text>
+    <text class="branch-mono" x="14" y="180" fill="#16a34a">Success: pipeline pre vs post diverges materially.</text>
+    <text class="branch-mono" x="14" y="194" fill="#dc2626">Fresh-paste = tripwire only, NOT benchmark.</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(50,950)">
+    <rect x="0" y="0" width="1500" height="35" fill="#f6f4ec" stroke="#dfd9c4" rx="4"/>
+    <text x="14" y="22" font-size="11" fill="#525252">
+      <tspan font-weight="700">Legend:</tspan>
+      <tspan dx="10"> ░ red border = active contamination path </tspan>
+      <tspan dx="20"> ░ amber border = engine-side / partial path </tspan>
+      <tspan dx="20"> ░ blue border = squad findings </tspan>
+      <tspan dx="20"> ░ green border = action plan </tspan>
+      <tspan dx="20"> ░ gray border = retracted claims </tspan>
+      <tspan dx="20"> --- dashed line = contamination flow </tspan>
+    </text>
+  </g>
+</svg>

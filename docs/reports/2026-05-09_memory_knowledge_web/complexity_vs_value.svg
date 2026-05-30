@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 800" font-family="ui-sans-serif, system-ui, sans-serif">
+  <defs>
+    <style>
+      .heading { font-size: 22px; font-weight: 700; fill: #1c1a17; }
+      .subheading { font-size: 13px; fill: #57534e; font-style: italic; }
+      .axis { stroke: #847e6f; stroke-width: 1.5; }
+      .grid { stroke: #dfd9c4; stroke-width: 0.5; stroke-dasharray: 2 3; }
+      .phase-a { fill: #16a34a; }
+      .phase-b { fill: #2563eb; }
+      .phase-c { fill: #7c3aed; }
+      .phase-d { fill: #78716c; }
+      .label-good { fill: #16a34a; font-weight: 700; }
+      .annotation { font-size: 11px; fill: #525252; }
+    </style>
+  </defs>
+
+  <rect width="1300" height="800" fill="#fcfcfa"/>
+
+  <text x="650" y="34" text-anchor="middle" class="heading">Memory web rollout — complexity vs value</text>
+  <text x="650" y="56" text-anchor="middle" class="subheading">X-axis: build effort (engineering days). Y-axis: expected impact on thesis quality. Bubble size: anchor risk if a node is wrong.</text>
+
+  <!-- Plot area: x=120 to 1180, y=130 to 600. Effort 0-30 days, impact 0-10 -->
+  <line x1="120" y1="600" x2="1180" y2="600" class="axis"/>
+  <line x1="120" y1="130" x2="120" y2="600" class="axis"/>
+
+  <!-- X-axis label -->
+  <text x="650" y="680" text-anchor="middle" font-size="13" fill="#1c1a17" font-weight="700">Build effort →</text>
+  <text x="120" y="625" text-anchor="middle" font-size="11" fill="#525252">0 days</text>
+  <text x="473" y="625" text-anchor="middle" font-size="11" fill="#525252">10 days</text>
+  <text x="827" y="625" text-anchor="middle" font-size="11" fill="#525252">20 days</text>
+  <text x="1180" y="625" text-anchor="middle" font-size="11" fill="#525252">30+ days</text>
+
+  <!-- Y-axis label -->
+  <text x="50" y="380" text-anchor="middle" font-size="13" fill="#1c1a17" font-weight="700" transform="rotate(-90 50 380)">Expected impact on thesis quality →</text>
+  <text x="100" y="600" text-anchor="end" font-size="11" fill="#525252">0</text>
+  <text x="100" y="365" text-anchor="end" font-size="11" fill="#525252">5</text>
+  <text x="100" y="130" text-anchor="end" font-size="11" fill="#525252">10</text>
+
+  <!-- Gridlines -->
+  <line x1="120" y1="365" x2="1180" y2="365" class="grid"/>
+  <line x1="473" y1="130" x2="473" y2="600" class="grid"/>
+  <line x1="827" y1="130" x2="827" y2="600" class="grid"/>
+
+  <!-- Phase A: lessons.md (low effort, high impact, low risk) -->
+  <!-- effort=1 day → x=120+1*35.3=155, impact=8 → y=600-8*47=224 -->
+  <circle cx="155" cy="224" r="34" class="phase-a" opacity="0.85"/>
+  <text x="155" y="220" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">Phase A</text>
+  <text x="155" y="236" text-anchor="middle" font-size="10" fill="#fff">lessons.md</text>
+  <text x="155" y="278" text-anchor="middle" font-size="11" fill="#16a34a" font-weight="700">BUILD NOW</text>
+
+  <!-- Phase B: pattern memory (medium effort, medium-high impact, medium risk) -->
+  <!-- effort=12 days → x=120+12*35.3=544, impact=6 → y=600-6*47=318 -->
+  <circle cx="544" cy="318" r="50" class="phase-b" opacity="0.8"/>
+  <text x="544" y="314" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">Phase B</text>
+  <text x="544" y="330" text-anchor="middle" font-size="10" fill="#fff">patterns</text>
+  <text x="544" y="380" text-anchor="middle" font-size="11" fill="#2563eb" font-weight="700">DEFER</text>
+  <text x="544" y="395" text-anchor="middle" font-size="10" fill="#525252">earn it via Phase A</text>
+
+  <!-- Phase C: progressive abstraction (high effort, high impact long-term, requires Module 9) -->
+  <!-- effort=20 days → x=120+20*35.3=826, impact=8 → y=600-8*47=224 -->
+  <circle cx="826" cy="224" r="58" class="phase-c" opacity="0.7"/>
+  <text x="826" y="220" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">Phase C</text>
+  <text x="826" y="236" text-anchor="middle" font-size="10" fill="#fff">abstraction</text>
+  <text x="826" y="294" text-anchor="middle" font-size="11" fill="#7c3aed" font-weight="700">DEFER</text>
+  <text x="826" y="309" text-anchor="middle" font-size="10" fill="#525252">requires Module 9 + Phase B</text>
+
+  <!-- Phase D: sector memory (high effort, low marginal impact since redundant with patterns) -->
+  <!-- effort=15 days → x=120+15*35.3=649, impact=3 → y=600-3*47=459 -->
+  <circle cx="649" cy="459" r="40" class="phase-d" opacity="0.6"/>
+  <text x="649" y="455" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">Phase D</text>
+  <text x="649" y="471" text-anchor="middle" font-size="10" fill="#fff">sector</text>
+  <text x="649" y="510" text-anchor="middle" font-size="11" fill="#78716c" font-weight="700">DEFER INDEFINITELY</text>
+  <text x="649" y="525" text-anchor="middle" font-size="10" fill="#525252">redundant with patterns</text>
+
+  <!-- Sweet spot annotation -->
+  <rect x="60" y="100" width="220" height="20" fill="#d1fae5" stroke="#16a34a" rx="4"/>
+  <text x="170" y="116" text-anchor="middle" font-size="11" font-weight="700" fill="#16a34a">"Sweet spot" — high impact, low effort, low anchor risk</text>
+
+  <line x1="170" y1="120" x2="155" y2="195" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="3 3"/>
+
+  <!-- Legend on bubble size -->
+  <g transform="translate(120,720)">
+    <text x="0" y="0" font-size="13" font-weight="700" fill="#0a0a09">Bubble size = anchor risk if a node is wrong</text>
+    <circle cx="50" cy="30" r="20" fill="none" stroke="#525252"/>
+    <text x="80" y="34" font-size="11" fill="#525252">Small = lessons (operator-curated, easy to audit/fix)</text>
+    <circle cx="450" cy="30" r="35" fill="none" stroke="#525252"/>
+    <text x="495" y="34" font-size="11" fill="#525252">Medium = patterns (cohort-spanning, wrong pattern poisons N tickers)</text>
+    <circle cx="950" cy="30" r="50" fill="none" stroke="#525252"/>
+    <text x="1010" y="34" font-size="11" fill="#525252">Large = abstraction (recursive — wrong pattern self-validates)</text>
+  </g>
+</svg>

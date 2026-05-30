@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1400 900" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" role="img">
+  <title>Three pending canary outcomes: AMD, LITE, AXON — what each settles</title>
+  <desc>Diagram showing the three live test cases for V3.4.3, what each case settles, and what intervention each outcome triggers.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#666"/>
+    </marker>
+  </defs>
+
+  <text x="700" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#222">The Three Pending Canary Outcomes</text>
+  <text x="700" y="62" text-anchor="middle" font-size="13" fill="#666">Each case settles a different architectural hypothesis. Together they determine what (if anything) ships next.</text>
+
+  <!-- Three canary boxes - top row -->
+
+  <!-- AMD card -->
+  <g>
+    <rect x="80" y="100" width="380" height="260" fill="#fef9e6" stroke="#7a3f0f" stroke-width="2" rx="8"/>
+    <text x="270" y="128" text-anchor="middle" font-size="16" font-weight="700" fill="#7a3f0f">AMD — $455.19</text>
+    <text x="270" y="148" text-anchor="middle" font-size="11" fill="#666">T+30 ≈ 2026-06-08</text>
+
+    <line x1="100" y1="162" x2="440" y2="162" stroke="#ccc"/>
+
+    <text x="100" y="182" font-size="11" font-weight="600" fill="#444">System V3.4.3 says:</text>
+    <text x="100" y="200" font-size="11" fill="#555">BROKEN / 0% / target $376</text>
+    <text x="100" y="216" font-size="11" fill="#555">ratio 0.72 (deepest BROKEN in cohort)</text>
+
+    <text x="100" y="244" font-size="11" font-weight="600" fill="#1f5582">Evercore ISI projects:</text>
+    <text x="100" y="262" font-size="11" fill="#555">2026 rev $77B (+62% above system)</text>
+    <text x="100" y="278" font-size="11" fill="#555">2027 rev $110B (+77% above system)</text>
+
+    <text x="100" y="306" font-size="11" font-weight="600" fill="#c0392b">What it settles:</text>
+    <text x="100" y="322" font-size="10" fill="#555">Step 4 (revenue build) — is the system's</text>
+    <text x="100" y="336" font-size="10" fill="#555">sequential-growth-decay too aggressive</text>
+    <text x="100" y="350" font-size="10" fill="#555">for regime-shift names?</text>
+  </g>
+
+  <!-- LITE card -->
+  <g>
+    <rect x="510" y="100" width="380" height="260" fill="#fef9e6" stroke="#7a3f0f" stroke-width="2" rx="8"/>
+    <text x="700" y="128" text-anchor="middle" font-size="16" font-weight="700" fill="#7a3f0f">LITE — $903.80</text>
+    <text x="700" y="148" text-anchor="middle" font-size="11" fill="#666">T+90 ≈ 2026-08-08</text>
+
+    <line x1="530" y1="162" x2="870" y2="162" stroke="#ccc"/>
+
+    <text x="530" y="182" font-size="11" font-weight="600" fill="#444">System V3.4.3 says:</text>
+    <text x="530" y="200" font-size="11" fill="#555">BROKEN / 0% / target $960</text>
+    <text x="530" y="216" font-size="11" fill="#555">ratio 0.833, buy_below $750</text>
+
+    <text x="530" y="244" font-size="11" font-weight="600" fill="#1f5582">Hume's dad sees:</text>
+    <text x="530" y="262" font-size="11" fill="#555">2x to ~$1,800 next year</text>
+    <text x="530" y="278" font-size="11" fill="#555">($840 above system target)</text>
+
+    <text x="530" y="306" font-size="11" font-weight="600" fill="#c0392b">What it settles:</text>
+    <text x="530" y="322" font-size="10" fill="#555">Step 5 (multiple anchor) — is</text>
+    <text x="530" y="336" font-size="10" fill="#555">same-sector-historical-peak the wrong</text>
+    <text x="530" y="350" font-size="10" fill="#555">anchor for regime-shift names?</text>
+  </g>
+
+  <!-- AXON card -->
+  <g>
+    <rect x="940" y="100" width="380" height="260" fill="#fef9e6" stroke="#7a3f0f" stroke-width="2" rx="8"/>
+    <text x="1130" y="128" text-anchor="middle" font-size="16" font-weight="700" fill="#7a3f0f">AXON — $403.54</text>
+    <text x="1130" y="148" text-anchor="middle" font-size="11" fill="#666">T+30 ≈ 2026-06-08</text>
+
+    <line x1="960" y1="162" x2="1300" y2="162" stroke="#ccc"/>
+
+    <text x="960" y="182" font-size="11" font-weight="600" fill="#444">System V3.4.3 says:</text>
+    <text x="960" y="200" font-size="11" fill="#555">MEDIUM / 25% / target $542</text>
+    <text x="960" y="216" font-size="11" fill="#555">ratio 1.20 (clean V3.4.3-vs-V4 divergence)</text>
+
+    <text x="960" y="244" font-size="11" font-weight="600" fill="#1f5582">V4 spike disagreed:</text>
+    <text x="960" y="262" font-size="11" fill="#555">BROKEN / 0% at same price</text>
+    <text x="960" y="278" font-size="11" fill="#555">(Hume holding 5% tracking position)</text>
+
+    <text x="960" y="306" font-size="11" font-weight="600" fill="#c0392b">What it settles:</text>
+    <text x="960" y="322" font-size="10" fill="#555">V3.4.3-vs-V4 gate-vs-inputs question.</text>
+    <text x="960" y="336" font-size="10" fill="#555">If V3.4.3 right, single-call architecture</text>
+    <text x="960" y="350" font-size="10" fill="#555">retires V4. If V4 right, deeper rebuild.</text>
+  </g>
+
+  <!-- Decision-flow boxes - middle row -->
+  <text x="700" y="410" text-anchor="middle" font-size="14" font-weight="700" fill="#444">Decision rule by outcome combination</text>
+
+  <g>
+    <rect x="120" y="430" width="350" height="170" fill="#e8f4ea" stroke="#2d7a3a" stroke-width="2" rx="8"/>
+    <text x="295" y="455" text-anchor="middle" font-size="13" font-weight="700" fill="#2d7a3a">If 0-1 names rally materially</text>
+    <text x="295" y="473" text-anchor="middle" font-size="10" font-style="italic" fill="#555">(system was right, dad/Evercore were noise)</text>
+    <line x1="140" y1="486" x2="450" y2="486" stroke="#bbd1bd"/>
+    <text x="140" y="508" font-size="11" fill="#444">→ V3.4.3 kill rule is well-calibrated</text>
+    <text x="140" y="528" font-size="11" fill="#444">→ Ship V3.4.3.1 (deterministic clamp)</text>
+    <text x="140" y="548" font-size="11" fill="#444">→ Defer regime-shift archetype</text>
+    <text x="140" y="568" font-size="11" fill="#444">→ Defer cognitive proposals A/C/D</text>
+    <text x="140" y="588" font-size="11" font-style="italic" fill="#666">Outcome: minimal arch work, ship V3.4.3</text>
+  </g>
+
+  <g>
+    <rect x="525" y="430" width="350" height="170" fill="#fef0e3" stroke="#b87333" stroke-width="2" rx="8"/>
+    <text x="700" y="455" text-anchor="middle" font-size="13" font-weight="700" fill="#b87333">If 2 names rally materially</text>
+    <text x="700" y="473" text-anchor="middle" font-size="10" font-style="italic" fill="#555">(systematic Step 4/5 conservatism)</text>
+    <line x1="545" y1="486" x2="855" y2="486" stroke="#dab98a"/>
+    <text x="545" y="508" font-size="11" fill="#444">→ Null hypothesis confirmed</text>
+    <text x="545" y="528" font-size="11" fill="#444">→ Ship regime-shift archetype (pre-spec'd)</text>
+    <text x="545" y="548" font-size="11" fill="#444">→ Tag LITE, AMD, similar as regime_shift</text>
+    <text x="545" y="568" font-size="11" fill="#444">→ Re-run watchlist, recalibrate</text>
+    <text x="545" y="588" font-size="11" font-style="italic" fill="#666">Outcome: 100-line patch fixes it</text>
+  </g>
+
+  <g>
+    <rect x="930" y="430" width="350" height="170" fill="#fde8e6" stroke="#c0392b" stroke-width="2" rx="8"/>
+    <text x="1105" y="455" text-anchor="middle" font-size="13" font-weight="700" fill="#c0392b">If 3 names rally, OR archetype fix fails</text>
+    <text x="1105" y="473" text-anchor="middle" font-size="10" font-style="italic" fill="#555">(foundational mismatch, not just inputs)</text>
+    <line x1="950" y1="486" x2="1260" y2="486" stroke="#dab2a5"/>
+    <text x="950" y="508" font-size="11" fill="#444">→ Foundation failure per memory</text>
+    <text x="950" y="528" font-size="11" fill="#444">→ Escalate to cognitive Proposals A/C/D</text>
+    <text x="950" y="548" font-size="11" fill="#444">→ Build scout_sector_map per spec</text>
+    <text x="950" y="568" font-size="11" fill="#444">→ Engine-feed (Option 2) priority-1</text>
+    <text x="950" y="588" font-size="11" font-style="italic" fill="#666">Outcome: multi-week refactor</text>
+  </g>
+
+  <!-- Arrows from canary cards to decision boxes (conceptual, not 1:1) -->
+  <line x1="270" y1="365" x2="295" y2="425" stroke="#888" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="700" y1="365" x2="700" y2="425" stroke="#888" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="1130" y1="365" x2="1105" y2="425" stroke="#888" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- Bottom: Action plan today -->
+  <rect x="80" y="640" width="1240" height="220" fill="#fafafa" stroke="#bbb" stroke-width="1" rx="8"/>
+  <text x="700" y="666" text-anchor="middle" font-size="14" font-weight="700" fill="#333">What to do RIGHT NOW (before outcomes resolve)</text>
+
+  <text x="100" y="694" font-size="12" font-weight="600" fill="#444">No-cost actions:</text>
+  <text x="100" y="715" font-size="11" fill="#555">• Annotate LITE memory with `human_target: $1,800` (dad's view, record-only)</text>
+  <text x="100" y="735" font-size="11" fill="#555">• Annotate AMD memory with Evercore $77B / $110B projections (Step 4 disagreement)</text>
+  <text x="100" y="755" font-size="11" fill="#555">• Tag watchlist tickers with `theme` per Hume's 14-theme taxonomy (bootstrap for future scout)</text>
+
+  <text x="700" y="694" font-size="12" font-weight="600" fill="#444">Low-cost actions (≤ half day each):</text>
+  <text x="700" y="715" font-size="11" fill="#555">• Ship V3.4.3.1 — Python post-processor clamping the kill rule deterministically</text>
+  <text x="700" y="735" font-size="11" fill="#555">• Fix Supabase schema drift (task #90) — add strategic_conviction + risk_adj_ev_ratio columns</text>
+  <text x="700" y="755" font-size="11" fill="#555">• Pre-spec the regime_shift archetype patch (write the code, don't deploy)</text>
+
+  <text x="100" y="790" font-size="12" font-weight="600" fill="#c0392b">Don't do:</text>
+  <text x="100" y="810" font-size="11" fill="#555">• Don't ship regime-shift archetype before AMD T+30 / LITE T+90 outcomes</text>
+  <text x="100" y="830" font-size="11" fill="#555">• Don't build cognitive Proposals A/C/D yet (deferred per complexity-ratchet discipline)</text>
+  <text x="100" y="850" font-size="11" fill="#555">• Don't build scout_sector_map yet (deferred — spec captured, build trigger is foundation-failure outcome)</text>
+</svg>

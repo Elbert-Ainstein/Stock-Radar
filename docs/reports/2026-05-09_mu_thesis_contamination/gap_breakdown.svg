@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" font-family="ui-sans-serif, system-ui, sans-serif">
+  <defs>
+    <style>
+      .heading { font-size: 22px; font-weight: 700; fill: #1c1a17; }
+      .subheading { font-size: 13px; fill: #57534e; font-style: italic; }
+      .axis { stroke: #847e6f; stroke-width: 1.2; }
+      .grid { stroke: #dfd9c4; stroke-width: 0.5; stroke-dasharray: 2 3; }
+      .bar-pipeline { fill: #fee2e2; stroke: #dc2626; stroke-width: 1.5; }
+      .bar-handpaste { fill: #d1fae5; stroke: #16a34a; stroke-width: 1.5; }
+      .bar-current { fill: #e5e7eb; stroke: #57534e; stroke-width: 1.5; }
+      .bar-postfix { fill: #dbeafe; stroke: #2563eb; stroke-width: 1.5; stroke-dasharray: 4 3; }
+      .bar-label { font-size: 14px; font-weight: 700; fill: #0a0a09; text-anchor: middle; }
+      .bar-value { font-size: 18px; font-weight: 700; fill: #0a0a09; text-anchor: middle; }
+      .bar-sub { font-size: 11px; fill: #525252; text-anchor: middle; }
+      .annotation { font-size: 11px; fill: #525252; }
+      .annotation-bad { font-size: 11px; fill: #dc2626; font-weight: 700; }
+      .annotation-good { font-size: 11px; fill: #16a34a; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="900" fill="#fcfcfa"/>
+
+  <text x="600" y="34" text-anchor="middle" class="heading">MU price targets — pipeline vs hand-paste vs estimated post-fix</text>
+  <text x="600" y="56" text-anchor="middle" class="subheading">Y-axis: $/share. The $325 gap between pipeline and hand-paste decomposes into ~3 contamination layers.</text>
+
+  <!-- Plot area: x=120 to x=1080, y=140 to y=620 -->
+  <!-- Y-axis -->
+  <line x1="120" y1="140" x2="120" y2="620" class="axis"/>
+  <line x1="120" y1="620" x2="1080" y2="620" class="axis"/>
+
+  <!-- Y gridlines + labels -->
+  <g font-size="11" fill="#57534e">
+    <!-- $0 -->
+    <line x1="120" y1="620" x2="1080" y2="620" class="grid"/>
+    <text x="113" y="624" text-anchor="end">$0</text>
+    <!-- $300 -->
+    <line x1="120" y1="544" x2="1080" y2="544" class="grid"/>
+    <text x="113" y="548" text-anchor="end">$300</text>
+    <!-- $600 -->
+    <line x1="120" y1="468" x2="1080" y2="468" class="grid"/>
+    <text x="113" y="472" text-anchor="end">$600</text>
+    <!-- $746.81 (current) -->
+    <line x1="120" y1="431" x2="1080" y2="431" stroke="#57534e" stroke-width="1.2" stroke-dasharray="6 4"/>
+    <text x="113" y="435" text-anchor="end" font-weight="700" fill="#57534e">$746.81</text>
+    <text x="1085" y="435" font-size="10.5" font-style="italic" fill="#57534e">current price</text>
+    <!-- $900 -->
+    <line x1="120" y1="392" x2="1080" y2="392" class="grid"/>
+    <text x="113" y="396" text-anchor="end">$900</text>
+    <!-- $1,200 -->
+    <line x1="120" y1="316" x2="1080" y2="316" class="grid"/>
+    <text x="113" y="320" text-anchor="end">$1,200</text>
+    <!-- $1,500 -->
+    <line x1="120" y1="240" x2="1080" y2="240" class="grid"/>
+    <text x="113" y="244" text-anchor="end">$1,500</text>
+    <!-- $1,800 -->
+    <line x1="120" y1="164" x2="1080" y2="164" class="grid"/>
+    <text x="113" y="168" text-anchor="end">$1,800</text>
+  </g>
+
+  <!-- Compute y-coordinates: y = 620 - (value/2.4)
+       value=746.81 → y=620-311=309? No, that's wrong. Let me recompute.
+       Range is 0 to 1800 over 480px (620-140). Scale = 480/1800 = 0.267.
+       For value V: y = 620 - V*0.267
+       $746.81: 620-746.81*0.267 = 620 - 199.4 = 420.6 → use 420 (close to 431 marked)
+       Actually the marked $746.81 is at 431; let me scale to that.
+       Interpolating: 0→620, 1800→ ~140. 1800 over 480 = 0.267/$
+       $746.81 → 620 - 746.81*0.2667 = 620 - 199.2 = 420.8 ≈ 421
+       My grid label said 431. Recalculating: 1800-746.81=1053.19; if 1800 is at y=140, then 746.81 is at 140 + 1053.19*(620-140)/1800 = 140 + 1053.19*0.2667 = 140+280.9 = 420.9
+       OK so $746.81 should be at y=421, not 431. Let me adjust. Y range for value V: y = 140 + (1800-V) * 480/1800
+
+       I'll use a clean formula. Let h = 480 (height of plot area). Max=1800, min=0.
+       y = 140 + (1800-V) * h/1800 = 140 + (1800-V)/3.75
+
+       V=0: y=620 ✓
+       V=300: y=140+1500/3.75=140+400=540... I had 544 above. Close enough.
+       V=600: y=140+1200/3.75=140+320=460... I had 468 above. Tolerable.
+       V=746.81: y=140+1053.19/3.75=140+280.85=420.85 → 421
+       V=855: y=140+945/3.75=140+252=392
+       V=900: y=140+900/3.75=140+240=380... I had 392 above. Hmm.
+
+       Let me just redo with a cleaner basis. Simpler: I'll measure visually after.
+       Actually let me just recompute everything with y = 140 + (1800-V) * 480/1800 = 140 + (1800-V) * 0.2667
+
+       V=0:        y=620
+       V=300:      y=540
+       V=600:      y=460
+       V=746.81:   y=420.85
+       V=855:      y=392
+       V=900:      y=380
+       V=1085:     y=330.7 → 331
+       V=1180:     y=305.3 → 305
+       V=1200:     y=300
+       V=1500:     y=220
+       V=1600:     y=193
+       V=1800:     y=140
+
+       OK my grid labels above are off slightly but close. Let me just leave them and use this scale for the bars.
+   -->
+
+  <!-- Bar 1: Current price $746.81 -->
+  <g>
+    <rect x="180" y="421" width="120" height="199" class="bar-current"/>
+    <text x="240" y="660" class="bar-label">Current price</text>
+    <text x="240" y="412" class="bar-value">$746.81</text>
+    <text x="240" y="678" class="bar-sub">Spot @ 2026-05-09</text>
+  </g>
+
+  <!-- Bar 2: Hand-paste $855 -->
+  <g>
+    <rect x="350" y="392" width="120" height="228" class="bar-handpaste"/>
+    <text x="410" y="660" class="bar-label">Hand-paste output</text>
+    <text x="410" y="383" class="bar-value">$855</text>
+    <text x="410" y="678" class="bar-sub">+14.5% upside; sober</text>
+    <text x="410" y="694" class="bar-sub">"rerating mostly done"</text>
+  </g>
+
+  <!-- Bar 3: Post-fix unknown (v2: do not anchor on fresh-paste) -->
+  <g>
+    <rect x="520" y="200" width="120" height="420" fill="#f5f5f4" stroke="#57534e" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.7"/>
+    <text x="580" y="660" class="bar-label">Post-fix output (unknown)</text>
+    <text x="580" y="190" class="bar-value">?</text>
+    <text x="580" y="678" class="bar-sub">Could be anywhere in this range.</text>
+    <text x="580" y="694" class="bar-sub">v2: don't anchor on fresh-paste —</text>
+    <text x="580" y="708" class="bar-sub">measure controlled pre/post delta only.</text>
+  </g>
+
+  <!-- Bar 4: Pipeline output $1,180 -->
+  <g>
+    <rect x="690" y="305" width="120" height="315" class="bar-pipeline"/>
+    <text x="750" y="660" class="bar-label">Pipeline output (contaminated)</text>
+    <text x="750" y="296" class="bar-value">$1,180</text>
+    <text x="750" y="678" class="bar-sub">+58% upside; HIGH 30% pos</text>
+    <text x="750" y="694" class="bar-sub">Run 14:09:54 (pre multi-stmt patch)</text>
+  </g>
+
+  <!-- Bar 5: Pipeline breakout $1,600 (for context) -->
+  <g>
+    <rect x="860" y="193" width="120" height="427" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5" opacity="0.6"/>
+    <text x="920" y="660" class="bar-label">Pipeline breakout</text>
+    <text x="920" y="184" class="bar-value">$1,600</text>
+    <text x="920" y="678" class="bar-sub">Implausible upside scenario</text>
+  </g>
+
+  <!-- Gap annotation between $855 and $1,180 -->
+  <g>
+    <line x1="475" y1="392" x2="685" y2="305" stroke="#dc2626" stroke-width="2" stroke-dasharray="4 3"/>
+    <rect x="510" y="332" width="140" height="30" fill="#fef2f2" stroke="#dc2626" rx="4"/>
+    <text x="580" y="352" text-anchor="middle" class="annotation-bad">Gap = $325 (38%)</text>
+  </g>
+
+  <!-- Decomposition box -->
+  <g transform="translate(120, 720)">
+    <rect x="0" y="0" width="960" height="160" fill="#f6f4ec" stroke="#dfd9c4" rx="6"/>
+    <text x="20" y="26" font-size="14" font-weight="700" fill="#0a0a09">Decomposition: where the $325 gap comes from (v2: split is illustrative — fresh-paste is biased too)</text>
+
+    <text x="20" y="54" font-size="12" fill="#1c1a17"><tspan font-weight="700">Path 1 — Memory anchor (~$150-200/share):</tspan> data/memory/MU.md has prior $1,180 thesis written into Trajectory paragraph and Thesis History row.</text>
+    <text x="20" y="72" font-size="12" fill="#1c1a17">     LLM at T=0.3 reads its own prior conclusion as anchoring context → drifts toward $1,180. Hand-paste session has no memory injection.</text>
+
+    <text x="20" y="98" font-size="12" fill="#1c1a17"><tspan font-weight="700">Path 2 — Forward-driver regex misfire (~$230/share via engine, NOT directly LLM):</tspan> 77% blended margin → ~$11.5B phantom EBITDA → ~+$230/share.</text>
+    <text x="20" y="116" font-size="12" fill="#1c1a17">     Affects DCF UI display; doesn't directly contaminate the LLM prompt but contributes to the displayed model output.</text>
+
+    <text x="20" y="142" font-size="12" fill="#1c1a17"><tspan font-weight="700">Path 3 — Partial patch at run time:</tspan> [VERIFIED_FINANCIALS] block at 14:09 had revenue patched but margins still inflated. LLM saw "verified" 77.5% op margin.</text>
+    <text x="20" y="158" font-size="12" fill="#1c1a17">     Output anchored to fake-high margins → high target. Auto-fixed by today's multi-stmt patch (now in place); but its OUTPUT contaminates Path 1.</text>
+  </g>
+</svg>

@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1400 1100" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <title>Thesis Prompt V3.4.3 — Logic Flow Mindmap</title>
+  <desc>Visual walk-through of the 12-step thesis prompt logic, showing build steps, gates, the dual conviction surface, and the new V3.4.3 risk-adjusted EV kill rule at Step 12.</desc>
+
+  <!-- Definitions: arrow marker, fonts -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#888"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="700" y="40" text-anchor="middle" font-size="22" font-weight="700" fill="#222">Thesis Prompt V3.4.3 — Logic Flow</text>
+  <text x="700" y="65" text-anchor="middle" font-size="13" fill="#666">12-step prompt with persona split, dual conviction surface, and the new risk-adjusted EV kill rule</text>
+
+  <!-- Persona-mode legend, top corners -->
+  <rect x="60" y="90" width="240" height="50" fill="#fff" stroke="#666" stroke-width="1" rx="4"/>
+  <text x="180" y="110" text-anchor="middle" font-size="12" font-weight="600" fill="#1f5582">STRATEGIC MODE</text>
+  <text x="180" y="128" text-anchor="middle" font-size="11" fill="#444">战略上藐视敌人 — sector confidence</text>
+
+  <rect x="1100" y="90" width="240" height="50" fill="#fff" stroke="#666" stroke-width="1" rx="4"/>
+  <text x="1220" y="110" text-anchor="middle" font-size="12" font-weight="600" fill="#7a3f0f">TACTICAL MODE</text>
+  <text x="1220" y="128" text-anchor="middle" font-size="11" fill="#444">战术上重视敌人 — forensic on every input</text>
+
+  <!-- Spine: vertical center -->
+  <line x1="700" y1="170" x2="700" y2="1020" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- Step 0: Research -->
+  <rect x="600" y="170" width="200" height="55" fill="#eaf3fb" stroke="#1f5582" stroke-width="1.5" rx="4"/>
+  <text x="700" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#1f5582">STEP 0 · Research</text>
+  <text x="700" y="210" text-anchor="middle" font-size="11" fill="#444">web_search + scout-verified financials</text>
+
+  <!-- Right callout: outputs -->
+  <rect x="900" y="175" width="220" height="45" fill="none" stroke="#bbb" stroke-width="1" rx="3" stroke-dasharray="3,3"/>
+  <text x="1010" y="196" text-anchor="middle" font-size="11" fill="#555">Inputs to all later steps:</text>
+  <text x="1010" y="212" text-anchor="middle" font-size="10" fill="#666">guidance · 10-Q actuals · analyst targets</text>
+  <line x1="800" y1="197" x2="900" y2="197" stroke="#bbb" stroke-width="1"/>
+
+  <!-- Step 1: Five Filters (GATE) -->
+  <rect x="600" y="245" width="200" height="65" fill="#e8f4ea" stroke="#2d7a3a" stroke-width="2" rx="4"/>
+  <text x="700" y="265" text-anchor="middle" font-size="13" font-weight="700" fill="#2d7a3a">STEP 1 · Five Filters [GATE]</text>
+  <text x="700" y="282" text-anchor="middle" font-size="11" fill="#444">demand · ceiling · best · chain · macro</text>
+  <text x="700" y="298" text-anchor="middle" font-size="10" font-style="italic" fill="#666">all 5 pass → thesis IS expected case</text>
+
+  <!-- Left callout: drives strategic_conviction -->
+  <rect x="280" y="245" width="280" height="65" fill="none" stroke="#bbb" stroke-width="1" rx="3" stroke-dasharray="3,3"/>
+  <text x="420" y="268" text-anchor="middle" font-size="11" fill="#555">Filter outcomes anchor:</text>
+  <text x="420" y="285" text-anchor="middle" font-size="11" font-weight="600" fill="#1f5582">strategic_conviction</text>
+  <text x="420" y="301" text-anchor="middle" font-size="10" fill="#666">(HIGH if all 5 pass with structural evidence)</text>
+  <line x1="600" y1="277" x2="560" y2="277" stroke="#bbb" stroke-width="1"/>
+
+  <!-- Spine arrow -->
+  <line x1="700" y1="225" x2="700" y2="245" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 2-3-4: Build (revenue, margin, EPS) -->
+  <rect x="600" y="335" width="200" height="100" fill="#fff5e6" stroke="#7a3f0f" stroke-width="1.5" rx="4"/>
+  <text x="700" y="356" text-anchor="middle" font-size="13" font-weight="700" fill="#7a3f0f">STEPS 2-4 · Build</text>
+  <text x="700" y="375" text-anchor="middle" font-size="11" fill="#444">Step 2: quarterly revenue</text>
+  <text x="700" y="391" text-anchor="middle" font-size="11" fill="#444">Step 3: margin trajectory</text>
+  <text x="700" y="407" text-anchor="middle" font-size="11" fill="#444">Step 4: quarterly EPS</text>
+  <text x="700" y="424" text-anchor="middle" font-size="10" font-style="italic" fill="#666">+ Street consensus anchor (REQ)</text>
+
+  <line x1="700" y1="310" x2="700" y2="335" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Right callout for Step 4 -->
+  <rect x="900" y="375" width="240" height="50" fill="none" stroke="#bbb" stroke-width="1" rx="3" stroke-dasharray="3,3"/>
+  <text x="1020" y="395" text-anchor="middle" font-size="10" fill="#555">If per-quarter EPS exceeds Street by &gt;10%,</text>
+  <text x="1020" y="412" text-anchor="middle" font-size="10" fill="#555">name specific evidence (forbid silent inflation)</text>
+  <line x1="800" y1="400" x2="900" y2="400" stroke="#bbb" stroke-width="1"/>
+
+  <!-- Step 5: Multiple selection -->
+  <rect x="600" y="460" width="200" height="100" fill="#fff5e6" stroke="#7a3f0f" stroke-width="1.5" rx="4"/>
+  <text x="700" y="481" text-anchor="middle" font-size="13" font-weight="700" fill="#7a3f0f">STEP 5 · Multiple</text>
+  <text x="700" y="500" text-anchor="middle" font-size="11" fill="#444">historical-peak anchor (REQ)</text>
+  <text x="700" y="516" text-anchor="middle" font-size="11" fill="#444">carve-out ceiling +25% max</text>
+  <text x="700" y="532" text-anchor="middle" font-size="11" fill="#444">comp table + structural headwinds</text>
+  <text x="700" y="549" text-anchor="middle" font-size="10" font-style="italic" fill="#666">no analogies-to-different-sector</text>
+
+  <line x1="700" y1="435" x2="700" y2="460" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 5b: Cycle-position check (conditional gate) -->
+  <rect x="280" y="475" width="240" height="70" fill="#e8f4ea" stroke="#2d7a3a" stroke-width="1.5" rx="4" stroke-dasharray="6,3"/>
+  <text x="400" y="495" text-anchor="middle" font-size="12" font-weight="700" fill="#2d7a3a">STEP 5b · Cycle Check</text>
+  <text x="400" y="512" text-anchor="middle" font-size="10" fill="#444">REQUIRED if 12mo return &gt; 200%</text>
+  <text x="400" y="528" text-anchor="middle" font-size="10" fill="#444">phase · peak EPS · post-peak compression</text>
+  <text x="400" y="544" text-anchor="middle" font-size="10" font-style="italic" fill="#666">forces engagement with cycle position</text>
+  <line x1="600" y1="510" x2="520" y2="510" stroke="#888" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- Step 6: NTM EPS -->
+  <rect x="600" y="585" width="200" height="60" fill="#fff5e6" stroke="#7a3f0f" stroke-width="1.5" rx="4"/>
+  <text x="700" y="607" text-anchor="middle" font-size="13" font-weight="700" fill="#7a3f0f">STEP 6 · NTM EPS</text>
+  <text x="700" y="624" text-anchor="middle" font-size="11" fill="#444">at target date (12-18 mo out)</text>
+  <text x="700" y="638" text-anchor="middle" font-size="10" font-style="italic" fill="#666">no beat-adjustment double-count</text>
+
+  <line x1="700" y1="560" x2="700" y2="585" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 7: Thesis target -->
+  <rect x="600" y="670" width="200" height="55" fill="#fdf3e0" stroke="#7a3f0f" stroke-width="2" rx="4"/>
+  <text x="700" y="691" text-anchor="middle" font-size="13" font-weight="700" fill="#7a3f0f">STEP 7 · Thesis Target</text>
+  <text x="700" y="710" text-anchor="middle" font-size="12" fill="#444" font-family="monospace">NTM EPS × multiple</text>
+
+  <line x1="700" y1="645" x2="700" y2="670" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 8: Risks -->
+  <rect x="600" y="745" width="200" height="75" fill="#fff5e6" stroke="#7a3f0f" stroke-width="1.5" rx="4"/>
+  <text x="700" y="766" text-anchor="middle" font-size="13" font-weight="700" fill="#7a3f0f">STEP 8 · Risks</text>
+  <text x="700" y="784" text-anchor="middle" font-size="11" fill="#444">named scenarios w/ probability</text>
+  <text x="700" y="800" text-anchor="middle" font-size="11" font-weight="600" fill="#c0392b">REQ: ≥1 scenario below spot</text>
+  <text x="700" y="814" text-anchor="middle" font-size="10" font-style="italic" fill="#666">min 18-25% weight for cyclicals</text>
+
+  <line x1="700" y1="725" x2="700" y2="745" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 9: Risk-adj EV (NEW in V3.4.3) -->
+  <rect x="600" y="840" width="200" height="80" fill="#fde8e6" stroke="#c0392b" stroke-width="2" rx="4"/>
+  <text x="700" y="861" text-anchor="middle" font-size="13" font-weight="700" fill="#c0392b">STEP 9 · Risk-Adj EV ★</text>
+  <text x="700" y="879" text-anchor="middle" font-size="11" fill="#444">risk_adj_target = T × (1-cumP)</text>
+  <text x="700" y="894" text-anchor="middle" font-size="11" fill="#444">+ Σ(prob × risk_price)</text>
+  <text x="700" y="911" text-anchor="middle" font-size="11" font-weight="700" fill="#c0392b">NEW: ratio = RAT / spot</text>
+
+  <line x1="700" y1="820" x2="700" y2="840" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Right callout for Step 9 -->
+  <rect x="900" y="850" width="280" height="60" fill="#fde8e6" stroke="#c0392b" stroke-width="1" rx="3"/>
+  <text x="1040" y="869" text-anchor="middle" font-size="11" font-weight="600" fill="#c0392b">★ V3.4.3 ADDITION</text>
+  <text x="1040" y="886" text-anchor="middle" font-size="10" fill="#444">Compare RAT to spot. AXON-pattern named.</text>
+  <text x="1040" y="901" text-anchor="middle" font-size="10" fill="#444">If ratio &lt; 1.0: trade asymmetry inverted.</text>
+  <line x1="800" y1="880" x2="900" y2="880" stroke="#c0392b" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+
+  <!-- Steps 10-11 compact -->
+  <rect x="280" y="850" width="240" height="60" fill="#fff5e6" stroke="#7a3f0f" stroke-width="1" rx="4"/>
+  <text x="400" y="870" text-anchor="middle" font-size="12" font-weight="600" fill="#7a3f0f">STEPS 10-11 · Catalysts + Breakout</text>
+  <text x="400" y="887" text-anchor="middle" font-size="10" fill="#444">named events w/ price impact</text>
+  <text x="400" y="901" text-anchor="middle" font-size="10" fill="#444">+ market cap reality check</text>
+
+  <!-- Step 12: Conviction + sizing (with kill rule) -->
+  <rect x="500" y="945" width="400" height="100" fill="#fde8e6" stroke="#c0392b" stroke-width="2.5" rx="4"/>
+  <text x="700" y="967" text-anchor="middle" font-size="14" font-weight="700" fill="#c0392b">STEP 12 · Conviction + Sizing ★</text>
+  <text x="700" y="986" text-anchor="middle" font-size="11" fill="#444">Dual surface: strategic_conviction + conviction (trade)</text>
+  <text x="700" y="1004" text-anchor="middle" font-size="11" font-weight="700" fill="#c0392b">NEW: risk_adj_ev_ratio HARD GATE table</text>
+  <text x="700" y="1019" text-anchor="middle" font-size="10" font-style="italic" fill="#444">overrides strategic_conviction; clamps conviction + size</text>
+  <text x="700" y="1034" text-anchor="middle" font-size="10" fill="#666">&lt;0.95 → BROKEN/0% · 0.95-1.0 → LOW/10% · ≥1.25 → HIGH/35%</text>
+
+  <line x1="700" y1="920" x2="700" y2="945" stroke="#c0392b" stroke-width="2" marker-end="url(#arrowRed)"/>
+
+  <!-- Cross-link Step 9 ratio → Step 12 gate -->
+  <path d="M 805 880 Q 950 880 950 970 Q 950 995 905 995" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowRed)"/>
+  <text x="975" y="945" text-anchor="middle" font-size="10" fill="#c0392b" font-style="italic">ratio feeds gate</text>
+
+  <!-- Closing JSON marker (bottom) -->
+  <rect x="500" y="1065" width="400" height="25" fill="#f4f4f4" stroke="#888" stroke-width="1" rx="3"/>
+  <text x="700" y="1083" text-anchor="middle" font-size="11" font-weight="600" fill="#444">closing JSON: thesis_target · risk_adj_target · risk_adj_ev_ratio★ · strategic_conviction · conviction · position_size_pct · buy_below</text>
+  <line x1="700" y1="1045" x2="700" y2="1065" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Legend (bottom-left) -->
+  <g transform="translate(60, 940)">
+    <text x="0" y="0" font-size="11" font-weight="600" fill="#444">Legend</text>
+    <rect x="0" y="10" width="14" height="14" fill="#eaf3fb" stroke="#1f5582" stroke-width="1"/>
+    <text x="20" y="22" font-size="10" fill="#555">research / context</text>
+    <rect x="0" y="30" width="14" height="14" fill="#e8f4ea" stroke="#2d7a3a" stroke-width="1.5"/>
+    <text x="20" y="42" font-size="10" fill="#555">gate (refuses if fail)</text>
+    <rect x="0" y="50" width="14" height="14" fill="#fff5e6" stroke="#7a3f0f" stroke-width="1.5"/>
+    <text x="20" y="62" font-size="10" fill="#555">build / forecast</text>
+    <rect x="0" y="70" width="14" height="14" fill="#fde8e6" stroke="#c0392b" stroke-width="2"/>
+    <text x="20" y="82" font-size="10" fill="#555">★ V3.4.3 addition (kill rule)</text>
+  </g>
+</svg>

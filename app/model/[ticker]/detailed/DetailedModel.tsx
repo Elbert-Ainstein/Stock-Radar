@@ -141,6 +141,29 @@ export default function DetailedModel({ ticker }: { ticker: string }) {
           </div>
         )}
 
+        {/* Data source badge — surfaces which provider served this payload.
+            Useful when the per-ticker override config (config/data_provider_overrides.json)
+            forces a non-default provider (e.g. MU → eodhd to dodge the yfinance bug). */}
+        {payload.source && (
+          <div style={{
+            marginBottom: 8, display: "flex", alignItems: "center", gap: 8,
+            fontSize: 10, color: "var(--sr-ink-3)",
+          }}>
+            <span style={{ textTransform: "uppercase", letterSpacing: "0.08em" }}>Data:</span>
+            <span style={{
+              fontFamily: "var(--font-mono)",
+              padding: "2px 8px", borderRadius: 3,
+              background: payload.source === "yfinance" ? "var(--sr-paper-2)" : "var(--sr-conv-good-bg)",
+              color: payload.source === "yfinance" ? "var(--sr-ink-2)" : "var(--sr-conv-good)",
+              border: `1px solid ${payload.source === "yfinance" ? "var(--sr-rule-soft)" : "var(--sr-conv-good)"}`,
+              fontWeight: 600,
+            }}>{payload.source}</span>
+            {payload.fetched_at && (
+              <span style={{ fontSize: 10, opacity: 0.7 }}>· fetched {new Date(payload.fetched_at).toLocaleString()}</span>
+            )}
+          </div>
+        )}
+
         {/* DCF summary — 4 tiles, secondary to thesis */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 14 }}>
           <Summary label="Current" value={fmtDollar(payload.target.current_price)} />
@@ -188,7 +211,7 @@ export default function DetailedModel({ ticker }: { ticker: string }) {
         {tab === "income" && <IncomeTab payload={payload} />}
         {tab === "cashflow" && <CashTab payload={payload} />}
         {tab === "formulas" && <FormulasTab payload={payload} />}
-        {tab === "whatif" && <WhatIfTab payload={payload} />}
+        {tab === "whatif" && <WhatIfTab payload={payload} ticker={ticker} />}
 
         {payload.warnings && payload.warnings.length > 0 && (
           <div style={{

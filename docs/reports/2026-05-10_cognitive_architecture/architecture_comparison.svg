@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1400 900" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" role="img">
+  <title>Frame-flexible human vs frame-locked LLM — architectural comparison</title>
+  <desc>Side-by-side comparison of how a human processes a stock through multiple frames in parallel vs how the thesis prompt processes it sequentially through one frame.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#666"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+
+  <text x="700" y="40" text-anchor="middle" font-size="22" font-weight="700" fill="#222">Frame-Flexible Human vs Frame-Locked LLM</text>
+  <text x="700" y="62" text-anchor="middle" font-size="13" fill="#666">Same stock, same inputs, different processing architectures.</text>
+
+  <!-- Vertical divider -->
+  <line x1="700" y1="90" x2="700" y2="850" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- LEFT SIDE: Human (frame-flexible) -->
+  <text x="350" y="105" text-anchor="middle" font-size="16" font-weight="700" fill="#1f5582">Human Investor (frame-flexible)</text>
+  <text x="350" y="125" text-anchor="middle" font-size="11" fill="#666">multiple frames in parallel, adaptive switching, integrated judgment</text>
+
+  <!-- Input box -->
+  <rect x="180" y="150" width="340" height="50" fill="#fff" stroke="#666" stroke-width="1" rx="4"/>
+  <text x="350" y="172" text-anchor="middle" font-size="12" font-weight="600" fill="#444">Inputs</text>
+  <text x="350" y="190" text-anchor="middle" font-size="10" fill="#555">financials · guidance · backlog · partnerships · history</text>
+
+  <!-- 8 frame boxes in 2 columns of 4 -->
+  <g font-size="10" fill="#444">
+    <rect x="180" y="220" width="155" height="55" fill="#eaf3fb" stroke="#1f5582" stroke-width="1" rx="4"/>
+    <text x="257" y="241" text-anchor="middle" font-size="11" font-weight="600" fill="#1f5582">Pattern-recog.</text>
+    <text x="257" y="258" text-anchor="middle">"like NVDA 2023?"</text>
+
+    <rect x="365" y="220" width="155" height="55" fill="#eaf3fb" stroke="#1f5582" stroke-width="1" rx="4"/>
+    <text x="442" y="241" text-anchor="middle" font-size="11" font-weight="600" fill="#1f5582">Positioning</text>
+    <text x="442" y="258" text-anchor="middle">"who's long?"</text>
+
+    <rect x="180" y="290" width="155" height="55" fill="#eaf3fb" stroke="#1f5582" stroke-width="1" rx="4"/>
+    <text x="257" y="311" text-anchor="middle" font-size="11" font-weight="600" fill="#1f5582">Mgmt credibility</text>
+    <text x="257" y="328" text-anchor="middle">"can I trust guide?"</text>
+
+    <rect x="365" y="290" width="155" height="55" fill="#eaf3fb" stroke="#1f5582" stroke-width="1" rx="4"/>
+    <text x="442" y="311" text-anchor="middle" font-size="11" font-weight="600" fill="#1f5582">Narrative</text>
+    <text x="442" y="328" text-anchor="middle">"building or peak?"</text>
+
+    <rect x="180" y="360" width="155" height="55" fill="#eaf3fb" stroke="#1f5582" stroke-width="1" rx="4"/>
+    <text x="257" y="381" text-anchor="middle" font-size="11" font-weight="600" fill="#1f5582">Cross-domain</text>
+    <text x="257" y="398" text-anchor="middle">"regime shift?"</text>
+
+    <rect x="365" y="360" width="155" height="55" fill="#eaf3fb" stroke="#1f5582" stroke-width="1" rx="4"/>
+    <text x="442" y="381" text-anchor="middle" font-size="11" font-weight="600" fill="#1f5582">Adversarial</text>
+    <text x="442" y="398" text-anchor="middle">"steel-man bear"</text>
+
+    <rect x="180" y="430" width="155" height="55" fill="#eaf3fb" stroke="#1f5582" stroke-width="1" rx="4"/>
+    <text x="257" y="451" text-anchor="middle" font-size="11" font-weight="600" fill="#1f5582">Simulation</text>
+    <text x="257" y="468" text-anchor="middle">"12mo backward"</text>
+
+    <rect x="365" y="430" width="155" height="55" fill="#fdf3e0" stroke="#7a3f0f" stroke-width="1" rx="4"/>
+    <text x="442" y="451" text-anchor="middle" font-size="11" font-weight="600" fill="#7a3f0f">Quick-math</text>
+    <text x="442" y="468" text-anchor="middle">"EPS × multiple"</text>
+  </g>
+
+  <!-- Lines from input to frames -->
+  <g stroke="#bbb" stroke-width="1">
+    <line x1="350" y1="200" x2="257" y2="220"/>
+    <line x1="350" y1="200" x2="442" y2="220"/>
+    <line x1="350" y1="200" x2="257" y2="290"/>
+    <line x1="350" y1="200" x2="442" y2="290"/>
+    <line x1="350" y1="200" x2="257" y2="360"/>
+    <line x1="350" y1="200" x2="442" y2="360"/>
+    <line x1="350" y1="200" x2="257" y2="430"/>
+    <line x1="350" y1="200" x2="442" y2="430"/>
+  </g>
+
+  <!-- Integration node -->
+  <rect x="220" y="540" width="260" height="60" fill="#fff5e6" stroke="#7a3f0f" stroke-width="2" rx="6"/>
+  <text x="350" y="562" text-anchor="middle" font-size="12" font-weight="700" fill="#7a3f0f">Integration / cross-frame check</text>
+  <text x="350" y="580" text-anchor="middle" font-size="10" fill="#555">where do frames AGREE? where do they DISAGREE?</text>
+  <text x="350" y="595" text-anchor="middle" font-size="10" font-style="italic" fill="#666">disagreement = the signal</text>
+
+  <!-- Lines from frames to integration -->
+  <g stroke="#888" stroke-width="1" stroke-dasharray="2,2">
+    <line x1="257" y1="275" x2="305" y2="540"/>
+    <line x1="442" y1="275" x2="395" y2="540"/>
+    <line x1="257" y1="345" x2="305" y2="540"/>
+    <line x1="442" y1="345" x2="395" y2="540"/>
+    <line x1="257" y1="415" x2="305" y2="540"/>
+    <line x1="442" y1="415" x2="395" y2="540"/>
+    <line x1="257" y1="485" x2="305" y2="540"/>
+    <line x1="442" y1="485" x2="395" y2="540"/>
+  </g>
+
+  <!-- Output -->
+  <line x1="350" y1="600" x2="350" y2="640" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="220" y="640" width="260" height="50" fill="#e8f4ea" stroke="#2d7a3a" stroke-width="2" rx="6"/>
+  <text x="350" y="662" text-anchor="middle" font-size="12" font-weight="700" fill="#2d7a3a">Position: target $1,800 (dad's view)</text>
+  <text x="350" y="680" text-anchor="middle" font-size="10" fill="#555">multi-frame integration produced this conviction</text>
+
+  <!-- RIGHT SIDE: System (frame-locked) -->
+  <text x="1050" y="105" text-anchor="middle" font-size="16" font-weight="700" fill="#c0392b">System / Thesis Prompt (frame-locked)</text>
+  <text x="1050" y="125" text-anchor="middle" font-size="11" fill="#666">12 sequential steps, one frame, deterministic order</text>
+
+  <rect x="880" y="150" width="340" height="50" fill="#fff" stroke="#666" stroke-width="1" rx="4"/>
+  <text x="1050" y="172" text-anchor="middle" font-size="12" font-weight="600" fill="#444">Inputs (same as left)</text>
+  <text x="1050" y="190" text-anchor="middle" font-size="10" fill="#555">financials · guidance · backlog · partnerships · history</text>
+
+  <!-- Sequential steps -->
+  <g>
+    <rect x="900" y="220" width="300" height="40" fill="#fdf3e0" stroke="#7a3f0f" stroke-width="1" rx="4"/>
+    <text x="1050" y="246" text-anchor="middle" font-size="11" fill="#444"><tspan font-weight="600">Step 1:</tspan> Five filters (gate)</text>
+
+    <line x1="1050" y1="260" x2="1050" y2="280" stroke="#888" stroke-width="1" marker-end="url(#arrow)"/>
+    <rect x="900" y="280" width="300" height="40" fill="#fdf3e0" stroke="#7a3f0f" stroke-width="1" rx="4"/>
+    <text x="1050" y="306" text-anchor="middle" font-size="11" fill="#444"><tspan font-weight="600">Steps 2-4:</tspan> Revenue / margin / EPS build</text>
+
+    <line x1="1050" y1="320" x2="1050" y2="340" stroke="#888" stroke-width="1" marker-end="url(#arrow)"/>
+    <rect x="900" y="340" width="300" height="40" fill="#fdf3e0" stroke="#7a3f0f" stroke-width="1" rx="4"/>
+    <text x="1050" y="366" text-anchor="middle" font-size="11" fill="#444"><tspan font-weight="600">Step 5:</tspan> Multiple selection (45x anchor)</text>
+
+    <line x1="1050" y1="380" x2="1050" y2="400" stroke="#888" stroke-width="1" marker-end="url(#arrow)"/>
+    <rect x="900" y="400" width="300" height="40" fill="#fdf3e0" stroke="#7a3f0f" stroke-width="1" rx="4"/>
+    <text x="1050" y="426" text-anchor="middle" font-size="11" fill="#444"><tspan font-weight="600">Steps 6-7:</tspan> NTM EPS × multiple = target</text>
+
+    <line x1="1050" y1="440" x2="1050" y2="460" stroke="#888" stroke-width="1" marker-end="url(#arrow)"/>
+    <rect x="900" y="460" width="300" height="40" fill="#fdf3e0" stroke="#7a3f0f" stroke-width="1" rx="4"/>
+    <text x="1050" y="486" text-anchor="middle" font-size="11" fill="#444"><tspan font-weight="600">Steps 8-9:</tspan> Risks + risk-adj EV ratio</text>
+
+    <line x1="1050" y1="500" x2="1050" y2="520" stroke="#c0392b" stroke-width="2" marker-end="url(#arrowRed)"/>
+    <rect x="900" y="520" width="300" height="60" fill="#fde8e6" stroke="#c0392b" stroke-width="2" rx="4"/>
+    <text x="1050" y="541" text-anchor="middle" font-size="11" font-weight="700" fill="#c0392b">Step 12: kill rule (ratio &lt; 0.95 → BROKEN)</text>
+    <text x="1050" y="557" text-anchor="middle" font-size="10" fill="#444">ratio = $753 / $903.80 = 0.833</text>
+    <text x="1050" y="572" text-anchor="middle" font-size="10" fill="#c0392b">→ BROKEN regardless of strategic conviction</text>
+  </g>
+
+  <!-- Output -->
+  <line x1="1050" y1="580" x2="1050" y2="640" stroke="#c0392b" stroke-width="2" marker-end="url(#arrowRed)"/>
+  <rect x="920" y="640" width="260" height="50" fill="#fde8e6" stroke="#c0392b" stroke-width="2" rx="6"/>
+  <text x="1050" y="662" text-anchor="middle" font-size="12" font-weight="700" fill="#c0392b">Position: BROKEN, 0%, target $960</text>
+  <text x="1050" y="680" text-anchor="middle" font-size="10" fill="#555">single-frame derivation produced this refusal</text>
+
+  <!-- Bottom comparison block -->
+  <rect x="100" y="730" width="1200" height="130" fill="#fafafa" stroke="#ccc" stroke-width="1" rx="6"/>
+  <text x="700" y="755" text-anchor="middle" font-size="13" font-weight="700" fill="#444">The architectural gap</text>
+  <text x="120" y="780" font-size="11" fill="#555"><tspan font-weight="600">Human:</tspan> processes inputs through ~8 frames in parallel, integrates with cross-frame check, disagreements flag where to dig deeper.</text>
+  <text x="120" y="800" font-size="11" fill="#555"><tspan font-weight="600">System:</tspan> processes inputs through 12 sequential steps within one frame (analytical-fundamental), produces gated output.</text>
+  <text x="120" y="824" font-size="11" fill="#555"><tspan font-weight="600">Where the gap matters:</tspan> Tier 1 early-stage candidates · regime shifts (NVDA-class re-ratings) · live human-system disagreement.</text>
+  <text x="120" y="844" font-size="11" fill="#c0392b" font-weight="600">The null hypothesis (Section 4.5):</tspan> the gap may be simpler than "cognitive architecture" — it may be that Step 5's multiple anchor is wrong for regime shifts.</text>
+</svg>

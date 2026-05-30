@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1400 1000" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" role="img">
+  <title>Cognitive frames a skilled investor uses when evaluating a company</title>
+  <desc>Mindmap of eight cognitive frames a human investor pulls from in parallel, with brief description of what each frame asks and what data feeds it.</desc>
+
+  <text x="700" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#222">Cognitive Frames a Skilled Investor Uses</text>
+  <text x="700" y="62" text-anchor="middle" font-size="13" fill="#666">Eight illustrative frames a human runs in parallel; the system runs only the analytical-fundamental frame.</text>
+
+  <!-- Center node -->
+  <circle cx="700" cy="500" r="80" fill="#fff8e6" stroke="#7a3f0f" stroke-width="2"/>
+  <text x="700" y="490" text-anchor="middle" font-size="14" font-weight="700" fill="#7a3f0f">Stock</text>
+  <text x="700" y="510" text-anchor="middle" font-size="12" fill="#444">evaluation</text>
+  <text x="700" y="528" text-anchor="middle" font-size="11" font-style="italic" fill="#666">"is this a good trade?"</text>
+
+  <!-- Frame nodes - 8 frames arranged radially -->
+  <!-- Frame 1: Pattern-recognition (top) -->
+  <g>
+    <line x1="700" y1="420" x2="700" y2="240" stroke="#888" stroke-width="1.5"/>
+    <rect x="540" y="170" width="320" height="70" fill="#eaf3fb" stroke="#1f5582" stroke-width="1.5" rx="6"/>
+    <text x="700" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#1f5582">Pattern-recognition</text>
+    <text x="700" y="210" text-anchor="middle" font-size="11" fill="#444">"What prior setup does this look like?"</text>
+    <text x="700" y="226" text-anchor="middle" font-size="10" font-style="italic" fill="#666">NVDA 2023 vs LITE 2017</text>
+  </g>
+
+  <!-- Frame 2: Sentiment / positioning (top-right) -->
+  <g>
+    <line x1="755" y1="445" x2="1010" y2="290" stroke="#888" stroke-width="1.5"/>
+    <rect x="980" y="220" width="320" height="70" fill="#eaf3fb" stroke="#1f5582" stroke-width="1.5" rx="6"/>
+    <text x="1140" y="242" text-anchor="middle" font-size="13" font-weight="700" fill="#1f5582">Sentiment / Positioning</text>
+    <text x="1140" y="260" text-anchor="middle" font-size="11" fill="#444">"Where are credible peers positioned?"</text>
+    <text x="1140" y="276" text-anchor="middle" font-size="10" font-style="italic" fill="#666">13F, insider, options skew, short int.</text>
+  </g>
+
+  <!-- Frame 3: Management credibility (right) -->
+  <g>
+    <line x1="780" y1="500" x2="1010" y2="500" stroke="#888" stroke-width="1.5"/>
+    <rect x="980" y="465" width="320" height="70" fill="#eaf3fb" stroke="#1f5582" stroke-width="1.5" rx="6"/>
+    <text x="1140" y="487" text-anchor="middle" font-size="13" font-weight="700" fill="#1f5582">Management Credibility</text>
+    <text x="1140" y="505" text-anchor="middle" font-size="11" fill="#444">"Has this CEO earned trust?"</text>
+    <text x="1140" y="521" text-anchor="middle" font-size="10" font-style="italic" fill="#666">guide track record, narrative discipline</text>
+  </g>
+
+  <!-- Frame 4: Narrative momentum (bottom-right) -->
+  <g>
+    <line x1="755" y1="555" x2="1010" y2="710" stroke="#888" stroke-width="1.5"/>
+    <rect x="980" y="710" width="320" height="70" fill="#eaf3fb" stroke="#1f5582" stroke-width="1.5" rx="6"/>
+    <text x="1140" y="732" text-anchor="middle" font-size="13" font-weight="700" fill="#1f5582">Narrative Momentum</text>
+    <text x="1140" y="750" text-anchor="middle" font-size="11" fill="#444">"Is narrative building or peaking?"</text>
+    <text x="1140" y="766" text-anchor="middle" font-size="10" font-style="italic" fill="#666">news velocity, WSJ/FT density</text>
+  </g>
+
+  <!-- Frame 5: Quick-math (bottom) -->
+  <g>
+    <line x1="700" y1="580" x2="700" y2="760" stroke="#888" stroke-width="1.5"/>
+    <rect x="540" y="760" width="320" height="70" fill="#fdf3e0" stroke="#7a3f0f" stroke-width="1.5" rx="6"/>
+    <text x="700" y="782" text-anchor="middle" font-size="13" font-weight="700" fill="#7a3f0f">Analytical / Quick-math</text>
+    <text x="700" y="800" text-anchor="middle" font-size="11" fill="#444">"What's NTM EPS × multiple?"</text>
+    <text x="700" y="816" text-anchor="middle" font-size="10" font-style="italic" fill="#666">★ the only frame the system runs</text>
+  </g>
+
+  <!-- Frame 6: Mental simulation (bottom-left) -->
+  <g>
+    <line x1="645" y1="555" x2="390" y2="710" stroke="#888" stroke-width="1.5"/>
+    <rect x="100" y="710" width="320" height="70" fill="#eaf3fb" stroke="#1f5582" stroke-width="1.5" rx="6"/>
+    <text x="260" y="732" text-anchor="middle" font-size="13" font-weight="700" fill="#1f5582">Mental Simulation</text>
+    <text x="260" y="750" text-anchor="middle" font-size="11" fill="#444">"Imagine 12mo out, work backward"</text>
+    <text x="260" y="766" text-anchor="middle" font-size="10" font-style="italic" fill="#666">what had to be true to get there?</text>
+  </g>
+
+  <!-- Frame 7: Adversarial (left) -->
+  <g>
+    <line x1="620" y1="500" x2="390" y2="500" stroke="#888" stroke-width="1.5"/>
+    <rect x="100" y="465" width="320" height="70" fill="#eaf3fb" stroke="#1f5582" stroke-width="1.5" rx="6"/>
+    <text x="260" y="487" text-anchor="middle" font-size="13" font-weight="700" fill="#1f5582">Adversarial / Steel-man</text>
+    <text x="260" y="505" text-anchor="middle" font-size="11" fill="#444">"What would a credible bear say?"</text>
+    <text x="260" y="521" text-anchor="middle" font-size="10" font-style="italic" fill="#666">deliberate frame-switch as check</text>
+  </g>
+
+  <!-- Frame 8: Cross-domain analogy (top-left) -->
+  <g>
+    <line x1="645" y1="445" x2="390" y2="290" stroke="#888" stroke-width="1.5"/>
+    <rect x="100" y="220" width="320" height="70" fill="#eaf3fb" stroke="#1f5582" stroke-width="1.5" rx="6"/>
+    <text x="260" y="242" text-anchor="middle" font-size="13" font-weight="700" fill="#1f5582">Cross-domain Analogy</text>
+    <text x="260" y="260" text-anchor="middle" font-size="11" fill="#444">"Has this dynamic played out elsewhere?"</text>
+    <text x="260" y="276" text-anchor="middle" font-size="10" font-style="italic" fill="#666">ASML pre-EUV, NVDA pre-CUDA acceptance</text>
+  </g>
+
+  <!-- Annotation: system gap -->
+  <rect x="510" y="845" width="380" height="40" fill="#fde8e6" stroke="#c0392b" stroke-width="1.5" rx="6"/>
+  <text x="700" y="864" text-anchor="middle" font-size="11" font-weight="600" fill="#c0392b">System runs the ★ frame only.</text>
+  <text x="700" y="878" text-anchor="middle" font-size="10" fill="#444">The other seven are where the LITE-vs-dad gap lives.</text>
+
+  <!-- Bottom note -->
+  <text x="700" y="930" text-anchor="middle" font-size="11" fill="#666" font-style="italic">Taxonomy is illustrative, not derived. Klein/Tetlock/Munger support multi-frame integration as a meta-claim;</text>
+  <text x="700" y="947" text-anchor="middle" font-size="11" fill="#666" font-style="italic">this specific eight-item list is one plausible decomposition. Section 9 names four additional candidate frames.</text>
+</svg>

@@ -1,0 +1,189 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 1100" font-family="ui-sans-serif, system-ui, sans-serif">
+  <defs>
+    <style>
+      .heading { font-size: 22px; font-weight: 700; fill: #1c1a17; }
+      .subheading { font-size: 13px; fill: #57534e; font-style: italic; }
+      .layer-now { fill: #ecfccb; stroke: #65a30d; stroke-width: 1.5; }
+      .layer-phase-a { fill: #d1fae5; stroke: #16a34a; stroke-width: 2; }
+      .layer-phase-b { fill: #dbeafe; stroke: #2563eb; stroke-width: 1.5; stroke-dasharray: 4 3; }
+      .layer-phase-c { fill: #ede9fe; stroke: #7c3aed; stroke-width: 1.5; stroke-dasharray: 4 3; }
+      .layer-defer { fill: #f5f5f4; stroke: #78716c; stroke-width: 1.5; stroke-dasharray: 6 4; }
+      .layer-title { font-size: 15px; font-weight: 700; fill: #0a0a09; }
+      .layer-text { font-size: 11.5px; fill: #1c1a17; }
+      .layer-mono { font-family: ui-monospace, monospace; font-size: 10.5px; fill: #525252; }
+      .web-link { stroke: #847e6f; stroke-width: 1.5; fill: none; opacity: 0.6; }
+      .web-link-strong { stroke: #16a34a; stroke-width: 2.5; fill: none; }
+      .promo { stroke: #d97706; stroke-width: 2.2; fill: none; stroke-dasharray: 5 3; }
+      .legend-box { fill: #f6f4ec; stroke: #dfd9c4; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#847e6f"/>
+    </marker>
+    <marker id="arrow-promo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706"/>
+    </marker>
+  </defs>
+
+  <rect width="1700" height="1100" fill="#fcfcfa"/>
+
+  <text x="850" y="34" text-anchor="middle" class="heading">Memory / knowledge / logic web — five-layer architecture</text>
+  <text x="850" y="56" text-anchor="middle" class="subheading">Hume's question: progressive decay + cross-knowledge linking like a real human's mind. Recommendation: Phase A only now; layers earn their complexity.</text>
+
+  <!-- Center: prompt construction -->
+  <g transform="translate(700,470)">
+    <rect x="0" y="0" width="300" height="140" rx="10" fill="#1c1a17" stroke="#847e6f" stroke-width="2"/>
+    <text x="150" y="34" text-anchor="middle" font-size="16" font-weight="700" fill="#fcfcfa">Thesis prompt construction</text>
+    <text x="150" y="58" text-anchor="middle" font-size="12" fill="#aaa28e">run_thesis.py:652-682</text>
+    <text x="150" y="84" text-anchor="middle" font-size="11" fill="#fef3c7">Pulls layers as needed:</text>
+    <text x="150" y="100" text-anchor="middle" font-size="11" fill="#fef3c7">[VERIFIED_FINANCIALS]</text>
+    <text x="150" y="116" text-anchor="middle" font-size="11" fill="#fef3c7">[MEMORY_SECTION]</text>
+    <text x="150" y="132" text-anchor="middle" font-size="11" fill="#fef3c7">+ new placeholders</text>
+  </g>
+
+  <!-- Layer 1: Ticker memory (already exists) -->
+  <g transform="translate(60,150)">
+    <rect class="layer-now" x="0" y="0" width="320" height="240" rx="8"/>
+    <text class="layer-title" x="14" y="24">Layer 1 — Ticker memory</text>
+    <text class="layer-text" x="14" y="44" fill="#65a30d" font-weight="700">EXISTS · works for what it does</text>
+    <text class="layer-mono" x="14" y="64">data/memory/{TICKER}.md</text>
+    <text class="layer-text" x="14" y="84">• Stable Facts (durable)</text>
+    <text class="layer-text" x="14" y="100">• Recent Thesis History (last 5)</text>
+    <text class="layer-text" x="14" y="116">• Trajectory paragraph</text>
+    <text class="layer-text" x="14" y="132">• Persistent Catalysts/Risks</text>
+    <text class="layer-text" x="14" y="148">• Stale (silent ≥2 runs)</text>
+    <text class="layer-text" x="14" y="164">• Resolved / Open Questions</text>
+    <text class="layer-text" x="14" y="180">• Hume Notes (preserved verbatim)</text>
+    <text class="layer-mono" x="14" y="204" fill="#dc2626">Risk: TEMPERATURE=0.3 anchors</text>
+    <text class="layer-mono" x="14" y="220" fill="#dc2626">on prior thesis output as truth</text>
+  </g>
+
+  <!-- Layer 5: Lessons (Phase A — build now) -->
+  <g transform="translate(60,470)">
+    <rect class="layer-phase-a" x="0" y="0" width="320" height="240" rx="8"/>
+    <text class="layer-title" x="14" y="24">Layer 5 — Lessons.md</text>
+    <text class="layer-text" x="14" y="44" fill="#16a34a" font-weight="700">PHASE A · build now (~30 min)</text>
+    <text class="layer-mono" x="14" y="64">data/memory/lessons.md</text>
+    <text class="layer-text" x="14" y="84">Cross-cutting durable mistakes:</text>
+    <text class="layer-text" x="14" y="100">• Calendar vs fiscal qtr trap</text>
+    <text class="layer-text" x="14" y="116">• Sanity-check on real cyclicals</text>
+    <text class="layer-text" x="14" y="132">• Stale single-source benchmarks</text>
+    <text class="layer-text" x="14" y="148">• Memory anchor at T=0.3</text>
+    <text class="layer-text" x="14" y="164">• "Trust fresh paste" reversal</text>
+    <text class="layer-text" x="14" y="184">Hume-curated; ~500-1500 tokens.</text>
+    <text class="layer-mono" x="14" y="208" fill="#16a34a">Highest signal/cost layer.</text>
+    <text class="layer-mono" x="14" y="224" fill="#16a34a">Today's MU mistake → directly</text>
+  </g>
+
+  <!-- Layer 3: Pattern memory (Phase B — defer) -->
+  <g transform="translate(60,790)">
+    <rect class="layer-phase-b" x="0" y="0" width="320" height="240" rx="8"/>
+    <text class="layer-title" x="14" y="24">Layer 3 — Pattern memory</text>
+    <text class="layer-text" x="14" y="44" fill="#2563eb" font-weight="700">PHASE B · defer (~2 weeks)</text>
+    <text class="layer-mono" x="14" y="64">data/memory/pattern/*.md</text>
+    <text class="layer-text" x="14" y="84">• cyclical_at_peak.md</text>
+    <text class="layer-text" x="14" y="100">• secular_growth_at_premium.md</text>
+    <text class="layer-text" x="14" y="116">• post_M&amp;A_uncertainty.md</text>
+    <text class="layer-text" x="14" y="132">• regulatory_overhang.md</text>
+    <text class="layer-text" x="14" y="156">Pulled when ticker has matching</text>
+    <text class="layer-text" x="14" y="172">archetype in frontmatter.</text>
+    <text class="layer-mono" x="14" y="200" fill="#dc2626">Risk: getting a pattern wrong</text>
+    <text class="layer-mono" x="14" y="216" fill="#dc2626">becomes anchor for everyone</text>
+    <text class="layer-mono" x="14" y="232" fill="#dc2626">in that archetype</text>
+  </g>
+
+  <!-- Layer 2: Sector memory (Phase D — defer indefinitely) -->
+  <g transform="translate(1320,150)">
+    <rect class="layer-defer" x="0" y="0" width="320" height="240" rx="8"/>
+    <text class="layer-title" x="14" y="24">Layer 2 — Sector memory</text>
+    <text class="layer-text" x="14" y="44" fill="#78716c" font-weight="700">PHASE D · defer indefinitely</text>
+    <text class="layer-mono" x="14" y="64">data/memory/sector/*.md</text>
+    <text class="layer-text" x="14" y="84">• memory-chips.md</text>
+    <text class="layer-text" x="14" y="100">• networking-photonics.md</text>
+    <text class="layer-text" x="14" y="116">• cybersecurity.md</text>
+    <text class="layer-text" x="14" y="132">• etc.</text>
+    <text class="layer-text" x="14" y="156">Cycle history, valuation regimes,</text>
+    <text class="layer-text" x="14" y="172">key players, common errors.</text>
+    <text class="layer-mono" x="14" y="200" fill="#78716c">Build only if Phase A+B+C</text>
+    <text class="layer-mono" x="14" y="216" fill="#78716c">demonstrate value. Mostly</text>
+    <text class="layer-mono" x="14" y="232" fill="#78716c">redundant with patterns.</text>
+  </g>
+
+  <!-- Layer 4: Decisions / outcomes (Module 9 - already scoped) -->
+  <g transform="translate(1320,470)">
+    <rect class="layer-phase-c" x="0" y="0" width="320" height="240" rx="8"/>
+    <text class="layer-title" x="14" y="24">Layer 4 — Decisions / outcomes</text>
+    <text class="layer-text" x="14" y="44" fill="#7c3aed" font-weight="700">PHASE C · already scoped (Module 9)</text>
+    <text class="layer-mono" x="14" y="64">data/memory/decisions.md</text>
+    <text class="layer-text" x="14" y="84">Operator's actual portfolio actions</text>
+    <text class="layer-text" x="14" y="100">+ realized T+30/90/180 outcomes:</text>
+    <text class="layer-mono" x="14" y="120">ticker | entry | size | thesis</text>
+    <text class="layer-mono" x="14" y="136">| T+30 | T+90 | T+180 | learning</text>
+    <text class="layer-text" x="14" y="160">Today: AXON entered at $403, 5%</text>
+    <text class="layer-text" x="14" y="176">tracking position, T+30 milestone</text>
+    <text class="layer-text" x="14" y="192">due 2026-06-08.</text>
+    <text class="layer-mono" x="14" y="216" fill="#7c3aed">Module 9 deferred until N≥20</text>
+    <text class="layer-mono" x="14" y="232" fill="#7c3aed">thesis rows accumulate.</text>
+  </g>
+
+  <!-- Progressive abstraction visual on the right -->
+  <g transform="translate(1320,790)">
+    <rect class="layer-phase-c" x="0" y="0" width="320" height="240" rx="8"/>
+    <text class="layer-title" x="14" y="24">Progressive abstraction</text>
+    <text class="layer-text" x="14" y="44" fill="#7c3aed" font-weight="700">REQUIRES Phase B + Module 9</text>
+    <text class="layer-mono" x="14" y="68">$1,180 · $1,300 (exact targets)</text>
+    <text class="layer-text" x="14" y="84">↓ at run 6+</text>
+    <text class="layer-mono" x="14" y="100">"avg $X, range $Y-$Z, stable"</text>
+    <text class="layer-text" x="14" y="116">↓ at ~12 months</text>
+    <text class="layer-mono" x="14" y="132">"MU 2026 cycle: re-rated 7x→13x</text>
+    <text class="layer-mono" x="14" y="148">over 6mo; outcome: Y/N"</text>
+    <text class="layer-text" x="14" y="164">↓ if outcome clear</text>
+    <text class="layer-mono" x="14" y="180">"At cycle peak, multiple compresses</text>
+    <text class="layer-mono" x="14" y="196">30-50% from secular avg"</text>
+    <text class="layer-text" x="14" y="220">Each promotion: drop specifics,</text>
+    <text class="layer-text" x="14" y="236">keep shape. ← human-like.</text>
+  </g>
+
+  <!-- Web links between layers -->
+  <!-- Layer 1 to center -->
+  <line x1="380" y1="270" x2="700" y2="510" class="web-link" marker-end="url(#arrow)"/>
+  <!-- Layer 5 (lessons) to center -->
+  <line x1="380" y1="590" x2="700" y2="540" class="web-link-strong" marker-end="url(#arrow)"/>
+  <text x="500" y="555" font-size="10.5" fill="#16a34a" font-weight="700">[LESSONS] (every run)</text>
+  <!-- Layer 3 to center -->
+  <line x1="380" y1="910" x2="700" y2="600" class="web-link" marker-end="url(#arrow)"/>
+  <text x="540" y="800" font-size="10.5" fill="#525252">[PATTERN] (when archetype matches)</text>
+  <!-- Layer 2 (sector) to center -->
+  <line x1="1320" y1="270" x2="1000" y2="510" class="web-link" marker-end="url(#arrow)"/>
+  <!-- Layer 4 (decisions) to center -->
+  <line x1="1320" y1="590" x2="1000" y2="540" class="web-link" marker-end="url(#arrow)"/>
+  <text x="1080" y="555" font-size="10.5" fill="#7c3aed">[DECISIONS] (when Module 9 lands)</text>
+
+  <!-- Promotion arrows: Layer 1 → 3 → 5 -->
+  <path d="M 220 390 Q 220 430 220 470" class="promo" marker-end="url(#arrow-promo)"/>
+  <text x="120" y="430" font-size="10" fill="#d97706" font-weight="700">runs_silent ≥4</text>
+  <text x="120" y="446" font-size="10" fill="#d97706">→ Archive</text>
+
+  <path d="M 380 870 L 1080 870 L 1080 760" stroke="#d97706" stroke-width="2.2" stroke-dasharray="5 3" fill="none" opacity="0.8"/>
+  <text x="700" y="860" font-size="10.5" fill="#d97706" font-weight="700">specific numbers age into pattern memory (Phase C)</text>
+
+  <!-- Connecting line between Decisions and Patterns showing outcome → lesson promotion -->
+  <path d="M 1320 690 Q 1180 760 1080 870" class="promo" marker-end="url(#arrow-promo)"/>
+
+  <!-- Legend -->
+  <g transform="translate(420,890)">
+    <rect class="legend-box" x="0" y="0" width="860" height="190" rx="6"/>
+    <text x="14" y="24" font-size="13" font-weight="700" fill="#0a0a09">Legend &amp; phasing</text>
+    <rect x="14" y="38" width="20" height="20" class="layer-now"/>
+    <text x="42" y="54" font-size="11" fill="#1c1a17">EXISTS — current ticker memory works for what it does (item-level decay, runs_silent counter)</text>
+    <rect x="14" y="62" width="20" height="20" class="layer-phase-a"/>
+    <text x="42" y="78" font-size="11" fill="#1c1a17">PHASE A · BUILD NOW — lessons.md (cross-cutting mistake memory; Hume-curated; ~500-1500 tokens)</text>
+    <rect x="14" y="86" width="20" height="20" class="layer-phase-b"/>
+    <text x="42" y="102" font-size="11" fill="#1c1a17">PHASE B · DEFER — pattern memory (cyclical_at_peak, secular_growth, etc.); build after Phase A proves out</text>
+    <rect x="14" y="110" width="20" height="20" class="layer-phase-c"/>
+    <text x="42" y="126" font-size="11" fill="#1c1a17">PHASE C · DEFER — progressive abstraction + Layer 4 outcomes (requires Module 9 calibration loop, deferred)</text>
+    <rect x="14" y="134" width="20" height="20" class="layer-defer"/>
+    <text x="42" y="150" font-size="11" fill="#1c1a17">PHASE D · DEFER INDEFINITELY — sector memory (mostly redundant with patterns; build only if Phases A-C demonstrate value)</text>
+    <line x1="14" y1="170" x2="34" y2="170" class="promo"/>
+    <text x="42" y="174" font-size="11" fill="#1c1a17">Promotion arrows — items age and abstract from specific (Layer 1) to general (Layer 3) to durable rule (Layer 5)</text>
+  </g>
+</svg>

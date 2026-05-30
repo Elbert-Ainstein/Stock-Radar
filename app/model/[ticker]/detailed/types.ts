@@ -57,6 +57,12 @@ export type Payload = {
   ticker: string;
   name: string;
   sector: string;
+  /** Data provider that served this payload — surfaced in UI as a small badge.
+   * "yfinance" (default), "eodhd", "alpha_vantage". When the per-ticker override
+   * config forces a specific provider, this reflects what was actually used. */
+  source?: string;
+  /** ISO timestamp when the financials were fetched. */
+  fetched_at?: string;
   target: {
     current_price: number;
     low: number;

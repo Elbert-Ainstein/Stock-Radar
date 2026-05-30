@@ -1,0 +1,12 @@
+{
+  "_README": [
+    "Manual quarterly data overrides \u2014 operator-verified values from 10-Q/10-K filings.",
+    "Use this layer when ALL upstream providers (yfinance, eodhd, alpha_vantage) return the same wrong number for a quarter \u2014 typically a syndication-layer bug (FactSet/CapIQ).",
+    "When patching cumulative-mislabel bugs, patch ALL line items (income + cash flow), not just revenue. Otherwise margins come out wrong.",
+    "CRITICAL \u2014 period labels are CALENDAR quarters, not fiscal. _period_label() in finance_data.py:192 derives them from the period-end month: m=Feb\u21921Q, May\u21922Q, Aug\u21923Q, Nov\u21924Q. For companies with non-calendar fiscal years (MU, NVDA, ORCL, CRM, ADBE, etc.) the calendar quarter label DOES NOT equal the fiscal quarter. Always match against the calendar quarter the period actually ends in.",
+    "Schema: { TICKER: { CALENDAR_PERIOD_LABEL: { '<Field Name>': <integer dollars>, source/verified_by/verified_on/note: '<string>' } } }.",
+    "Numeric values must be in dollars, not millions.",
+    "",
+    "INCIDENT 2026-05-09: a previous MU 1Q26 entry patched real Q2 FY26 actuals ($23.86B) to Q1 FY26 actuals ($13.64B). Operator confused fiscal vs calendar quarter mapping. Entry removed. See docs/reports/2026-05-09_mu_thesis_contamination/REPORT.md and project_mu_data_bug.md memory note for the full corrigendum."
+  ]
+}

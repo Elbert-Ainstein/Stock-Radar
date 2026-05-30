@@ -13,17 +13,21 @@ export function Summary({
   sub?: string;
   emphasize?: boolean;
 }) {
+  // Theme-aware tile. Hardcoded `bg-neutral-900` was rendering as
+  // gray-on-gray against the cream light-theme paper. sr- tokens flip
+  // correctly between light and dark themes.
   return (
     <div
-      className={`rounded border p-3 ${
-        emphasize
-          ? "border-blue-700 bg-blue-950/30"
-          : "border-neutral-800 bg-neutral-900/30"
-      }`}
+      className="rounded border p-3"
+      style={{
+        background: emphasize ? "var(--sr-paper-2)" : "var(--sr-paper-1)",
+        borderColor: emphasize ? "var(--sr-rule-strong)" : "var(--sr-rule-soft)",
+        color: "var(--sr-ink)",
+      }}
     >
-      <div className="text-[10px] uppercase tracking-wider text-neutral-400">{label}</div>
-      <div className="text-xl font-semibold">{value}</div>
-      {sub && <div className="text-xs text-neutral-400">{sub}</div>}
+      <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--sr-ink-3)" }}>{label}</div>
+      <div className="text-xl font-semibold" style={{ color: "var(--sr-ink)" }}>{value}</div>
+      {sub && <div className="text-xs" style={{ color: "var(--sr-ink-2)" }}>{sub}</div>}
     </div>
   );
 }

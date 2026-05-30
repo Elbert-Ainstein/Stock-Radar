@@ -1,0 +1,11 @@
+{
+  "_README": [
+    "Per-ticker data-provider overrides for finance_data.py.",
+    "Use when a specific ticker has known issues with the default (yfinance) provider.",
+    "Schema: ticker -> { provider, fallback[], skip[], reason, added, validated }.",
+    "Fallback semantics: if primary returns EarningsFetchError, walk down fallback list.",
+    "Skip wins over fallback \u2014 providers in skip are never tried for that ticker.",
+    "",
+    "INCIDENT 2026-05-09: previous MU entry routed away from yfinance based on a misdiagnosis (operator mistook real cyclical revenue ramp for syndication bug; calendar-vs-fiscal quarter mapping was the actual confusion, not bad data). All 3 providers were returning correct $23.86B Q2 FY26 actuals. Entry removed; system retained for genuine future bugs."
+  ]
+}

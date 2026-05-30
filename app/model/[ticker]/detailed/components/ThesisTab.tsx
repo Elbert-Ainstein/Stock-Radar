@@ -43,29 +43,41 @@ export default function ThesisTab({
           <div className="text-[10px] uppercase tracking-wider text-emerald-400/60 font-semibold mb-1">Breakout</div>
           <div className="text-2xl font-mono font-bold text-emerald-300/80">{fmt(thesis.breakout_price)}</div>
         </div>
-        <div className="rounded-lg border border-neutral-700 bg-neutral-900/40 p-4">
-          <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold mb-1">Risk-adj</div>
-          <div className="text-2xl font-mono font-bold text-neutral-200">{fmt(thesis.risk_adj_target)}</div>
+        <div
+          className="rounded-lg border p-4"
+          style={{ borderColor: "var(--sr-rule-soft)", background: "var(--sr-paper-1)" }}
+        >
+          <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--sr-ink-3)" }}>Risk-adj</div>
+          <div className="text-2xl font-mono font-bold" style={{ color: "var(--sr-ink)" }}>{fmt(thesis.risk_adj_target)}</div>
         </div>
-        <div className="rounded-lg border border-neutral-700 bg-neutral-900/40 p-4">
-          <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold mb-1">Conviction</div>
-          <div className={`text-xl font-mono font-bold ${CONVICTION_COLOR[thesis.conviction || ""] || "text-neutral-200"}`}>
+        <div
+          className="rounded-lg border p-4"
+          style={{ borderColor: "var(--sr-rule-soft)", background: "var(--sr-paper-1)" }}
+        >
+          <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--sr-ink-3)" }}>Conviction</div>
+          <div className={`text-xl font-mono font-bold ${CONVICTION_COLOR[thesis.conviction || ""] || ""}`} style={!CONVICTION_COLOR[thesis.conviction || ""] ? { color: "var(--sr-ink)" } : undefined}>
             {thesis.conviction || "—"}
           </div>
-          <div className="text-[10px] text-neutral-500 mt-1">
+          <div className="text-[10px] mt-1" style={{ color: "var(--sr-ink-3)" }}>
             {thesis.position_size_pct != null ? `${thesis.position_size_pct}% position` : ""}
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-        <div className="rounded-lg border border-neutral-800 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-neutral-500 mb-1">Buy below</div>
-          <div className="font-mono">{fmt(thesis.buy_below)}</div>
+        <div
+          className="rounded-lg border p-3"
+          style={{ borderColor: "var(--sr-rule-soft)", background: "var(--sr-paper-1)" }}
+        >
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--sr-ink-3)" }}>Buy below</div>
+          <div className="font-mono" style={{ color: "var(--sr-ink)" }}>{fmt(thesis.buy_below)}</div>
         </div>
-        <div className="rounded-lg border border-neutral-800 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-neutral-500 mb-1">Trim above</div>
-          <div className="font-mono">{fmt(thesis.trim_above)}</div>
+        <div
+          className="rounded-lg border p-3"
+          style={{ borderColor: "var(--sr-rule-soft)", background: "var(--sr-paper-1)" }}
+        >
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--sr-ink-3)" }}>Trim above</div>
+          <div className="font-mono" style={{ color: "var(--sr-ink)" }}>{fmt(thesis.trim_above)}</div>
         </div>
       </div>
 

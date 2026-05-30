@@ -31,12 +31,14 @@ Usage:
 """
 from __future__ import annotations
 
+import json
 import math
 import os
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path as _Path
 from typing import Any
 
 
@@ -204,33 +206,122 @@ def _period_label(ts, freq: str) -> str:
     return f"{q}Q{str(y)[-2:]}"
 
 
-def _validate_quarterly_revenue(periods: list[dict]) -> tuple[list[str], set[int]]:
+_TICKER_ARCHETYPES_CACHE: dict | None = None
+_TICKER_ARCHETYPES_CACHE_MTIME: float = 0.0
+
+
+def _load_ticker_archetypes() -> dict:
+    """Load and cache config/ticker_archetypes.json with mtime invalidation.
+
+    Returns a dict mapping uppercase ticker → archetype string. Used by
+    `_archetype_threshold_multiplier()` to relax sanity-check thresholds
+    for cyclical tickers where 2-3x sequential revenue jumps are real
+    (memory chips at HBM ramp, semis at cycle peak) — not data errors.
+
+    Cache is invalidated when the JSON file's mtime changes so operator
+    edits during a long-running process pick up automatically. Per
+    red-team review 2026-05-09: previously module-global cache was set
+    once and ignored config edits, silently dropping new ticker tags.
+
+    Empty dict on missing/malformed config; archetype tagging is optional
+    and a missing config should never break the default flow. Logs once
+    on first-time load so operators can verify it loaded.
+    """
+    global _TICKER_ARCHETYPES_CACHE, _TICKER_ARCHETYPES_CACHE_MTIME
+    cfg_path = _Path(__file__).resolve().parent.parent / "config" / "ticker_archetypes.json"
+    # mtime-based cache invalidation
+    try:
+        mtime = cfg_path.stat().st_mtime
+    except FileNotFoundError:
+        if _TICKER_ARCHETYPES_CACHE is None:
+            _TICKER_ARCHETYPES_CACHE = {}
+        return _TICKER_ARCHETYPES_CACHE
+    if _TICKER_ARCHETYPES_CACHE is not None and mtime == _TICKER_ARCHETYPES_CACHE_MTIME:
+        return _TICKER_ARCHETYPES_CACHE
+    # (re)load
+    try:
+        raw = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  [finance_data] ticker_archetypes config load failed: {e}", file=sys.stderr)
+        _TICKER_ARCHETYPES_CACHE = {}
+        _TICKER_ARCHETYPES_CACHE_MTIME = mtime
+        return _TICKER_ARCHETYPES_CACHE
+    _TICKER_ARCHETYPES_CACHE = {
+        k.upper(): v for k, v in raw.items()
+        if not k.startswith("_") and isinstance(v, str)
+    }
+    _TICKER_ARCHETYPES_CACHE_MTIME = mtime
+    print(f"  [finance_data] ticker_archetypes loaded: {len(_TICKER_ARCHETYPES_CACHE)} entries", file=sys.stderr)
+    return _TICKER_ARCHETYPES_CACHE
+
+
+# Threshold multipliers for the sanity check. Cyclicals legitimately ramp
+# 2-3x at cycle peaks (memory: $13.6B Q1 FY26 → $23.86B Q2 FY26 was real,
+# verified via Micron Q2 FY26 press release). Default 2.0x trailing / 2.5x
+# YoY thresholds were calibrated on secular growers and over-flag cyclicals.
+_ARCHETYPE_THRESHOLD_MULTIPLIER: dict = {
+    "cyclical_tech":        1.5,   # memory chips, semis equipment, networking
+    "cyclical_industrial":  1.4,   # autos, chemicals, materials
+    "cyclical_normalized":  1.5,   # handled by engine but tagged here for completeness
+    "secular_growth":       1.0,   # software, fintech (default behavior)
+    "compounder":           1.0,   # stable margin business (default behavior)
+}
+
+
+def _archetype_threshold_multiplier(ticker: str | None) -> tuple[float, str | None]:
+    """Look up the threshold multiplier for a ticker's archetype.
+
+    Returns (multiplier, archetype_name). Default (1.0, None) if no
+    archetype is configured for the ticker — equivalent to current behavior.
+    """
+    if not ticker:
+        return 1.0, None
+    archetypes = _load_ticker_archetypes()
+    arch = archetypes.get(ticker.upper())
+    if not arch:
+        return 1.0, None
+    mult = _ARCHETYPE_THRESHOLD_MULTIPLIER.get(arch, 1.0)
+    return mult, arch
+
+
+def _validate_quarterly_revenue(periods: list[dict], ticker: str | None = None) -> tuple[list[str], set[int]]:
     """Detect quarters with suspicious revenue spikes.
 
     Checks two signals for each quarter:
     1. Revenue > Nx the trailing 4Q average (rolling anomaly)
     2. Revenue > Mx same-quarter-last-year (YoY anomaly)
 
-    Thresholds are size-aware:
+    Thresholds are size-aware AND archetype-aware:
     - Large-cap (trailing avg ≥ $500M/Q): 2.0x trailing, 2.5x YoY
-      → catches data-provider errors (MU-class: $23B vs $8.7B actual)
+      → catches data-provider errors
     - Mid-cap ($100M–$500M): 3.0x trailing, 4.0x YoY
       → moderate tolerance for business lumpiness
     - Micro/small-cap (< $100M/Q): 5.0x trailing, 6.0x YoY
       → high tolerance; $5M→$15M quarter swings are normal order
         lumpiness for semi-equipment, biotech, and niche industrials
+    - Cyclical archetypes (cyclical_tech, cyclical_industrial,
+      cyclical_normalized) get a 1.4-1.5x multiplier on top, so a
+      memory company doing $13.6B → $23.86B (real Q2 FY26 ramp) doesn't
+      false-positive while still catching the genuine $40B → $80B
+      provider bugs. Configured via config/ticker_archetypes.json.
 
-    Returns a list of warning strings. Called AFTER period conversion so we can
-    catch bad data before it poisons TTM calculations.
+    Returns a list of warning strings + suspect indices. Called AFTER period
+    conversion so we can catch bad data before it poisons TTM calculations.
 
-    This was added to catch the MU-class bug: yfinance returning a Q1 FY26
-    revenue of $23.86B vs actual ~$8.7B, which inflated TTM revenue to ~$58B
-    and produced a $1290 base target on a $455 stock.
+    Pre-2026-05-09: this check fired on real cyclical ramps and blocked
+    valid model rendering (the MU misdiagnosis). The archetype multiplier
+    is the architectural fix.
     """
     warnings: list[str] = []
     suspect_indices: set[int] = set()
     if not periods:
         return warnings, suspect_indices
+
+    # Archetype-aware multiplier: relax thresholds for cyclical tickers
+    # whose real revenue swings can hit 2-3x at cycle inflections.
+    arch_mult, arch_name = _archetype_threshold_multiplier(ticker)
+    if arch_name and arch_mult != 1.0:
+        print(f"  [{ticker}] archetype={arch_name}, applying {arch_mult}x sanity-check multiplier", file=sys.stderr)
 
     # Only check the most recent 8 quarters (2 years) — flagging ancient
     # data (e.g. ASML 2010) is noise, not signal.
@@ -255,37 +346,61 @@ def _validate_quarterly_revenue(periods: list[dict]) -> tuple[list[str], set[int
         if len(prior_revs) >= 2:
             trailing_avg = sum(prior_revs) / len(prior_revs)
 
-            # Size-aware thresholds: micro-caps have lumpy revenue by nature
+            # Size-aware thresholds: micro-caps have lumpy revenue by nature.
+            # Two thresholds computed: base (no multiplier) and applied
+            # (with archetype multiplier). Lets us distinguish "real cyclical
+            # ramp accommodated by multiplier" from "actual suspect data."
             if trailing_avg >= 500e6:       # Large-cap: ≥$500M/Q
-                trailing_thresh = 2.0
+                trailing_thresh_base = 2.0
             elif trailing_avg >= 100e6:     # Mid-cap: $100M–$500M/Q
-                trailing_thresh = 3.0
+                trailing_thresh_base = 3.0
             else:                           # Micro/small-cap: <$100M/Q
-                trailing_thresh = 5.0
+                trailing_thresh_base = 5.0
+            trailing_thresh = trailing_thresh_base * arch_mult
 
             if trailing_avg > 0 and rev > trailing_thresh * trailing_avg:
+                # Exceeds the applied threshold (with multiplier) — real suspect.
                 ratio = rev / trailing_avg
                 warnings.append(
                     f"SUSPECT DATA: {period_label} revenue "
                     f"${rev/1e9:.2f}B is {ratio:.1f}x the trailing "
                     f"{len(prior_revs)}Q avg ${trailing_avg/1e9:.2f}B "
-                    f"(threshold: {trailing_thresh:.0f}x for this revenue scale). "
+                    f"(threshold: {trailing_thresh:.1f}x for this revenue scale"
+                    f"{', archetype=' + arch_name if arch_name else ''}). "
                     f"Possible data error — cross-check against "
                     f"10-Q filing before trusting this quarter."
                 )
                 suspect_indices.add(i)
+            elif (arch_mult > 1.0 and trailing_avg > 0
+                  and rev > trailing_thresh_base * trailing_avg):
+                # Would have fired without the archetype multiplier — but the
+                # multiplier is the architectural fix for legitimate cyclical
+                # ramps. Emit a CYCLICAL_RAMP_NOTE (informational, distinct
+                # prefix) rather than SUSPECT DATA so operators don't habituate
+                # to ignoring real warnings later.
+                ratio = rev / trailing_avg
+                warnings.append(
+                    f"CYCLICAL_RAMP_NOTE: {period_label} revenue "
+                    f"${rev/1e9:.2f}B is {ratio:.1f}x the trailing "
+                    f"{len(prior_revs)}Q avg ${trailing_avg/1e9:.2f}B — "
+                    f"within archetype={arch_name} relaxed threshold "
+                    f"({trailing_thresh:.1f}x), would have flagged at base "
+                    f"({trailing_thresh_base:.1f}x). Real cyclical ramp; not "
+                    f"a data error. Verify only if other warnings co-fire."
+                )
 
         # Check 2: same-quarter-last-year (4 periods back in quarterly data)
         if i >= 4:
             yoy_rev = periods[i - 4].get("Total Revenue")
             if yoy_rev is not None and yoy_rev > 0:
-                # Size-aware YoY thresholds
+                # Size-aware YoY thresholds (archetype multiplier applied).
                 if yoy_rev >= 500e6:
-                    yoy_thresh = 2.5
+                    yoy_thresh_base = 2.5
                 elif yoy_rev >= 100e6:
-                    yoy_thresh = 4.0
+                    yoy_thresh_base = 4.0
                 else:
-                    yoy_thresh = 6.0
+                    yoy_thresh_base = 6.0
+                yoy_thresh = yoy_thresh_base * arch_mult
 
                 if rev > yoy_thresh * yoy_rev:
                     ratio = rev / yoy_rev
@@ -293,9 +408,21 @@ def _validate_quarterly_revenue(periods: list[dict]) -> tuple[list[str], set[int
                         f"SUSPECT DATA: {period_label} revenue "
                         f"${rev/1e9:.2f}B is {ratio:.1f}x same-quarter-"
                         f"last-year ${yoy_rev/1e9:.2f}B "
-                        f"(threshold: {yoy_thresh:.1f}x). Verify against filing."
+                        f"(threshold: {yoy_thresh:.1f}x"
+                        f"{', archetype=' + arch_name if arch_name else ''}). "
+                        f"Verify against filing."
                     )
                     suspect_indices.add(i)
+                elif arch_mult > 1.0 and rev > yoy_thresh_base * yoy_rev:
+                    ratio = rev / yoy_rev
+                    warnings.append(
+                        f"CYCLICAL_RAMP_NOTE: {period_label} revenue "
+                        f"${rev/1e9:.2f}B is {ratio:.1f}x YoY "
+                        f"${yoy_rev/1e9:.2f}B — within archetype={arch_name} "
+                        f"relaxed threshold ({yoy_thresh:.1f}x), would have "
+                        f"flagged at base ({yoy_thresh_base:.1f}x). Real "
+                        f"cycle YoY; not a data error."
+                    )
 
     return warnings, suspect_indices
 
@@ -351,6 +478,148 @@ def _derive_shares(bs_periods: list[dict], is_periods: list[dict]) -> float | No
     return v if v and v > 0 else None
 
 
+_MANUAL_QUARTERLY_OVERRIDES_CACHE: dict | None = None
+
+
+def _load_manual_quarterly_overrides() -> dict:
+    """Load and cache config/manual_quarterly_overrides.json.
+
+    Returns operator-verified per-period overrides used when ALL upstream
+    providers report the same wrong number for a quarter (typically a
+    syndication-layer bug — e.g. MU 1Q26 where yfinance, EODHD, and
+    AlphaVantage all returned $23.86B vs the 10-Q's $13.643B).
+
+    Returns an empty dict if the file is missing or malformed — manual
+    overrides are optional and a missing config should never break the
+    default flow.
+    """
+    global _MANUAL_QUARTERLY_OVERRIDES_CACHE
+    if _MANUAL_QUARTERLY_OVERRIDES_CACHE is not None:
+        return _MANUAL_QUARTERLY_OVERRIDES_CACHE
+    cfg_path = _Path(__file__).resolve().parent.parent / "config" / "manual_quarterly_overrides.json"
+    try:
+        raw = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        _MANUAL_QUARTERLY_OVERRIDES_CACHE = {}
+        return _MANUAL_QUARTERLY_OVERRIDES_CACHE
+    except Exception as e:
+        print(f"  [finance_data] manual overrides config load failed: {e}", file=sys.stderr)
+        _MANUAL_QUARTERLY_OVERRIDES_CACHE = {}
+        return _MANUAL_QUARTERLY_OVERRIDES_CACHE
+    _MANUAL_QUARTERLY_OVERRIDES_CACHE = {
+        k.upper(): v for k, v in raw.items()
+        if not k.startswith("_") and isinstance(v, dict)
+    }
+    return _MANUAL_QUARTERLY_OVERRIDES_CACHE
+
+
+# Numeric fields the override layer is allowed to patch. Anything else in the
+# JSON config is treated as metadata (source, verified_by, note, etc.).
+_OVERRIDABLE_NUMERIC_FIELDS = {
+    # Income statement
+    "Total Revenue", "Operating Income", "Net Income", "EBITDA",
+    "Cost Of Revenue", "Gross Profit", "Research And Development",
+    "Selling General And Administration", "Operating Expense",
+    # Cash flow statement (patched in q_cf, not q_inc)
+    "Depreciation", "Operating Cash Flow", "Capital Expenditure",
+    "Free Cash Flow", "Amortization Of Intangibles",
+}
+_OVERRIDE_META_KEYS = {"source", "verified_by", "verified_on", "note"}
+
+
+def _apply_manual_overrides(ticker: str, *period_lists: list[dict]) -> list[str]:
+    """Patch one or more quarterly statements using
+    config/manual_quarterly_overrides.json.
+
+    Each positional arg is a quarterly statement list (q_inc, q_cf, etc.).
+    The override applies field-by-field across whichever statement(s) contain
+    the matching period and field name. Income-statement fields like
+    "Total Revenue" land in q_inc; cash-flow fields like "Operating Cash Flow"
+    land in q_cf. The same period dict in q_inc and q_cf is matched by its
+    "period" string (e.g. "1Q26"), so a single config entry can patch the
+    whole income + cash-flow row for a quarter.
+
+    Mutates the period lists in place. Returns a list of warning strings
+    describing each applied patch, so the user can see exactly what changed
+    in the model warnings panel.
+
+    CRITICAL: cumulative-mislabel bugs (FactSet/CapIQ syndication labeling
+    FY-cumulative as Q1) inflate every flow row, not just revenue. Patching
+    only revenue while leaving op income / D&A / OCF inflated produces wrong
+    margins (the bug Hume caught: revenue patched but EBITDA margin reading
+    77% vs real 61%). Always pull the full income statement AND cash flow.
+    """
+    overrides = _load_manual_quarterly_overrides()
+    ticker_overrides = overrides.get(ticker.upper(), {})
+    if not ticker_overrides:
+        return []
+
+    patches: list[str] = []
+    for period_label, period_overrides in ticker_overrides.items():
+        if period_label.startswith("_") or not isinstance(period_overrides, dict):
+            continue
+
+        # Collect every (period_dict, statement_index) where this period exists.
+        # The same logical quarter typically has separate dicts in q_inc and q_cf.
+        targets: list[dict] = []
+        for stmt in period_lists:
+            for p in stmt:
+                if p.get("period") == period_label:
+                    targets.append(p)
+                    break  # one match per statement
+
+        if not targets:
+            patches.append(
+                f"MANUAL_OVERRIDE: {ticker} {period_label} configured but period "
+                f"not present in provider data — config may be stale."
+            )
+            continue
+
+        # For each numeric field in the override, write it to whichever
+        # statement(s) already have that field present. Falls back to the
+        # FIRST statement (typically q_inc) if no statement has the field
+        # yet — this handles the case where the provider didn't report a
+        # specific line item and we want the override to provide it.
+        applied_fields: list[str] = []
+        for field_name, new_value in period_overrides.items():
+            if field_name in _OVERRIDE_META_KEYS:
+                continue
+            if not isinstance(new_value, (int, float)) or isinstance(new_value, bool):
+                continue
+
+            wrote_to: list[str] = []
+            had_field = False
+            for t in targets:
+                if field_name in t:
+                    had_field = True
+                    old_value = t.get(field_name)
+                    t[field_name] = float(new_value)
+                    if old_value is not None:
+                        try:
+                            diff_pct = abs(float(new_value) - float(old_value)) / max(1.0, abs(float(old_value))) * 100
+                            wrote_to.append(f"was ${float(old_value)/1e9:.2f}B → ${float(new_value)/1e9:.2f}B ({diff_pct:.0f}%)")
+                        except Exception:
+                            wrote_to.append(f"was {old_value} → {new_value}")
+                    else:
+                        wrote_to.append(f"set ${float(new_value)/1e9:.2f}B (was null)")
+            if not had_field:
+                # Provider didn't have this field — write to the first target
+                # so it shows up downstream.
+                targets[0][field_name] = float(new_value)
+                wrote_to.append(f"set ${float(new_value)/1e9:.2f}B (was missing)")
+
+            applied_fields.append(f"{field_name} ({'; '.join(wrote_to)})")
+
+        if applied_fields:
+            src = period_overrides.get("source", "manual override")
+            patches.append(
+                f"MANUAL_OVERRIDE: {ticker} {period_label}: "
+                f"{'; '.join(applied_fields)} — source: {src}"
+            )
+
+    return patches
+
+
 def _validate_and_build(
     ticker: str,
     info: dict,
@@ -373,8 +642,21 @@ def _validate_and_build(
     """
     warnings: list[str] = list(extra_warnings or [])
 
-    # Revenue sanity check
-    rev_warnings, suspect_indices = _validate_quarterly_revenue(q_inc)
+    # Apply manual quarterly overrides BEFORE sanity check.
+    # When upstream providers (yfinance, EODHD, AlphaVantage) all return the
+    # same wrong number — typically a syndication-layer bug — the operator
+    # can patch specific (ticker, period) cells from a verified 10-Q via
+    # config/manual_quarterly_overrides.json. This way the sanity check
+    # runs against corrected data and the model can render.
+    manual_patches = _apply_manual_overrides(ticker, q_inc, q_cf)
+    if manual_patches:
+        warnings.extend(manual_patches)
+        print(f"  [{ticker}] Manual quarterly overrides applied:", file=sys.stderr)
+        for patch in manual_patches:
+            print(f"    {patch}", file=sys.stderr)
+
+    # Revenue sanity check (runs against post-override data)
+    rev_warnings, suspect_indices = _validate_quarterly_revenue(q_inc, ticker=ticker)
     if rev_warnings:
         warnings.extend(rev_warnings)
         print(f"  [{ticker}] Revenue sanity check fired:", file=sys.stderr)
@@ -403,14 +685,22 @@ def _validate_and_build(
                 print(f"  [{ticker}] override_suspect_recent=True — building model "
                       f"despite sanity-check failure on {recent_labels}", file=sys.stderr)
             else:
+                _arch_mult, _arch_name = _archetype_threshold_multiplier(ticker)
+                _arch_note = (
+                    f"archetype={_arch_name}, multiplier={_arch_mult}x applied"
+                    if _arch_name else
+                    "no archetype configured (default thresholds used)"
+                )
                 raise EarningsFetchError(
                     f"{ticker}: revenue sanity check FAILED on recent quarter(s) "
                     f"{recent_labels} (within last {TTM_QUARTERS}Q used for TTM). "
-                    f"Provider data is inconsistent with prior quarters by 2x "
-                    f"trailing-avg / 2.5x YoY thresholds (size-aware). Cannot "
-                    f"build a reliable model. Operator must verify against 10-Q. "
-                    f"If data is genuinely correct (M&A, post-IPO, post-spinoff), "
-                    f"pass override_suspect_recent=True to fetch_financials. Details:\n  "
+                    f"Thresholds applied: 2.0x trailing-avg / 2.5x YoY (large-cap base) "
+                    f"× {_arch_mult}x ({_arch_note}). Cannot build a reliable model. "
+                    f"Operator must verify against 10-Q. If data is genuinely correct "
+                    f"(M&A, post-IPO, post-spinoff, or cyclical ramp beyond multiplier), "
+                    f"pass override_suspect_recent=True to fetch_financials. To tag the "
+                    f"ticker as cyclical going forward, add it to "
+                    f"config/ticker_archetypes.json. Details:\n  "
                     + "\n  ".join(recent_warnings)
                 )
 
@@ -1182,6 +1472,95 @@ def _ensure_env_loaded():
     os.environ["_FINANCE_DATA_ENV_LOADED"] = "1"
 
 
+# ---------------------------------------------------------------------------
+# Per-ticker provider overrides
+# ---------------------------------------------------------------------------
+# yfinance has known per-ticker bugs (e.g. MU Q1 FY26 returns $23.86B vs the
+# real ~$8.7B per the 10-Q — a 3x inflation). When the sanity check catches
+# this, the model API can't render and the watchlist becomes unusable.
+#
+# This module loads `config/data_provider_overrides.json` (keyed by ticker)
+# and builds a per-ticker provider chain. fetch_financials() walks the chain,
+# trying each provider until one returns data that survives the sanity check.
+# Providers in the `skip` list are never tried for that ticker.
+
+_OVERRIDES_CACHE: dict | None = None
+
+def _load_provider_overrides() -> dict:
+    """Load and cache config/data_provider_overrides.json.
+
+    Returns an empty dict if the file is missing or malformed — overrides are
+    optional and a missing config should never break the default flow.
+    """
+    global _OVERRIDES_CACHE
+    if _OVERRIDES_CACHE is not None:
+        return _OVERRIDES_CACHE
+    cfg_path = _Path(__file__).resolve().parent.parent / "config" / "data_provider_overrides.json"
+    try:
+        raw = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        _OVERRIDES_CACHE = {}
+        return _OVERRIDES_CACHE
+    except Exception as e:
+        print(f"  [finance_data] overrides config load failed: {e}", file=sys.stderr)
+        _OVERRIDES_CACHE = {}
+        return _OVERRIDES_CACHE
+    # Filter out non-ticker keys (e.g. "_README" notes block) and non-dict values
+    _OVERRIDES_CACHE = {
+        k.upper(): v for k, v in raw.items()
+        if not k.startswith("_") and isinstance(v, dict)
+    }
+    return _OVERRIDES_CACHE
+
+
+def _build_provider_chain(ticker: str) -> list[str]:
+    """Build the ordered list of providers to try for `ticker`.
+
+    Order:
+      1. config[ticker].provider             (explicit primary)
+      2. config[ticker].fallback             (explicit fallbacks, in order)
+      3. Env / auto-detected default         (eodhd if key, else yfinance)
+      4. yfinance                            (universal last resort)
+
+    Any provider in config[ticker].skip is excluded everywhere — this lets us
+    say "for MU, NEVER try yfinance" so the bad data never leaks in.
+    """
+    overrides = _load_provider_overrides()
+    cfg = overrides.get(ticker.upper(), {})
+    skip = set(cfg.get("skip", []) or [])
+
+    chain: list[str] = []
+
+    def add(name: str | None) -> None:
+        if not name:
+            return
+        if name in skip:
+            return
+        if name in chain:
+            return
+        if name not in _PROVIDER_REGISTRY:
+            return
+        chain.append(name)
+
+    # 1. Explicit primary
+    add(cfg.get("provider"))
+    # 2. Explicit fallbacks
+    for f in cfg.get("fallback", []) or []:
+        add(f)
+    # 3. Env override / auto-detected default
+    env_choice = os.environ.get("FINANCE_DATA_PROVIDER", "").strip().lower()
+    if env_choice:
+        add(env_choice)
+    else:
+        # Auto-detect: prefer EODHD if key is set
+        eodhd_key = os.environ.get("EODHD_API_KEY", "").strip()
+        add("eodhd" if eodhd_key else "yfinance")
+    # 4. Universal fallback
+    add("yfinance")
+
+    return chain
+
+
 def get_provider(name: str | None = None) -> DataProvider:
     """Get a data provider instance by name.
 
@@ -1191,6 +1570,10 @@ def get_provider(name: str | None = None) -> DataProvider:
       3. Auto-detect: try EODHD (if key present), else yfinance
 
     Returns an instantiated DataProvider ready to call .fetch().
+
+    NOTE: For per-ticker provider selection (e.g. force MU through EODHD),
+    use fetch_financials() — it consults config/data_provider_overrides.json
+    and walks a fallback chain. get_provider() returns ONE provider only.
     """
     _ensure_env_loaded()
     provider_name = name or os.environ.get("FINANCE_DATA_PROVIDER", "").strip().lower()
@@ -1215,14 +1598,24 @@ def get_provider(name: str | None = None) -> DataProvider:
 
 def fetch_financials(ticker: str, min_quarters: int = 4,
                      override_suspect_recent: bool = False) -> FinancialData:
-    """Fetch historical financials for `ticker` using the configured provider.
+    """Fetch historical financials for `ticker` using a provider chain.
 
-    This is the public API that all downstream consumers call. The provider
-    is selected via get_provider() — see its docstring for precedence rules.
+    Per-ticker chain logic (config/data_provider_overrides.json):
+      1. Override primary (e.g. MU → eodhd)
+      2. Override fallbacks (e.g. MU fallback → alpha_vantage)
+      3. Env / auto-detected default
+      4. yfinance as universal last resort
 
-    If the primary provider (EODHD) fails and yfinance is available as a
-    fallback, it retries with yfinance automatically. This ensures the
-    pipeline doesn't halt due to transient EODHD API issues.
+    Each provider in the chain is tried in order. If a provider raises
+    EarningsFetchError (which fires for both API failures AND sanity check
+    failures), we log it and try the next provider. This means a ticker
+    with bad yfinance data (like MU's inflated Q1 FY26) automatically falls
+    through to EODHD without the user knowing.
+
+    The returned `FinancialData.source` field tells you which provider
+    actually served the data, and any provider attempts that failed are
+    appended to `warnings` so the user can see "we tried yfinance first,
+    fell back to eodhd."
 
     Parameters
     ----------
@@ -1230,58 +1623,113 @@ def fetch_financials(ticker: str, min_quarters: int = 4,
         Stock symbol (e.g. "LITE").
     min_quarters : int
         Minimum quarterly periods required. Default 4 (one year of history).
+    override_suspect_recent : bool
+        If True, allow data even if the sanity check flags recent quarters
+        as anomalous. Use only after manually verifying against the 10-Q.
 
     Raises
     ------
     EarningsFetchError
-        If ALL providers fail. The last error is raised.
+        If ALL providers in the chain fail. The last error is included.
     """
-    # ── Check for known delisted tickers ──
+    _ensure_env_loaded()
     upper = ticker.upper()
+
+    # ── Check for known delisted tickers ──
     if upper in DELISTED_TICKERS:
         raise EarningsFetchError(
             f"{ticker} is delisted/inactive: {DELISTED_TICKERS[upper]}"
         )
 
-    provider = get_provider()
-    try:
-        result = provider.fetch(ticker, min_quarters=min_quarters, override_suspect_recent=override_suspect_recent)
-    except EarningsFetchError as primary_err:
-        # If the primary provider is not yfinance, try yfinance as fallback
-        if provider.name != "yfinance":
-            print(
-                f"  [finance_data] {provider.name} failed for {ticker}: {primary_err}",
-                file=sys.stderr,
-            )
-            print(
-                f"  [finance_data] Falling back to yfinance for {ticker}...",
-                file=sys.stderr,
-            )
-            try:
-                fallback = YFinanceProvider()
-                result = fallback.fetch(ticker, min_quarters=min_quarters, override_suspect_recent=override_suspect_recent)
-                result.warnings.append(
-                    f"FALLBACK: Used yfinance instead of {provider.name} "
-                    f"(primary error: {primary_err})"
-                )
-            except EarningsFetchError:
-                raise primary_err  # fallback also failed — raise the original
-        else:
-            raise
+    # ── Build per-ticker provider chain ──
+    chain = _build_provider_chain(upper)
+    if not chain:
+        raise EarningsFetchError(
+            f"No usable providers for {ticker} after applying overrides. "
+            f"Check config/data_provider_overrides.json"
+        )
 
-    # ── Apply data cutoffs for re-IPO'd / entity-change tickers ──
-    if upper in TICKER_DATA_CUTOFFS:
-        for attr, freq in [
-            ("quarterly_income", "quarterly"), ("quarterly_cashflow", "quarterly"),
-            ("quarterly_balance", "quarterly"), ("annual_income", "annual"),
-            ("annual_cashflow", "annual"), ("annual_balance", "annual"),
-        ]:
-            periods = getattr(result, attr, [])
-            filtered, cutoff_warnings = _apply_data_cutoff(upper, periods, freq)
-            setattr(result, attr, filtered)
-            result.warnings.extend(cutoff_warnings)
+    overrides = _load_provider_overrides()
+    cfg = overrides.get(upper, {})
+    if cfg:
+        print(
+            f"  [finance_data] {ticker}: per-ticker override active "
+            f"(primary={cfg.get('provider')}, skip={cfg.get('skip', [])}, "
+            f"reason={cfg.get('reason', '')[:60]}...)",
+            file=sys.stderr,
+        )
 
-    return result
+    last_err: Exception | None = None
+    attempted: list[str] = []
+    failures: list[tuple[str, str]] = []  # (provider_name, error_summary)
+
+    for prov_name in chain:
+        try:
+            cls = _PROVIDER_REGISTRY[prov_name]
+            provider = cls()
+        except Exception as e:
+            # e.g. EODHDProvider raises if EODHD_API_KEY is missing.
+            # That's not a fatal error — just skip and try the next one.
+            msg = str(e)[:120]
+            print(f"  [finance_data] cannot instantiate {prov_name}: {msg}", file=sys.stderr)
+            failures.append((prov_name, f"init: {msg}"))
+            continue
+
+        attempted.append(prov_name)
+        print(f"  [finance_data] trying {prov_name} for {ticker}...", file=sys.stderr)
+        try:
+            result = provider.fetch(
+                ticker, min_quarters=min_quarters,
+                override_suspect_recent=override_suspect_recent,
+            )
+        except EarningsFetchError as e:
+            msg = str(e)[:200]
+            print(f"  [finance_data] {prov_name} failed: {msg}", file=sys.stderr)
+            failures.append((prov_name, msg))
+            last_err = e
+            continue
+        except Exception as e:
+            # Unexpected error (network, library bug, etc) — try next
+            msg = f"{type(e).__name__}: {str(e)[:180]}"
+            print(f"  [finance_data] {prov_name} unexpected error: {msg}", file=sys.stderr)
+            failures.append((prov_name, msg))
+            last_err = e
+            continue
+
+        # ── Apply data cutoffs for re-IPO'd / entity-change tickers ──
+        if upper in TICKER_DATA_CUTOFFS:
+            for attr, freq in [
+                ("quarterly_income", "quarterly"), ("quarterly_cashflow", "quarterly"),
+                ("quarterly_balance", "quarterly"), ("annual_income", "annual"),
+                ("annual_cashflow", "annual"), ("annual_balance", "annual"),
+            ]:
+                periods = getattr(result, attr, [])
+                filtered, cutoff_warnings = _apply_data_cutoff(upper, periods, freq)
+                setattr(result, attr, filtered)
+                result.warnings.extend(cutoff_warnings)
+
+        # Annotate the fallback chain in warnings so the UI / logs can show it
+        if len(attempted) > 1:
+            result.warnings.append(
+                f"PROVIDER_FALLBACK: tried {' → '.join(attempted)}; "
+                f"served by {prov_name}. "
+                f"Failures: {'; '.join(f'{n}: {m[:80]}' for n, m in failures)}"
+            )
+        elif cfg.get("provider"):
+            result.warnings.append(
+                f"PROVIDER_OVERRIDE: forced through {prov_name} "
+                f"(reason: {cfg.get('reason', 'see config')[:120]})"
+            )
+
+        print(f"  [finance_data] {ticker} served by {prov_name} (chain: {chain})", file=sys.stderr)
+        return result
+
+    # Exhausted the chain
+    raise EarningsFetchError(
+        f"All providers failed for {ticker}. Tried: {attempted or chain}. "
+        f"Failures: {'; '.join(f'{n}: {m[:120]}' for n, m in failures)}. "
+        f"Last error: {last_err}"
+    )
 
 
 # ---------------------------------------------------------------------------

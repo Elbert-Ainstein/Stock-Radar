@@ -129,32 +129,123 @@ export default function NavBar() {
     } finally { setPipBusy(false); }
   };
 
-  // ── Run All Theses (fetch watchlist on demand) ──
-  const [thesesBusy, setThesesBusy] = useState(false);
-  const [thesesQueued, setThesesQueued] = useState(0);
+  // ── Run All Theses (fetch watchlist on demand, poll for completion) ──
+  // States: idle → kicking → running → complete | partial. Mirrors
+  // RunAllThesesButton.tsx so the navbar shows the same "Running… X/N"
+  // progress indicator as the dashboard. Without polling the user just
+  // sees a brief "Queuing…" then nothing — runs finish out-of-band.
+  type ThesesStatus = "idle" | "kicking" | "running" | "complete" | "partial";
+  const [thesesStatus, setThesesStatus] = useState<ThesesStatus>("idle");
+  const [thesesTotal, setThesesTotal] = useState(0);
+  const [thesesDone, setThesesDone] = useState(0);
+  const [thesesErrors, setThesesErrors] = useState(0);
+  const thesesPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const thesesStartedAt = useRef(0);
+  const THESES_POLL_MS = 7_000;
+  const THESES_TIMEOUT_MS = 12 * 60 * 1_000;
+
+  // Cleanup poll interval on unmount
+  useEffect(() => () => {
+    if (thesesPollRef.current) clearInterval(thesesPollRef.current);
+  }, []);
+
   const runAllTheses = async () => {
-    if (thesesBusy) return;
-    setThesesBusy(true);
-    setThesesQueued(0);
+    if (thesesStatus === "kicking" || thesesStatus === "running") return;
+    setThesesStatus("kicking");
+    setThesesTotal(0);
+    setThesesDone(0);
+    setThesesErrors(0);
+    thesesStartedAt.current = Date.now();
+    let kicked: string[] = [];
+    let kickFailures = 0;
     try {
-      // Get watchlist tickers
       const stocksRes = await fetch("/api/stocks", { cache: "no-store" });
       const stocksJson = await stocksRes.json();
       const tickers: string[] = (stocksJson.stocks || stocksJson.data || []).map((s: any) => s.ticker).filter(Boolean);
-      // Queue thesis runs in parallel (each is fire-and-forget; the script handles its own throttling)
+      setThesesTotal(tickers.length);
+      // Kick off in parallel — the rerun route is idempotent (returns 409 if
+      // already running, which we treat as success since we'll poll for it).
       const results = await Promise.allSettled(
         tickers.map((t) =>
           fetch(`/api/thesis/${encodeURIComponent(t)}/rerun`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ trigger_reason: "manual_bulk" }),
-          })
+          }).then((r) => {
+            if (r.status === 409) return t;     // already running — still kicked
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return t;
+          }),
         )
       );
-      setThesesQueued(results.filter((r) => r.status === "fulfilled").length);
-      setTimeout(() => setThesesQueued(0), 8000);
-    } finally { setThesesBusy(false); }
+      for (const r of results) {
+        if (r.status === "fulfilled") kicked.push(r.value);
+        else kickFailures++;
+      }
+    } catch {
+      // Watchlist fetch failed — bail out
+      setThesesStatus("idle");
+      return;
+    }
+
+    if (kicked.length === 0) {
+      setThesesStatus("partial");
+      setThesesErrors(kickFailures);
+      setTimeout(() => setThesesStatus("idle"), 6000);
+      return;
+    }
+
+    // Switch to running state and start polling
+    setThesesStatus("running");
+    const pending = new Set(kicked);
+    let errorCount = kickFailures;
+
+    thesesPollRef.current = setInterval(async () => {
+      // Timeout guard — stop polling after 12 min so the navbar doesn't
+      // pin "Running…" forever if a thesis hangs.
+      if (Date.now() - thesesStartedAt.current > THESES_TIMEOUT_MS) {
+        if (thesesPollRef.current) clearInterval(thesesPollRef.current);
+        thesesPollRef.current = null;
+        setThesesStatus("partial");
+        setTimeout(() => setThesesStatus("idle"), 8000);
+        return;
+      }
+
+      const checks = await Promise.allSettled(
+        Array.from(pending).map((t) =>
+          fetch(`/api/thesis/${encodeURIComponent(t)}/rerun`)
+            .then((r) => r.json())
+            .then((d) => ({ ticker: t, running: !!d.running, last_status: d.last_status })),
+        ),
+      );
+
+      for (const r of checks) {
+        if (r.status !== "fulfilled") continue;
+        const { ticker, running, last_status } = r.value as {
+          ticker: string; running: boolean; last_status: { ok?: boolean } | null;
+        };
+        if (!running) {
+          pending.delete(ticker);
+          if (last_status && last_status.ok === false) errorCount++;
+        }
+      }
+
+      const finished = (kicked.length + kickFailures) - pending.size;
+      setThesesDone(finished);
+      setThesesErrors(errorCount);
+
+      if (pending.size === 0) {
+        if (thesesPollRef.current) clearInterval(thesesPollRef.current);
+        thesesPollRef.current = null;
+        setThesesStatus(errorCount > 0 ? "partial" : "complete");
+        setTimeout(() => setThesesStatus("idle"), errorCount > 0 ? 10000 : 5000);
+      }
+    }, THESES_POLL_MS);
   };
+
+  // Legacy alias for the JSX below (was thesesBusy / thesesQueued)
+  const thesesBusy = thesesStatus === "kicking" || thesesStatus === "running";
+  const thesesQueued = thesesStatus === "complete" || thesesStatus === "partial" ? (thesesDone || thesesTotal) : 0;
 
   return (
     <header style={{
@@ -249,13 +340,30 @@ export default function NavBar() {
             Rebuild
           </button>
 
-          {/* Run All Theses */}
-          <button onClick={runAllTheses} disabled={thesesBusy} style={btnAccent(thesesBusy)} title="Queue thesis runs for every ticker on the watchlist (~$3-5 each)">
-            {thesesQueued > 0
-              ? <><span aria-hidden style={{ marginRight: 4 }}>✓</span>Queued {thesesQueued}</>
-              : thesesBusy
-                ? "Queuing…"
-                : <><span aria-hidden style={{ marginRight: 4 }}>⚡</span>Run All Theses</>}
+          {/* Run All Theses — shows live X/N progress while polling */}
+          <button
+            onClick={runAllTheses}
+            disabled={thesesBusy}
+            style={btnAccent(thesesBusy)}
+            title={
+              thesesStatus === "running"
+                ? `Polling thesis status — ${thesesDone}/${thesesTotal} complete${thesesErrors > 0 ? `, ${thesesErrors} errored` : ""}`
+                : `Queue thesis runs for every ticker on the watchlist (~$3-5 each)`
+            }
+          >
+            {thesesStatus === "kicking" && "Queuing…"}
+            {thesesStatus === "running" && (
+              <><span aria-hidden style={{ marginRight: 4 }}>⏳</span>Running {thesesDone}/{thesesTotal}{thesesErrors > 0 ? ` (${thesesErrors} err)` : ""}</>
+            )}
+            {thesesStatus === "complete" && (
+              <><span aria-hidden style={{ marginRight: 4 }}>✓</span>All {thesesTotal} done</>
+            )}
+            {thesesStatus === "partial" && (
+              <><span aria-hidden style={{ marginRight: 4 }}>⚠</span>{thesesDone}/{thesesTotal} ({thesesErrors} err)</>
+            )}
+            {thesesStatus === "idle" && (
+              <><span aria-hidden style={{ marginRight: 4 }}>⚡</span>Run All Theses</>
+            )}
           </button>
 
           {/* Theme toggle */}

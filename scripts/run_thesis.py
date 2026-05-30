@@ -363,6 +363,97 @@ def write_to_supabase(row: dict) -> int | None:
     return inserted["id"]
 
 
+def write_socratic_auto(thesis_id: int | None, row: dict, parsed: dict) -> int | None:
+    """Dual-write the thesis as an `auto`-mode row in socratic_analyses.
+
+    BUILD_PLAN_v2 Phase 2 wiring (2026-05-15): the new 5-tab frontend reads
+    from socratic_analyses for both auto and socratic modes. Auto-mode rows
+    here carry the single-call thesis verdict in `model_a` (model_b/c null)
+    so the UI doesn't need to know about modes.
+
+    Best-effort. Failures must NOT abort the run â the canonical write is to
+    `theses` (already done by write_to_supabase). This is a denormalized
+    convenience copy. If it fails, the run still succeeded.
+    """
+    try:
+        try:
+            from supabase_helper import get_client
+            sb = get_client()
+        except ImportError:
+            from supabase import create_client
+            url = os.environ.get("SUPABASE_URL", "")
+            key = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("SUPABASE_SECRET_KEY", "")
+            if not url or not key:
+                return None
+            sb = create_client(url, key)
+
+        model_a = {
+            "role": "auto",
+            "verdict": parsed.get("conviction"),
+            "target_low": parsed.get("buy_below") or parsed.get("thesis_target"),
+            "target_high": parsed.get("breakout_price") or parsed.get("thesis_target"),
+            "thesis_target": parsed.get("thesis_target"),
+            "risk_adj_target": parsed.get("risk_adj_target"),
+            "risk_adj_ev_ratio": parsed.get("risk_adj_ev_ratio"),
+            "position_size_pct": parsed.get("position_size_pct"),
+            "confidence": parsed.get("conviction"),
+            "filters": parsed.get("filters", {}),
+            "top_risks_count": len(parsed.get("top_risks", []) or []),
+            "top_catalysts_count": len(parsed.get("top_catalysts", []) or []),
+        }
+
+        socratic_row = {
+            "ticker": row["ticker"],
+            "run_at": row["run_at"],
+            "mode": "auto",
+            "thesis_id": thesis_id,
+            "model_a": model_a,
+            "model_b": None,
+            "model_c": None,
+            "agreements": [],
+            "disagreements": [],
+            "research_findings": [],
+            "rough_target_low": parsed.get("buy_below") or parsed.get("thesis_target"),
+            "rough_target_high": parsed.get("breakout_price") or parsed.get("thesis_target"),
+            "downside_price": parsed.get("buy_below"),
+            "final_verdict": _conviction_to_verdict(parsed.get("conviction")),
+            "prompt_versions": {"auto": row.get("prompt_version", "unknown")},
+            "spot_at_run": row.get("spot_at_run"),
+            "input_tokens": row.get("input_tokens"),
+            "output_tokens": row.get("output_tokens"),
+            "web_search_count": row.get("web_search_count"),
+        }
+
+        result = sb.table("socratic_analyses").insert(socratic_row).execute()
+        if not result.data:
+            print(
+                "  [supabase] socratic_analyses dual-write returned empty data "
+                "(RLS or schema drift). Auto-mode row not stored in socratic_analyses; "
+                "theses write succeeded so the canonical record is intact.",
+                file=sys.stderr, flush=True,
+            )
+            return None
+        return result.data[0].get("id")
+    except Exception as e:
+        print(f"  [WARN] socratic_analyses dual-write skipped: {e}", file=sys.stderr, flush=True)
+        return None
+
+
+def _conviction_to_verdict(conviction):
+    """Map theses.conviction -> socratic_analyses.final_verdict enum."""
+    if not conviction:
+        return None
+    c = conviction.upper()
+    if c in ("HIGH", "MEDIUM"):
+        return "proceed"
+    if c in ("LOW", "LOW-MEDIUM"):
+        return "watch"
+    if c in ("BROKEN", "WEAK"):
+        return "pass"
+    return None
+
+
+
 def _log_outcome_if_possible(thesis_id: int | None) -> None:
     """Best-effort outcome logging. Failures here must NOT abort the run —
     the thesis was successfully saved; outcome tracking is bookkeeping."""
@@ -744,6 +835,11 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
             thesis_id = write_to_supabase(row)
             _log_outcome_if_possible(thesis_id)
             print("  wrote row to Supabase theses", flush=True)
+            # BUILD_PLAN_v2 Phase 2: dual-write to socratic_analyses (mode=auto)
+            # Best-effort; failures here do not abort the run.
+            sa_id = write_socratic_auto(thesis_id, row, parsed)
+            if sa_id is not None:
+                print(f"  wrote socratic_analyses row (auto mode, id={sa_id})", flush=True)
         except Exception as e:
             print(f"  [WARN] Supabase write failed: {e}", file=sys.stderr)
 

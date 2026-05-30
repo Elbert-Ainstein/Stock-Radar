@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 850" font-family="ui-sans-serif, system-ui, sans-serif">
+  <defs>
+    <style>
+      .heading { font-size: 22px; font-weight: 700; fill: #1c1a17; }
+      .subheading { font-size: 13px; fill: #57534e; font-style: italic; }
+      .stage-1 { fill: #fee2e2; stroke: #dc2626; stroke-width: 1.5; }
+      .stage-2 { fill: #fef3c7; stroke: #d97706; stroke-width: 1.5; }
+      .stage-3 { fill: #dbeafe; stroke: #2563eb; stroke-width: 1.5; }
+      .stage-4 { fill: #d1fae5; stroke: #16a34a; stroke-width: 1.5; }
+      .stage-title { font-size: 14px; font-weight: 700; fill: #0a0a09; }
+      .stage-label { font-size: 12px; fill: #1c1a17; }
+      .stage-mono { font-family: ui-monospace, monospace; font-size: 11.5px; fill: #1c1a17; }
+      .stage-meta { font-size: 11px; fill: #57534e; font-style: italic; }
+      .arrow-line { stroke: #525252; stroke-width: 1.4; fill: none; }
+      .promo-label { font-size: 11px; font-weight: 600; fill: #d97706; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#525252"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="850" fill="#fcfcfa"/>
+
+  <text x="700" y="34" text-anchor="middle" class="heading">Progressive abstraction — how specific numbers fade into durable patterns</text>
+  <text x="700" y="56" text-anchor="middle" class="subheading">Hume's vision: like human memory. Specific facts fade with time; the structural shape persists. Pattern memory aggregates ticker memory; lessons aggregate patterns.</text>
+
+  <!-- Stage 1: Specific numbers (Recent Thesis History) -->
+  <g transform="translate(80,120)">
+    <rect class="stage-1" x="0" y="0" width="240" height="200" rx="8"/>
+    <text class="stage-title" x="14" y="26">Stage 1 — Specific</text>
+    <text class="stage-meta" x="14" y="46">Recent Thesis History (last 5 runs)</text>
+    <text class="stage-mono" x="14" y="74">| 2026-05-10 | $1,300 |</text>
+    <text class="stage-mono" x="14" y="90">| 2026-05-09 | $1,180 |</text>
+    <text class="stage-mono" x="14" y="106">| 2026-04-12 | $1,050 |</text>
+    <text class="stage-mono" x="14" y="122">| 2026-03-15 | $920   |</text>
+    <text class="stage-mono" x="14" y="138">| 2026-02-18 | $810   |</text>
+    <text class="stage-meta" x="14" y="166">Exact values, exact dates.</text>
+    <text class="stage-meta" x="14" y="182">Highest detail, highest anchor</text>
+    <text class="stage-meta" x="14" y="198">risk at TEMPERATURE=0.3.</text>
+  </g>
+
+  <!-- Stage 2: Rolled-up directional summary -->
+  <g transform="translate(400,120)">
+    <rect class="stage-2" x="0" y="0" width="240" height="200" rx="8"/>
+    <text class="stage-title" x="14" y="26">Stage 2 — Rolled-up</text>
+    <text class="stage-meta" x="14" y="46">When &gt;5 runs accumulate</text>
+    <text class="stage-mono" x="14" y="74">Pre-2026-02-18:</text>
+    <text class="stage-mono" x="14" y="90">avg $810, range $760-$920,</text>
+    <text class="stage-mono" x="14" y="106">conviction stable HIGH,</text>
+    <text class="stage-mono" x="14" y="122">methods: DCF / EPS×Multiple,</text>
+    <text class="stage-mono" x="14" y="138">multiple expanded 8x → 13x</text>
+    <text class="stage-meta" x="14" y="166">Specifics dropped; direction</text>
+    <text class="stage-meta" x="14" y="182">+ trend preserved. Lower</text>
+    <text class="stage-meta" x="14" y="198">anchor risk.</text>
+  </g>
+
+  <!-- Stage 3: Pattern absorption -->
+  <g transform="translate(720,120)">
+    <rect class="stage-3" x="0" y="0" width="240" height="200" rx="8"/>
+    <text class="stage-title" x="14" y="26">Stage 3 — Pattern</text>
+    <text class="stage-meta" x="14" y="46">~12 months later (Phase C)</text>
+    <text class="stage-mono" x="14" y="74">in pattern/cyclical_at_peak.md:</text>
+    <text class="stage-mono" x="14" y="92">"MU 2026 cycle:</text>
+    <text class="stage-mono" x="14" y="108">  re-rated 7x → 13x over 6mo,</text>
+    <text class="stage-mono" x="14" y="124">  driven by HBM/AI cycle,</text>
+    <text class="stage-mono" x="14" y="140">  realized outcome: TBD"</text>
+    <text class="stage-meta" x="14" y="166">Ticker-level → archetype-level.</text>
+    <text class="stage-meta" x="14" y="182">No exact targets. Pattern shape</text>
+    <text class="stage-meta" x="14" y="198">+ outcome (when known).</text>
+  </g>
+
+  <!-- Stage 4: Lesson promotion -->
+  <g transform="translate(1040,120)">
+    <rect class="stage-4" x="0" y="0" width="240" height="200" rx="8"/>
+    <text class="stage-title" x="14" y="26">Stage 4 — Lesson</text>
+    <text class="stage-meta" x="14" y="46">If outcome clearly won/lost</text>
+    <text class="stage-mono" x="14" y="74">in lessons.md:</text>
+    <text class="stage-mono" x="14" y="92">"Cyclical at peak earnings —</text>
+    <text class="stage-mono" x="14" y="108">  multiple historically</text>
+    <text class="stage-mono" x="14" y="124">  compresses 30-50% from</text>
+    <text class="stage-mono" x="14" y="140">  secular average."</text>
+    <text class="stage-mono" x="14" y="156">(N=X cycles, M=Y tickers)</text>
+    <text class="stage-meta" x="14" y="184">Durable cross-cutting rule.</text>
+    <text class="stage-meta" x="14" y="200">Used as prior on every run.</text>
+  </g>
+
+  <!-- Arrows + labels between stages -->
+  <line x1="320" y1="220" x2="400" y2="220" class="arrow-line" marker-end="url(#arrow)"/>
+  <text x="360" y="206" text-anchor="middle" class="promo-label">at run 6+</text>
+
+  <line x1="640" y1="220" x2="720" y2="220" class="arrow-line" marker-end="url(#arrow)"/>
+  <text x="680" y="206" text-anchor="middle" class="promo-label">~12 months</text>
+
+  <line x1="960" y1="220" x2="1040" y2="220" class="arrow-line" marker-end="url(#arrow)"/>
+  <text x="1000" y="206" text-anchor="middle" class="promo-label">if outcome clear</text>
+
+  <!-- Bottom: comparison with current system -->
+  <g transform="translate(80,400)">
+    <rect x="0" y="0" width="1240" height="180" fill="#f6f4ec" stroke="#dfd9c4" rx="6"/>
+    <text x="20" y="28" font-size="14" font-weight="700" fill="#0a0a09">Current state vs proposed</text>
+
+    <text x="20" y="54" font-size="12" fill="#1c1a17"><tspan font-weight="700">TODAY:</tspan> Stage 1 → Stage 2 (rolled-up) works. Stage 3 (pattern absorption) doesn't exist.</text>
+    <text x="20" y="72" font-size="12" fill="#1c1a17">Items age out via runs_silent counter (≥2 = Stale, ≥4 = Archive). When archived, they're <em>gone</em> — no promotion to durable knowledge.</text>
+
+    <text x="20" y="100" font-size="12" fill="#1c1a17"><tspan font-weight="700">PROPOSED:</tspan> Items don't just decay — they <em>promote</em>. The most durable shape of a thesis (cycle pattern, multiple regime, common error)</text>
+    <text x="20" y="118" font-size="12" fill="#1c1a17">survives even after specific numbers fade. Like human memory: I don't remember every quarter MU reported in 2018, but I remember "memory cycle peaked → 50% drawdown."</text>
+
+    <text x="20" y="146" font-size="12" fill="#16a34a"><tspan font-weight="700">Phase A (lessons.md) is buildable now.</tspan> It captures Stage 4 directly from operator-curated mistakes. Doesn't require pattern memory or outcome tracking.</text>
+    <text x="20" y="164" font-size="12" fill="#dc2626"><tspan font-weight="700">Phases B + C require Module 9 (deferred).</tspan> Pattern absorption needs realized outcomes to validate which patterns are predictive vs spurious.</text>
+  </g>
+
+  <!-- Bottom: anchor risk gradient -->
+  <g transform="translate(80,620)">
+    <text x="0" y="22" font-size="14" font-weight="700" fill="#0a0a09">Anchor risk at TEMPERATURE=0.3 — decreases as content abstracts</text>
+
+    <!-- Risk gradient bar -->
+    <rect x="0" y="40" width="240" height="40" fill="#fee2e2" stroke="#dc2626"/>
+    <text x="120" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#0a0a09">HIGH</text>
+    <rect x="240" y="40" width="240" height="40" fill="#fef3c7" stroke="#d97706"/>
+    <text x="360" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#0a0a09">MEDIUM</text>
+    <rect x="480" y="40" width="240" height="40" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="600" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#0a0a09">LOW</text>
+    <rect x="720" y="40" width="240" height="40" fill="#d1fae5" stroke="#16a34a"/>
+    <text x="840" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#0a0a09">MINIMAL</text>
+
+    <text x="120" y="100" text-anchor="middle" font-size="11" fill="#525252">Specific $ targets</text>
+    <text x="120" y="115" text-anchor="middle" font-size="11" fill="#525252">in last 5 runs</text>
+    <text x="360" y="100" text-anchor="middle" font-size="11" fill="#525252">Rolled-up</text>
+    <text x="360" y="115" text-anchor="middle" font-size="11" fill="#525252">directional summary</text>
+    <text x="600" y="100" text-anchor="middle" font-size="11" fill="#525252">Pattern with</text>
+    <text x="600" y="115" text-anchor="middle" font-size="11" fill="#525252">credibility weight (n,m)</text>
+    <text x="840" y="100" text-anchor="middle" font-size="11" fill="#525252">Lesson rule</text>
+    <text x="840" y="115" text-anchor="middle" font-size="11" fill="#525252">("avoid X")</text>
+
+    <text x="120" y="148" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="700">"Pipeline says $1,180" →</text>
+    <text x="120" y="163" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="700">next run anchors on $1,180</text>
+    <text x="360" y="148" text-anchor="middle" font-size="11" fill="#525252">"prior runs ranged $810-$1,180"</text>
+    <text x="360" y="163" text-anchor="middle" font-size="11" fill="#525252">→ shape, not center</text>
+    <text x="600" y="148" text-anchor="middle" font-size="11" fill="#525252">"cyclical at peak compresses</text>
+    <text x="600" y="163" text-anchor="middle" font-size="11" fill="#525252">30-50%" → reasoning anchor</text>
+    <text x="840" y="148" text-anchor="middle" font-size="11" fill="#525252">"calendar vs fiscal trap"</text>
+    <text x="840" y="163" text-anchor="middle" font-size="11" fill="#525252">→ procedural caution</text>
+
+    <text x="0" y="200" font-size="12" fill="#1c1a17"><tspan font-weight="700">Implication:</tspan> the more abstract the memory, the safer the anchor. Today's MU misdiagnosis was Stage-1 anchoring (specific $1,180 target). Stage 4 lessons are far less risky to inject — they shape</text>
+    <text x="0" y="218" font-size="12" fill="#1c1a17">reasoning without dictating numbers. <tspan font-weight="700">This is why Phase A (lessons) is the right place to start.</tspan></text>
+  </g>
+</svg>
