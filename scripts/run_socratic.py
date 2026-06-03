@@ -1141,9 +1141,7 @@ def run_socratic(ticker: str, *, trigger_reason: str = "manual", supabase: bool 
     else:
         print("  [supabase] skipped (--no-supabase)", flush=True)
 
-    print(f"=== run_socratic done: {ticker} ===\n", flush=True)
-
-    return {
+    result = {
         "ticker": ticker.upper(),
         "run_at": run_at.isoformat(),
         "socratic_analyses_id": row_id,
@@ -1152,7 +1150,27 @@ def run_socratic(ticker: str, *, trigger_reason: str = "manual", supabase: bool 
         "corpus_callosum": cc["parsed"],
         "research_findings": research_findings,
         "rough_target_range": target["parsed"],
+        # ── Checkpoint-seal inputs (2026-06-01) ──
+        "ref_price": ctx.get("spot_raw", ctx.get("price")),
+        "prompt_versions": {
+            "model_a": round_1["a"].get("prompt_version"),
+            "model_b": round_1["b"].get("prompt_version"),
+            "model_c": round_1["c"].get("prompt_version"),
+            "corpus_callosum": cc.get("prompt_version"),
+        },
     }
+
+    # Async Checkpoint Feedback (rescoped P0/P1): seal the reasoning fingerprint
+    # + system version into prediction_log. Best-effort — never aborts the run.
+    if supabase:
+        try:
+            from checkpoint_seal import seal_socratic_prediction
+            seal_socratic_prediction(result)
+        except Exception as e:
+            print(f"  [checkpoint_seal] WARN: {e}", file=sys.stderr, flush=True)
+
+    print(f"=== run_socratic done: {ticker} ===\n", flush=True)
+    return result
 
 
 # ────────────────────────────────────────────────────────────────────

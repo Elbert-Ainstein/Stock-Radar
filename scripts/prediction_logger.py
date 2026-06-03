@@ -49,6 +49,14 @@ def _coerce_row(snapshot: dict) -> dict:
         "sigmoid_params": snapshot.get("sigmoid_params") or {},
         "context_inputs": snapshot.get("context_inputs") or {},
         "scenario_probabilities": snapshot.get("scenario_probabilities") or {},
+        # ── Checkpoint-seal fields (2026-06-01) — optional; NULL for the engine
+        #    write-path, populated by checkpoint_seal.seal_socratic_prediction().
+        #    Unknown columns are schema-drift-stripped until the migration lands.
+        "system_version": snapshot.get("system_version"),
+        "reasoning_fingerprint": snapshot.get("reasoning_fingerprint") or {},
+        "cohort_key": snapshot.get("cohort_key"),
+        "version_cohort_break": snapshot.get("version_cohort_break"),
+        "socratic_analysis_id": snapshot.get("socratic_analysis_id"),
     }
 
 

@@ -2,6 +2,40 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-06-01] Async Checkpoint Feedback — rescoped P0/P1 (seal layer on prediction_log)
+
+**Theme:** Implements the rescoped checkpoint-feedback layer per `docs/CHECKPOINT_FEEDBACK_ASSESSMENT_2026-06-01.md` + `docs/CHECKPOINT_FEEDBACK_RESCOPE_RESOLUTIONS_2026-06-01.md`. The original spec proposed a parallel `thesis_predictions`/`thesis_outcomes` system; review squad found ~70% already exists (`prediction_log`, `prediction_outcomes`, `prediction_logger.py`) plus a name collision with the existing `thesis_outcomes`. We **extend** the existing stack instead.
+
+### What shipped
+
+**`supabase/2026-06-01_checkpoint_seal.sql`** (NEW) — additive, not auto-applied:
+- `prediction_log` += `system_version` (git hash), `reasoning_fingerprint` (jsonb), `cohort_key`, `version_cohort_break`, `socratic_analysis_id` (**bigint** — fixes the spec's uuid-vs-bigint FK error against `socratic_analyses.id`).
+- `prediction_outcomes` += `actual_date_used` (P0 date-pinning, so immutable grades record the exact close date).
+- Append-only RLS on `prediction_log` (Option A): INSERT+SELECT policies only; UPDATE/DELETE denied for the anon key. Logger upsert still works (run_id unique → insert-only). Escape hatch: dated service-role migration for the rare real correction.
+
+**`scripts/checkpoint_seal.py`** (NEW) — pure, unit-tested functions + one guarded DB entry point:
+- `reasoning_fingerprint()` assembled from already-captured `socratic_analyses` data (dissenting_model, unresolved judgment questions, per-model confidences) — no change to the model prompts.
+- `conviction_proxy()` = mean(model confidence) × direction-agreement, sealed with `conviction_source="proxy"` (judgment card can later overwrite as `"human"`). [Resolution Decision 2]
+- `compute_cohort_key()` = judgment `prompt_versions` (model_a/b/c + corpus_callosum) + content hash of `analyst.py`, `target_engine.py`, `kill_condition_eval.py`. `run_socratic.py` deliberately excluded (orchestration churn; its judgment is captured via prompt_versions). [Resolution Decision 1 + Flag 2]
+- `close_on_or_after()` = date-pinned price pick returning `(price, exact_date_used)` — fixes the `_fetch_historical_price` "first row in window" bug. [P0]
+- `seal_socratic_prediction()` — best-effort; never raises into the caller.
+
+**`scripts/prediction_logger.py`** — `_coerce_row()` passes through the 5 new optional fields (NULL for the engine path; schema-drift-stripped until the migration lands).
+
+**`scripts/run_socratic.py`** — guarded seal hook after the `socratic_analyses` write; adds `ref_price` + `prompt_versions` to the returned dict. Skipped under `--no-supabase`.
+
+**`scripts/test_checkpoint_seal.py`** (NEW) — 13 tests, no network/DB.
+
+### Verification
+`pytest test_checkpoint_seal.py test_engine.py` → **52 passed**. Touched files compile. Guarded seal degrades gracefully with no DB creds (warns, returns None). git system_version resolves (`8c4e505`). A red-team pass on the new code fixed three issues before commit: `direction_agreement` now divides by recognised-verdict count (not a hard 3); `close_on_or_after` skips non-ISO date rows instead of mis-comparing them; and a failed previous-cohort lookup now seals `version_cohort_break=None` (unknown) rather than `False`, so a transient DB error can't silently hide a real cohort break.
+
+**First live run (LITE, socratic id=26) surfaced a real fingerprint bug, now fixed:** the verdict→direction map only knew generic/Chinese labels, not the models' actual enums — Model A `OVERVALUED/FAIRLY_VALUED/UNDERVALUED`, Model B `REGIME_UPSIDE/NO_REGIME_SHIFT/REGIME_DOWNSIDE` — so a LITE seal with `A:OVERVALUED B:REGIME_DOWNSIDE C:None` parsed only one direction and read a false unanimous agreement. Fixes: (1) verdict vocab expanded to the real enums; (2) Model C correctly treated as non-directional (adversarial, emits no verdict); (3) `conviction_proxy` scoped to the directional voters (A/B) so C's bear-case confidence can't pollute it; (4) added `directional_conflict` (A-vs-B) to the fingerprint, the meaningful 2-voter signal alongside `dissenting_model`. Any seal written before this fix should be re-run. (52 passed includes the new live-shape regression test.)
+
+### Deferred (unchanged from the assessment)
+- Live `[CALIBRATION]` insight injection until ~N≥10 (Corrective threshold = 10, not the spec's 20). Until then: log quietly. The only N-independent interim value is the existing `kill_condition_eval.py` monitor + single-case process review of the fingerprint.
+- `implied_expectations` capture (blocked on D5). Grader cron wiring (uses `close_on_or_after` + `actual_date_used`).
+- **Apply `supabase/2026-06-01_checkpoint_seal.sql` via the SQL editor** before the seal fields persist (until then they are schema-drift-stripped, no error).
+
 ## [2026-05-26] target_engine.py: DCF role contextual routing (C1) + archetype override loader (D-v1)
 
 **Theme:** Closes 25-day architectural debt from memory `user_dcf_is_wrong_primary` (2026-05-01). Forward DCF was producing primary engine targets that structurally undershot regime-shift candidates (Gordon Growth ≤4.5% perpetuity cap). This change demotes DCF to a downside-floor role for regime-shift archetypes; exit multiples drive the primary target.
