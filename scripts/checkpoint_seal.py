@@ -41,6 +41,17 @@ JUDGMENT_FILES = ("analyst.py", "target_engine.py", "kill_condition_eval.py")
 # Socratic prompt_versions keys that count toward the cohort key.
 JUDGMENT_PROMPT_KEYS = ("model_a", "model_b", "model_c", "corpus_callosum")
 
+# Judgment prompt files whose `model:` frontmatter pins the reasoner. A model
+# swap here (e.g. sonnet-4-6 -> opus-4-8) is a clock-resetting change and must
+# trip a cohort break automatically — independent of whether the prompt VERSION
+# string was bumped. Mapped cohort-key key -> prompt filename.
+JUDGMENT_PROMPT_FILES = {
+    "model_a": "model_a_fundamentals.md",
+    "model_b": "model_b_regime.md",
+    "model_c": "model_c_adversarial.md",
+    "corpus_callosum": "corpus_callosum.md",
+}
+
 # Confidence string -> numeric, for the conviction proxy.
 _CONFIDENCE_SCORE = {"HIGH": 1.0, "MEDIUM": 0.66, "MED": 0.66, "LOW": 0.33}
 
@@ -166,29 +177,102 @@ def unresolved_questions(disagreements: Optional[Iterable[dict]]) -> list[str]:
     return out
 
 
+_DIR_WORD = {1: "up", -1: "down", 0: "flat"}
+
+
+def net_direction(round_1: dict) -> Optional[str]:
+    """The directional lean the models agree on: 'up'/'down'/'flat', or None.
+
+    None when the directional voters genuinely conflict (e.g. A overvalued vs B
+    regime-upside) or none expressed a recognised verdict. This is the honest
+    thesis direction to grade against — far better than a band midpoint that can
+    sit on top of the reference price.
+    """
+    dirs = [verdict_direction(m.get("verdict")) for m in _models(round_1).values()]
+    dirs = [d for d in dirs if d is not None]
+    if not dirs:
+        return None
+    nonzero = {d for d in dirs if d != 0}
+    if len(nonzero) > 1:
+        return None  # real conflict — no net lean
+    modal = max(set(dirs), key=dirs.count)
+    return _DIR_WORD.get(modal)
+
+
 def reasoning_fingerprint(round_1: dict, disagreements: Optional[Iterable[dict]]) -> dict:
     """Assemble the process-insight fingerprint from already-captured data."""
     models = _models(round_1)
     return {
         "dissenting_model": dissenting_model(round_1),
         "directional_conflict": directional_conflict(round_1),
+        "directional_lean": net_direction(round_1),  # graded against by run_checkpoint
         "unresolved_questions": unresolved_questions(disagreements),
         "model_confidences": {r: m.get("confidence") for r, m in models.items()},
+        # Self-consistency (P1): modal frequency of each model's mode-of-N verdict
+        # (None when SELF_CONSISTENCY_N=1, i.e. a single un-aggregated sample), so
+        # the grader can later down-weight low-consistency seals.
+        "model_consistencies": {r: m.get("consistency") for r, m in models.items()},
         "conviction": conviction_proxy(round_1),
         "conviction_source": "proxy",
     }
 
 
-def compute_cohort_key(prompt_versions: Optional[dict], judgment_file_hash: str) -> str:
+def compute_cohort_key(
+    prompt_versions: Optional[dict],
+    judgment_file_hash: str,
+    model_ids: Optional[dict] = None,
+) -> str:
     """Stable short key for the judgment cohort.
 
-    Combines the judgment Socratic prompt versions with a content hash of the
-    judgment files. A change in either yields a new key -> a cohort break.
+    Combines three judgment signals; a change in any one yields a new key (a
+    cohort break):
+      - the Socratic prompt VERSION strings (operator-controlled granularity),
+      - a content hash of the judgment FILES (analyst/target_engine/kill_eval),
+      - the resolved MODEL ids per judgment prompt (so a model swap always resets
+        the clock, even if no version string was bumped).
     """
     pv = prompt_versions or {}
     subset = {k: pv.get(k) for k in JUDGMENT_PROMPT_KEYS}
-    payload = json.dumps({"pv": subset, "files": judgment_file_hash}, sort_keys=True)
+    payload = json.dumps(
+        {"pv": subset, "files": judgment_file_hash, "models": model_ids or {}},
+        sort_keys=True,
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def resolve_model_ids(models_used: Optional[dict], frontmatter_ids: Optional[dict]) -> dict:
+    """Prefer the models that ACTUALLY ran over the intended frontmatter.
+
+    If the run reported `models_used` with at least one non-null value, use it
+    (so a same-provider fallback is reflected in the cohort key + fingerprint);
+    otherwise fall back to the intended frontmatter models.
+    """
+    mu = models_used or {}
+    return mu if any(mu.values()) else (frontmatter_ids or {})
+
+
+def judgment_model_ids(repo_root: Path) -> dict:
+    """Resolved `model:` frontmatter of each judgment prompt -> for the cohort key.
+
+    Reads the `model:` line from the first few lines of each judgment prompt's
+    YAML frontmatter. Missing file / missing line -> None for that key. This is
+    where the Socratic reasoner is actually pinned, so editing it (the act of
+    swapping models) changes the cohort key automatically.
+    """
+    out: dict[str, Optional[str]] = {}
+    for key, fname in JUDGMENT_PROMPT_FILES.items():
+        p = Path(repo_root) / "scripts" / "prompts" / "socratic" / fname
+        model = None
+        try:
+            for line in p.read_text(encoding="utf-8").splitlines()[:15]:
+                s = line.strip()
+                if s.startswith("model:"):
+                    model = s.split(":", 1)[1].strip()
+                    break
+        except FileNotFoundError:
+            model = None
+        out[key] = model
+    return out
 
 
 def _to_date(d: Any) -> Optional[date]:
@@ -346,7 +430,15 @@ def seal_socratic_prediction(result: dict, *, repo_root: Optional[Path] = None) 
         prompt_versions = result.get("prompt_versions") or {}
 
         system_version = git_system_version(repo_root)
-        cohort_key = compute_cohort_key(prompt_versions, file_content_hash(repo_root))
+        # Prefer the models that ACTUALLY ran (captured per call); fall back to the
+        # intended frontmatter only if the run didn't report them. This keeps the
+        # cohort key honest when the same-provider fallback fired.
+        model_ids = resolve_model_ids(result.get("models_used"), judgment_model_ids(repo_root))
+        cohort_key = compute_cohort_key(
+            prompt_versions,
+            file_content_hash(repo_root),
+            model_ids,
+        )
         prev = _previous_cohort_key(sb, ticker)
         prev_known = prev is not _QUERY_FAILED
 
@@ -368,6 +460,9 @@ def seal_socratic_prediction(result: dict, *, repo_root: Optional[Path] = None) 
         # If the prior-cohort lookup failed, break-detection is unknown, not False.
         if not prev_known:
             snapshot["version_cohort_break"] = None
+        # Record the models that produced this verdict inside the fingerprint, so a
+        # fallback is auditable in the sealed record itself.
+        snapshot["reasoning_fingerprint"]["models_used"] = model_ids
         row = log_prediction(ticker, snapshot)
         if row:
             print(f"  [checkpoint_seal] sealed {ticker} "

@@ -192,6 +192,7 @@ def record_price_outcome(
     prediction_id: str,
     days_elapsed: int,
     actual_price: float,
+    actual_date_used: str | None = None,
 ) -> dict:
     """
     Record an actual price observation against a logged prediction.
@@ -228,6 +229,10 @@ def record_price_outcome(
         "days_elapsed": int(days_elapsed),
         "actual_price": actual_price,
     }
+    if actual_date_used:
+        # The exact trading-day the close came from (P0 date-pinning). Schema-drift
+        # stripped until the 2026-06-01 migration lands.
+        row["actual_date_used"] = actual_date_used
 
     results = _upsert_with_retry("prediction_outcomes", [row])
 

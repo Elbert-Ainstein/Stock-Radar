@@ -1,0 +1,17 @@
+# Stock Radar — native schedule (host cron; runs whether or not any app is open).
+# Install:   crontab scripts/cron/crontab.txt      (replaces your crontab)
+#   or merge: crontab -l > cur && cat scripts/cron/crontab.txt >> cur && crontab cur
+# Times are LOCAL. If you use conda, set the interpreter once at the top:
+STOCKRADAR_PYTHON=/Users/ianwu_elbert_aintein/miniconda3/bin/python
+
+# Checkpoint grader — daily 07:00. Grades any sealed predictions ripened to
+# T+30/60/90. Idempotent; a missed day catches up on the next run.
+0 7 * * * /Users/ianwu_elbert_aintein/Documents/Projects/Trading_Strategy/Stock-Radar/scripts/cron/stockradar_cron.sh grader
+
+# Analyst panel refresh — Mon/Wed/Fri 06:30. Low cadence = thinking time (per the
+# panel design); persists data/analyst_panel.json that the Socratic [CHAIN] block loads.
+30 6 * * 1,3,5 /Users/ianwu_elbert_aintein/Documents/Projects/Trading_Strategy/Stock-Radar/scripts/cron/stockradar_cron.sh panel
+
+# (optional) live price refresh — weekdays hourly 10:00–16:00 (for the dashboard/DB;
+# per-run thesis/socratic already fetch a live quote). Uncomment to enable.
+# 0 10-16 * * 1-5 /Users/ianwu_elbert_aintein/Documents/Projects/Trading_Strategy/Stock-Radar/scripts/cron/stockradar_cron.sh prices

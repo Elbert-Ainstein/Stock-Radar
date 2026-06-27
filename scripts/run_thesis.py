@@ -35,7 +35,7 @@ import yaml
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from utils import load_env
+from utils import load_env, create_message
 
 load_env()
 
@@ -57,7 +57,7 @@ PROMPT_PATH = HERE / "prompts" / "thesis_v3.md"
 SOURCES_PATH = HERE / "prompts" / "sources_allowlist.json"
 THESES_DIR = REPO_ROOT / "data" / "theses"
 
-ANTHROPIC_MODEL = "claude-opus-4-6"
+ANTHROPIC_MODEL = "claude-opus-4-8"
 ANTHROPIC_MODEL_MEMORY = "claude-sonnet-4-6"
 MEMORY_PROMPT_PATH = HERE / "prompts" / "memory_update_v1.md"
 MEMORY_MAX_TOKENS = 16000
@@ -88,6 +88,38 @@ def fill_placeholders(body: str, **fields: str) -> str:
     for key, val in fields.items():
         out = out.replace(f"[{key.upper()}]", str(val))
     return out
+
+
+def _archetype_override_block(archetype: str | None) -> str:
+    """Build the [ARCHETYPE_OVERRIDE] block injected into thesis_v3.md.
+
+    Empty when no override is set (so the placeholder leaves NO literal text — the
+    prior bug: the unfilled placeholder shipped verbatim and the model valued
+    regime-shift names like mature companies). For `transformational`, instruct
+    Step-5 multiple selection to anchor to regime-shift comps and drop the +25%
+    carve-out ceiling — the v3.4.4 design the frontmatter marked 'smoke test pending'.
+    """
+    if not archetype:
+        return ""
+    a = archetype.lower()
+    if a == "transformational":
+        return (
+            "STRATEGIC ARCHETYPE OVERRIDE — this ticker is tagged "
+            "**transformational** (regime-shift / right-tail), set by the operator in "
+            "config/ticker_archetype_overrides.json.\n"
+            "At Step 5 (multiple selection): anchor the forward multiple to regime-shift "
+            "comparables — e.g. NVDA peak NTM forward ~59x (mid-2025), ASML pre-EUV "
+            "35-45x — NOT to mature-company mean multiples, and DISABLE the +25% "
+            "carve-out ceiling. This is a demand-regime change, not a cycle: size the "
+            "multiple to the durability of the inflection. Keep FULL tactical rigor on "
+            "NTM EPS, dilution, and entry price — the tag does not excuse an inflated "
+            "multiple or hand-waved EPS; it only forbids anchoring to mature-company means."
+        )
+    return (
+        f"STRATEGIC ARCHETYPE OVERRIDE — this ticker is tagged **{a}** by the operator "
+        f"(config/ticker_archetype_overrides.json). Apply the {a} valuation framework at "
+        f"Step 5; keep full tactical rigor on inputs."
+    )
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -156,7 +188,8 @@ def call_claude_with_search(
 
     for iteration in range(max_iter):
         print(f"  [run_thesis] API call {iteration + 1}/{max_iter}...", file=sys.stderr, flush=True)
-        resp = client.messages.create(
+        resp = create_message(
+            client,
             model=ANTHROPIC_MODEL,
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
@@ -336,7 +369,25 @@ def write_to_supabase(row: dict) -> int | None:
         sb = create_client(url, key)
     else:
         sb = get_client()
-    result = sb.table("theses").insert(row).execute()
+    import re as _re
+    result = None
+    for _attempt in range(5):  # strip up to 5 unknown columns (e.g. kill_gate_override,
+        try:                    # model_d_bracket) before their migrations land
+            result = sb.table("theses").insert(row).execute()
+            break
+        except Exception as e:
+            m = (_re.search(r"column \"?([a-zA-Z_][a-zA-Z0-9_]*)\"? .*does not exist", str(e))
+                 or _re.search(r"Could not find the '([a-zA-Z_][a-zA-Z0-9_]*)' column", str(e)))
+            if m and m.group(1) in row:
+                bad = m.group(1)
+                print(f"  [supabase] column '{bad}' missing in theses — stripping and retrying "
+                      f"(apply the matching supabase migration to persist it).",
+                      file=sys.stderr, flush=True)
+                row = {k: v for k, v in row.items() if k != bad}
+                continue
+            raise
+    if result is None:
+        raise RuntimeError("theses insert failed after stripping unknown columns")
     if not result.data:
         # The insert may have succeeded (no exception raised) but PostgREST
         # returned an empty body. This typically means RLS blocks SELECT on
@@ -730,10 +781,18 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     # (Module 5 cleanup 2026-05-07: dropped stale `as_of=None` kwarg — the
     # signature was simplified during the provider-abstraction refactor and
     # this call site was never updated, blocking dry-runs with TypeError.)
-    from finance_data import fetch_financials
+    from finance_data import fetch_financials, fetch_live_price
     fin = fetch_financials(ticker, override_suspect_recent=override_suspect_recent)
     spot = fin.price or 0.0
     sector = getattr(fin, "sector", "") or ""
+    # Use a LIVE quote for spot — fin.price is the EOD provider close (~1 day stale),
+    # which distorts the trade-asymmetry ratio on volatile days.
+    _live = fetch_live_price(ticker)
+    if _live:
+        if spot and abs(_live - spot) / spot > 0.01:
+            print(f"  [price] live ${_live:.2f} vs EOD provider ${spot:.2f} "
+                  f"({(_live/spot - 1) * 100:+.1f}%) — using live", flush=True)
+        spot = _live
     print(f"  spot={spot:.2f} sector={sector}", flush=True)
 
     # 2. IR metadata (auto-discover)
@@ -760,6 +819,18 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     # to the injected table. Anchoring is now via placeholder + body text.
     verified_block = _build_verified_financials_block(fin, currency=meta.get("currency", "USD"))
 
+    # Inject the operator archetype override into the prompt's Step-5 multiple
+    # layer. The engine (V2) and kill gate (D1) already route on this; the THESIS
+    # PROMPT was the missing leg — an unfilled [ARCHETYPE_OVERRIDE] made the model
+    # value regime-shift names like mature companies (LITE -> ~$406 on a ~25x mult).
+    try:
+        from target_engine import _load_archetype_override
+        _arch = _load_archetype_override(ticker)
+    except Exception:
+        _arch = None
+    if _arch:
+        print(f"  archetype override: {_arch} (injected into thesis prompt)", flush=True)
+
     prompt = fill_placeholders(
         body,
         ticker=ticker,
@@ -770,6 +841,7 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
         sector=sector or "Unknown",
         memory_section=memory_section,
         verified_financials=verified_block,
+        archetype_override=_archetype_override_block(_arch),
     )
 
     # 4. Claude API call with web_search
@@ -784,6 +856,55 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     # 5. Parse output
     text = result["text"]
     parsed = extract_closing_json(text) or {}
+
+    # D1 (2026-06-03): archetype-routed kill gate. A ratio-driven BROKEN on a
+    # regime-shift / pre-revenue name is relaxed deterministically (a Hard Gate
+    # belongs in code, not model prose). The structured override travels with the
+    # record so the checkpoint grader reads the routed verdict, not the raw BROKEN.
+    try:
+        from kill_gate import apply_kill_gate, is_pre_revenue
+        from target_engine import _load_archetype_override
+        _arch = _load_archetype_override(ticker)
+        try:
+            _ttm = fin.ttm_revenue()
+        except Exception:
+            _ttm = None
+        parsed, _kgo = apply_kill_gate(parsed, _arch, pre_revenue=is_pre_revenue(_ttm))
+        if _kgo:
+            print(f"  [kill_gate] {ticker}: {_kgo['raw_verdict']} -> {_kgo['routed_verdict']} "
+                  f"({_kgo['reason']})", flush=True)
+        elif str(parsed.get("conviction") or "").upper() == "BROKEN":
+            # Visibility for the no-op case: show WHY the gate didn't relax, so a
+            # run is a real wiring check (did it see the archetype + ratio?).
+            print(f"  [kill_gate] {ticker}: BROKEN left unchanged — archetype={_arch!r}, "
+                  f"ratio={parsed.get('risk_adj_ev_ratio')}, "
+                  f"strategic={parsed.get('strategic_conviction')!r} "
+                  f"(transformational floor 0.60; pre_rev={is_pre_revenue(_ttm)})", flush=True)
+    except Exception as e:
+        print(f"  [kill_gate] WARN: skipped — {e}", file=sys.stderr, flush=True)
+
+    # Model D (optionality / vision lens) — transformational names ONLY, additive.
+    # Presents a vision CEILING alongside the engine FLOOR; it never overrides the
+    # conviction/target. Guarded: a failure, or a missing diluted share count, just
+    # skips it. One extra Opus call, gated to regime-shift names only (cost-aware).
+    try:
+        from model_d_generate import should_run_model_d, model_d_for_ticker
+        if should_run_model_d(_arch):
+            _shares = getattr(fin, "shares_diluted", None)
+            if _shares and _shares > 0:
+                _eng = parsed.get("risk_adj_target") or parsed.get("thesis_target")
+                _md = model_d_for_ticker(ticker, context=text[:12000],
+                                         shares=float(_shares), engine_target=_eng)
+                parsed["model_d_bracket"] = _md["bracket"]
+                b = _md["bracket"]
+                print(f"  [model_d] vision ceiling ${b.get('vision_ceiling')} vs engine floor "
+                      f"${b.get('engine_floor')} ({b.get('vision_over_floor_x')}x) — additive, not a verdict",
+                      flush=True)
+            else:
+                print("  [model_d] skipped — no diluted share count", flush=True)
+    except Exception as e:
+        print(f"  [model_d] skipped — {e}", file=sys.stderr, flush=True)
+
     cited = extract_cited_domains(result["raw_blocks"])
     coverage = coverage_quality(len(cited))
     print(f"  cited domains ({len(cited)}, {coverage}): {', '.join(cited[:8])}{'...' if len(cited) > 8 else ''}", flush=True)
@@ -811,7 +932,9 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
         "thesis_target": parsed.get("thesis_target"),
         "breakout_price": parsed.get("breakout_price"),
         "risk_adj_target": parsed.get("risk_adj_target"),
-        "conviction": parsed.get("conviction"),
+        "conviction": parsed.get("conviction"),                       # Type B — trade-level (price-dependent)
+        "strategic_conviction": parsed.get("strategic_conviction"),   # Type A — structural (price-independent); was computed then dropped
+        "risk_adj_ev_ratio": parsed.get("risk_adj_ev_ratio"),         # the trade-asymmetry ratio that drives the BROKEN clamp; persist it so the verdict is auditable
         "position_size_pct": parsed.get("position_size_pct"),
         "buy_below": parsed.get("buy_below"),
         "trim_above": parsed.get("trim_above"),
@@ -819,6 +942,8 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
         "top_risks": parsed.get("top_risks", []),
         "top_catalysts": parsed.get("top_catalysts", []),
         "kill_triggers": parsed.get("kill_triggers", []),
+        "kill_gate_override": parsed.get("kill_gate_override"),  # D1: structured override (or None)
+        "model_d_bracket": parsed.get("model_d_bracket"),        # Model D: vision-vs-floor bracket (or None)
         "spot_at_run": spot,
         "trigger_reason": trigger_reason,
         "markdown_path": str(md_path.relative_to(REPO_ROOT)),

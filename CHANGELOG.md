@@ -2,6 +2,315 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-06-27] QA verification pass (settle before building further)
+
+Systematic QA sweep across static / regression / money-path / parity dimensions before stacking the dual-system work. **Verdict: the running engine is sound; gaps are in the QA *net*, not in correctness.**
+
+- **Static:** all 88 `scripts/*.py` compile — no syntax errors.
+- **Regression:** full suite **148 passing** (+ `test_engine.py` 37 engine-math tests); the only failure is the documented network-gated `test_engine_fixtures::test_skip_floor` (passes with live providers).
+- **Money-path data integrity (this session's EDGAR fix):** stress-tested `fetch_financials` across 7 fiscal-calendar shapes — SanDisk (boundary straddle, previously false-rejecting), Apple (~Sep FYE), NVDA/CRM (~Jan FYE), RDDT/MU/AMAT — **all OK, zero false-rejects, zero false-passes**; EDGAR actively cross-checks each against SEC.
+- **Engine:** builds targets cleanly (LITE base $1132 / low $512 / high $1506); math covered by the 37 engine tests.
+- **Found + fixed:** the **pre-commit hook was never installed** (docs claim it runs on commit) — installed `.git/hooks/pre-commit` running the deterministic suite (`-k "not skip_floor"`), smoke-tested green.
+- **Found, flagged (not fixed):** `verify_model.py`'s engine↔Excel parity is **non-functional** — it needs a `recalc.py` (LibreOffice) that has never existed in the repo, so it returns `recalc_fail` (its "diffs=0" means *not checked*, not *verified*). Not a correctness risk (engine is tested directly), but the Excel-parity leg is dead.
+- **Known debt inventory (carried):** kill-gate archetype routing inert (`archetype=None`); `strategic_conviction` persisted but not yet surfaced in the dashboard; 4 pending `ADD COLUMN IF NOT EXISTS` migrations; uncommitted money-path changes (P1, EDGAR fix, Step 1); stale `CLAUDE.md` (says 9 stocks/19 tests vs 6/148; outdated MU "data bug" note).
+
+## [2026-06-27] Dual-system architecture (blueprint) + Step 1: surface the structural axis
+
+**Theme.** The watchlist sweep returned 6/6 BROKEN — including RDDT, which the engine itself scored at +18% upside and `strategic_conviction=HIGH`. Root cause (researched, not guessed): the engine already splits a structural (Type A) verdict — `strategic_conviction`, price-independent — from a tactical (Type B) trade verdict — `conviction` clamped by `risk_adj_ev_ratio` — but the structural axis is **discarded** (never persisted) and **underpowered** (Model B has no framework for structural supply/demand). So the bearish trade-gate runs unopposed and every name reads "broken." This formalizes Hume's two-types philosophy as the target architecture and starts executing it.
+
+**Blueprint (`docs/DUAL_SYSTEM_ARCHITECTURE.md`, NEW).** Type A (backward-from-5–10y structural truth → what to own) × Type B (respond-to-current-market + an attention factor → what to do now), combined via a structural×attention 2×2; `risk_adj_ev_ratio`/`buy_below` still set entry/size *within* the stance (discipline preserved). Sequenced, individually-shippable steps: (1) surface the structural axis, (2) attention factor (x-axis, timing-only, anti-momentum-capped), (3) Model B structural-demand lens (y-axis), (4) deterministic 2×2 verdict that discovery feeds into.
+
+**Step 1 shipped (`run_thesis.py` + migration).** The `theses` row at `run_thesis.py:928` persisted `conviction`/`risk_adj_target`/`buy_below` but dropped `strategic_conviction` and `risk_adj_ev_ratio` (both already computed — the kill-gate log reads them). Added both to the persisted row + migration `supabase/2026-06-27_theses_strategic_axis.sql` (`ADD COLUMN IF NOT EXISTS`, safe; schema-drift-strip handles pre-migration). A verdict can now read "strategic HIGH / trade BROKEN / buy below $X" instead of a bare BROKEN.
+
+**Verification.** Full suite **148 passing** (only the network-gated `test_skip_floor` fails). Live persistence is gated on applying the migration (then a `run_thesis` run will carry the two fields, like `kill_gate_override`/`model_d_bracket` once their migrations land).
+
+**Not committed** — `run_thesis.py` is money-path (ground rule 2: human-approved commit only).
+
+## [2026-06-26] D2 EDGAR cross-check — fix false-reject of fiscal-calendar names (SNDK unblocked)
+
+**Theme:** The watchlist sweep had SNDK hard-failing `run_thesis` ("All providers failed … revenue sanity check FAILED"). Investigation (dumping the raw SEC XBRL with durations) proved the data is **fine** — MU's `$23.86B`/`$41.46B` and SNDK's `$5.95B` are genuine 90-day single-quarter facts that reconcile exactly against the YTD facts (a real memory supercycle). The bug was in the **cross-check**, not the data: an earlier hypothesis that "the memory feeds are corrupted" was wrong.
+
+**Root cause.** `_edgar_crosscheck` aligned provider quarters to SEC quarters by calendar-quarter bucket: `(end.year, (end.month-1)//3+1)`. SanDisk's fiscal quarter-ends straddle calendar boundaries (~Jan 2 / ~Apr 3), so the provider's fiscal Q2 (`$3.02B`, ends ~Dec 28 → bucket `2025-Q4`) was compared against SEC's fiscal Q1 (`$2.31B`, ends Oct 3 → also `2025-Q4`) — an off-by-one that fabricated a 31–97% "mismatch" and hard-rejected clean data. (eodhd also omits `_date` for SNDK, so only the fiscal label was available — but the values match SEC exactly when aligned correctly.)
+
+**Fix (`scripts/finance_data.py`).** Align each provider quarter to the SEC quarter whose period-END date is **nearest**, within `_EDGAR_MATCH_TOLERANCE_DAYS = 45` (< half a quarter, so the nearest match is unambiguous; a provider quarter with no SEC end inside the tolerance is **skipped, never rejected**). `_edgar_revenue_by_quarter` now returns `[(period_end, revenue), …]` (real SEC end-dates, not calendar buckets); `_period_quarter_key` → `_period_end_date` (returns the period-end, `_date` or label-parsed, tz-naive). Value-comparison and hard/soft thresholds are unchanged, so genuine faults still reject; only the *alignment* changed.
+
+**Verification.** `test_finance_data_edgar.py` rewritten to the date-keyed format (+ a SNDK fiscal-calendar regression that the old bucketing failed, + a no-SEC-match-→-skip safety test). Suite **148 passing** (only the network-gated `test_skip_floor` fails). Live: `fetch_financials('SNDK')` now succeeds (was a hard `EarningsFetchError`); the hard EDGAR gate date-matches provider `$5.95B` ↔ SEC `$5.95B` (0% diff) and passes, leaving only the advisory YoY trajectory note.
+
+**Not committed** — `finance_data.py` is the source-of-truth money-path file (ground rule 2: human-approved commit only). The stale CLAUDE.md "MU Data Source Bug" note (April) is now outdated — MU reports those numbers for real.
+
+## [2026-06-26] `--price` drift-free harness pin + P3 Model D live validation
+
+**`stability_check.py --price` (new) + `build_context(spot_override=)`.** The stability harness uses the *live* price each `build_context`, so a verdict-variance A/B run across ~40 min on a moving stock is confounded by intraday drift (LITE drifted −2.4% during the P1 validation, contaminating the chain-ON arm). `--price FLOAT` pins the spot across all conditions/runs (skips the live fetch, logs `[price] pinned $X`); pass the same value to the N=1 and N=5 arms for a clean comparison. `spot_override` is additive/default-None on `build_context` and is explicitly NOT for production judgment runs (those must seal an honest live ref). +1 wiring test (`test_stability_check.py`); suite **146 passing**. (`build_context` is in `run_socratic.py` — money-path, not committed.)
+
+**P3 — Model D live-validated on LITE (`run_thesis LITE`).** All behavioral acceptance criteria met:
+- `[model_d] vision ceiling $348.4 vs engine floor $436 (0.8x) — additive, not a verdict` printed; scenario inputs came from the thesis research text (`context=text[:12000]`), not hand-set.
+- Live `spot=786.94` (−8.7% vs stale EOD $861.97); `archetype override: transformational` injected; `[kill_gate] BROKEN left unchanged` (ratio 0.55 < transformational floor 0.60 — correct no-op, proves the gate saw archetype+ratio).
+- Model D left the verdict untouched: persisted thesis (id=98) has `conviction=BROKEN`, `thesis_target=581`, `risk_adj_target=436` — all the engine's.
+- **Finding to flag:** the bracket is *inverted* — vision ceiling ($348) sits BELOW the engine floor ($436), i.e. 0.8x. Model D behaved correctly (additive, gated, guarded), but the datum says the optionality/vision lens adds no upside for LITE at $787 right now (modest discounted scenarios vs the risk-adj target). Worth a human look; not a bug.
+- **Persistence pending migration:** the live `theses` table has neither `model_d_bracket` nor `kill_gate_override` (confirmed by query on id=98) — `run_thesis` schema-drift-stripped both with a clear log line. Applying `supabase/2026-06-23_theses_model_d_bracket.sql` + `2026-06-03_theses_kill_gate_override.sql` (P2; manual Supabase SQL-editor step — DDL can't go via the REST client) will persist them.
+
+## [2026-06-25] P1 — Self-consistency (mode-of-N) for the Socratic round (env-gated, default-off)
+
+**Theme:** The stability harness measured Model B (regime) at only **60% reproducibility** chain-off — opus-4-8 has no `temperature` control, so a single sealed round-1 verdict is partly a dice roll, and that noise propagates into the seal, the grader's `directional_lean`, and calibration. This dampens the variance by sampling each model N times and sealing the **consensus**, without changing default behavior or cost.
+
+### What shipped
+- **`scripts/consensus.py` (NEW, pure):** `aggregate_samples(parsed_list)` collapses N round-1 outputs for one model — categorical fields (verdict, confidence) → **mode**, numeric targets → **median across the samples sharing the modal verdict**, and records `consistency` = modal frequency [0..1] (`1/N` = max spread). Model C (no verdict) falls back to confidence stability. Reuses `modal_consistency` from `stability_check.py` (the shared modal-frequency primitive) rather than re-deriving it. `self_consistency_n()` reads `SELF_CONSISTENCY_N` (int, default 1; clamps bad/0/negative → 1).
+- **`scripts/run_socratic.py`:** `run_round_1_parallel` is env-gated — **`N=1` is the original single-sample path, byte-identical**; `N>1` samples each of A/B/C N times (capped at `SELF_CONSISTENCY_MAX_WORKERS=6` concurrent so a high N can't stampede the rate limit), aggregates, and carries the consensus on a representative raw record (chosen to match the modal verdict so its text stays coherent) with tokens **summed** across all N samples for honest cost accounting. Corpus callosum / research / target still run once on the aggregated A/B/C — only the round-1 calls multiply.
+- **`scripts/checkpoint_seal.py`:** `reasoning_fingerprint` now carries `model_consistencies` (per-model modal frequency; `None` at N=1), so the grader can later down-weight low-consistency seals. Stored inside the existing `reasoning_fingerprint` jsonb — **no migration required**.
+
+### Decisions (PRD §5)
+- **N=5** for production sealed runs (operator sets `SELF_CONSISTENCY_N=5`; code default stays 1). **Scope = all three A/B/C** (uniform path; A confirms cheaply at 100% stability). **Env-gated, default-off** per ground rule 3 (cost-multiplying → opt-in only).
+
+### Verification
+- New unit tests: `test_consensus.py` (12 — mode/median/consistency/tie/all-different/N=1 no-op/env helper, plus 2 wiring tests that mock `run_one_model`: N=1 injects nothing, N=3 aggregates + sums tokens) and `test_checkpoint_seal.py` (+1, fingerprint surfaces `model_consistencies`).
+- `pytest scripts/test_*.py` → **145 passed** (was 132), 10 skipped; the lone failure is the network-gated `test_engine_fixtures::test_skip_floor` (unchanged, passes with live providers).
+- Live acceptance (operator, costs ~150 opus-4-8 calls): `SELF_CONSISTENCY_N=5 python scripts/stability_check.py LITE --k 5` — `stability_check` calls `run_round_1_parallel`, so each iteration now seals the mode-of-5 verdict; expect the **aggregated** B verdict to be stable run-to-run vs the ~60% baseline.
+
+### Live validation (2026-06-26, LITE, ~180 opus-4-8 calls)
+Ran baseline (N=1, k=5) vs treatment (N=5, k=5) back-to-back:
+- **Chain-OFF — the measured noisy condition — stabilized as predicted.** Baseline B span = UPSIDE×2 / DOWNSIDE×1 / NO_SHIFT×2 → **40%** consistency (all three verdicts appear; grader-facing net lean = conflict/none @ 40%, i.e. random). Treatment B = NO_SHIFT×4 / UPSIDE×1 → **80%** consistency, the DOWNSIDE tail eliminated, net lean = **flat @ 80%** (stable). Model A was 100% OVERVALUED in both arms (25/25), confirming "A confirms cheaply"; Model C confidence-consistency 0.6–1.0.
+- **The sealed `consistency` separates recoverable noise from irreducible conflict** — exactly the down-weighting signal intended. Chain-OFF inner consistencies clustered at 0.6 (mild, recoverable); chain-ON clustered at 0.4 (near-uniform 3-way — mode-of-5 can't manufacture a view it doesn't have, and correctly reports low confidence).
+- **Caveat — chain-ON was inconclusive, partly confounded.** The harness uses *live* price per `build_context`; LITE drifted $801→$782 (−2.4%) across the ~40-min run on a VIX-spiking day, plausibly pushing B toward DOWNSIDE in the later arm. A `--price` pin on `stability_check.py` (now shipped — see the 2026-06-26 entry) gives a clean cross-arm A/B. One transient `[edgar] Read timed out` in the treatment arm was advisory-only (D2 gate) and did not affect the measurement.
+- **Verdict:** P1 demonstrably reduces round-1 verdict noise on the condition it targeted and labels the residual; net win confirmed. Full log: `/tmp/p1_stability.log`.
+
+**Not committed** — `run_socratic.py` / `checkpoint_seal.py` are judgment/money-path files (ground rule 2: human-approved commit only).
+
+## [2026-06-24] Stability harness — measure verdict variance + [CHAIN] effect
+
+**Theme:** The seal/grade/calibration loop assumes a single sealed verdict is stable — but opus-4-8 runs without temperature control (it rejects the param), so 3 consecutive LITE runs gave Model B = DOWNSIDE / NO_SHIFT / UPSIDE. Before fixing (e.g. self-consistency/median-of-N), MEASURE it.
+
+### What shipped (`scripts/stability_check.py`, NEW)
+- Fires JUST the A/B/C round (3 calls/iteration — no corpus callosum/research/target) K times under **chain-off and chain-on**, then reports per-model verdict distribution + a **consistency** score (modal frequency), the **net directional lean** per run + its stability, and a **signal/noise/inconclusive** verdict on whether the `[CHAIN]` block shifts the lean beyond the within-condition noise.
+- Answers two questions in one cheap experiment: *how noisy is a sealed verdict* and *does the chain actually move it*. Cost: K×2×3 calls (K=5 → 30).
+- Pure aggregation (`modal_consistency`, `summarize_condition`, `compare_conditions`, `render_report`) unit-tested (7 tests); guarded runner.
+- **Design catch from its own test:** a `None` net-lean means the models *conflicted* that run — that's instability and must count, so `modal_consistency(ignore_none=False)` keeps `None` as a category for the lean (dropping it made a genuinely unstable lean read as 100% consistent).
+- `run_socratic.build_context` gained an `include_chain` toggle (also enables a future `--no-chain` CLI).
+
+### Verification
+`pytest test_stability_check.py` → 7 passed; full suite **132 passed** (the one failure is the network-gated `test_engine_fixtures`). Run it: `python scripts/stability_check.py LITE --k 5`.
+
+## [2026-06-24] Analyst Panel scaled to 7 nodes · native scheduler · debug pass
+
+**Panel scaled to the full chain.** `DEFAULT_CHAIN` now has all 7 nodes — Compute, Memory, Optical, Custom-silicon, Power, Passives, Materials — with a directed edge graph (compute demand pulls the component nodes; components pull passives/materials downstream). `derive_propagation` gained a self-loop + duplicate-edge guard (robustness for the larger graph). New tests: self-loop/dedupe, full-chain config consistency (every edge endpoint is a declared node). The 7-node `[CHAIN]` block renders and propagates correctly (e.g. surfaces `compute 8Q vs memory 2Q — reconcile`).
+
+**Native scheduler (`scripts/cron/`)** — per Hume: scheduling belongs in the program, on the host, not the Claude app (which only fires while open). `stockradar_cron.sh <grader|panel|prices>` runs one maintenance job and logs to `data/cron/`; `crontab.txt` installs daily grader (07:00) + Mon/Wed/Fri panel refresh (06:30); `README.md` covers install, conda interpreter override, and that this supersedes the app-scheduled grader (the AXON reasoning task can stay in-app or become a script later).
+
+**Fix (standalone/cron env):** `analyst_panel.py` and `run_checkpoint.py` didn't load `.env` (only run_socratic/run_thesis did, at import), so running them standalone or via cron saw no `ANTHROPIC_API_KEY` / `SUPABASE_*` — the panel reported every node "unknown — ANTHROPIC_API_KEY not set". Both now call `load_env()` at import (guarded). Verified: importing either populates the keys from `.env`. (`refresh_prices.py` already loaded env.)
+
+**Debugging pass (before the live run):** compiled ALL 81 scripts and **fixed a pre-existing syntax error** in `discovery_ingest.py` (an orphaned duplicate tail after `if __name__`, last touched 2026-05-09, `return` outside a function — truncated the dead 33-line tail). Full test discovery: **125 passed**; the single failure is `test_engine_fixtures::test_skip_floor`, which is environmental (no live provider in the sandbox → fixtures skip → floor trips) and passes with network. Integration smoke confirmed the persist→load `[CHAIN]` injection path end-to-end.
+
+## [2026-06-23] Analyst Panel — cross-node [CHAIN] context layer (thin slice)
+
+**Theme:** Every model (Socratic A/B/C, Model D) reasons about ONE company. Nothing held a standing view of the *chain* — where each node sits in its cycle and how that propagates to neighbours (memory tightness → optical demand → custom-silicon pull). This fills that gap as a **context producer**, not a trade generator: it emits a structured `[CHAIN]` block injected into the per-stock judgment like `[MACRO]/[WAVE]/[VIX]` — the same mechanism that already moves Socratic verdicts, so it demonstrably changes a decision while never emitting a trade.
+
+### What shipped (`scripts/analyst_panel.py`, NEW)
+- Thin slice of the AI chain: Memory → Optical → Custom-silicon (extensible config). Each node gets a cycle **clock** (position ∈ accelerating/peaking/decelerating/trough, duration_quarters, confidence, one-line read) from a guarded LLM call.
+- **Cross-node propagation is a PURE, deterministic rule engine** over clocks + directed edges (tailwind / headwind / duration-gap) — auditable and unit-tested, not free prose. The LLM judges each node; the chain reasoning is rules.
+- Pure `parse_node_clock` / `derive_propagation` / `render_chain_context`; guarded `analyze_node` / `run_panel`; `save_panel_state` (with **read-only history = the anchoring guard**; prior duration estimates are NOT fed back into generation) and `load_chain_context` for cheap injection.
+- Runs on its own cadence (persists `data/analyst_panel.json`); per-stock runs only LOAD the latest block. `run_socratic.build_context` injects `[CHAIN]` (load-only, guarded).
+
+### Debugging pass (red-team) — three fixes before done
+1. **bool duration** slipped validation (`bool` is an `int` subclass → `float(True)=1.0`) → now rejected; non-finite durations rejected too.
+2. **Staleness off-by-one** (`timedelta.days` truncates → a 7d+1s-old block read as fresh) → now compared in total seconds; boundary tested.
+3. **Brace footgun** (an LLM `read` like `"{HBM4}"` could collide with a downstream `.format()`) → `read` braces sanitized at parse time (defensive; `fill` is `[]`-placeholder-based so not live, but future-proofed).
+Plus a history-cap invariant test.
+
+### Verification & scope
+`pytest test_analyst_panel.py` → 10 passed; full suite **123 passed**. Pure logic fully tested; the LLM node-analyst + `run_panel` are guarded and run via `python analyst_panel.py` (not yet on a schedule). This is the thin vertical slice — prove the cross-node value on Memory→Optical→Custom-silicon, then scale to the full node set.
+
+## [2026-06-23] Model D — live integration in run_thesis (additive, gated, non-authoritative)
+
+**Theme:** Wires the vision lens into the thesis path — carefully, because it touches the money path. Model D presents a vision *ceiling alongside* the engine *floor*; it never overrides conviction/target/sizing.
+
+### What shipped
+- `model_d_generate.should_run_model_d(archetype)` — pure gate: Model D runs **only for transformational** names (keeps the extra Opus call off every ticker and off mature names). Unit-tested.
+- `run_thesis.run_one`: after the kill gate, for transformational tickers, calls `model_d_for_ticker` (context = the thesis's own research text, `shares = fin.shares_diluted`, `engine_target = risk_adj_target`). Result attached as `parsed["model_d_bracket"]` and the `theses.model_d_bracket` column; prints `[model_d] vision ceiling $X vs engine floor $Y (Nx) — additive, not a verdict`. Fully guarded: a failure or a missing diluted share count just skips it.
+- `supabase/2026-06-23_theses_model_d_bracket.sql` — `ADD COLUMN model_d_bracket jsonb`.
+- `write_to_supabase` drift-strip now **loops** (up to 5 unknown columns), so `kill_gate_override` + `model_d_bracket` can both be missing pre-migration without error.
+
+### Guardrails (explicit)
+- Transformational-only (gated), additive (a second lens, never overrides), guarded (never breaks a run), cost-aware (one extra call, regime-shift names only). The scenario set is enforced complete (sums-to-1, downside included) by the parser, so the vision number can't be a manufactured bull.
+
+### Verification
+`pytest` → **113 passed** (incl. the gate test). Touched files compile. Live behaviour (a real transformational run) is the next confirmation — expected: a `[model_d]` bracket line alongside the thesis, no change to conviction/target.
+
+## [2026-06-23] Model D — scenario generator (research → vision scenarios)
+
+**Theme:** Model D's math is pure but needs inputs (TAM-capture paths). This generates them — with the discipline in the PARSER, not the prompt.
+
+### What shipped (`scripts/model_d_generate.py`, NEW — generator unwired)
+- `parse_vision_scenarios(data)` — **pure**, the safety boundary: validates every field + ranges (prob/capture ∈ [0,1], non-negative tam/pe) and **enforces probabilities sum to ~1.0**, which forces a downside/zero case into every vision valuation. This is the guard against the "manufacture a bullish number" failure mode: a model asked "how big can this get" will inflate; a model forced to also assign probability mass to the failure case cannot quietly omit it.
+- `MODEL_D_PROMPT` — instructs 3–5 scenarios spanning the full distribution, exactly one downside, probs summing to 1, multiples anchored to regime-shift comps (no monopoly multiple without a sole-source argument), fully-diluted economics.
+- `generate_vision_scenarios` (guarded LLM call via `create_message`) + `_extract_json` + `model_d_for_ticker` orchestrator (generate → `optionality_value` → `bracket`).
+
+### Verification & scope
+`pytest test_model_d_generate.py` → 6 passed (valid dict/list, missing field, out-of-range, prob-sum enforcement, empty/wrong-shape, JSON extraction). Full suite **112 passed**. **Still NOT wired into the live pipeline** — `model_d_for_ticker` is callable but no pipeline calls it; integration (archetype-routed, presented alongside the engine floor, never overriding) remains the reviewed step.
+
+## [2026-06-23] Model D — optionality/TAM valuation lens (the "buy the vision" frame)
+
+**Theme:** Addresses the "bearish on everything" gap Hume named (四十年前: you used to buy a real company; now, esp. SpaceX, you buy a vision and hope it's realized). The engine values proven near-term earnings (margin-of-safety / "prove it to me"), which structurally undervalues regime-shift names whose value is in the right tail. Model D is the complementary lens: a probability-weighted set of TAM-capture paths with explicit right-tail weight.
+
+### What shipped (`scripts/model_d.py`, NEW — pure, standalone)
+- `VisionScenario` (label, prob, TAM, capture, net_margin, exit_pe) + `scenario_value_per_share` (discounted per-share PV if that path is realized) + `optionality_value` (probability-weighted target, per-scenario breakdown, `right_tail_share` = how tail-concentrated the value is) + `bracket` (engine floor vs vision ceiling).
+- Decomposed, not hand-waved: every scenario states its TAM/capture/margin/multiple/probability, so optimism is auditable.
+
+### The honest finding (worth recording)
+Building the lens did NOT hand back a bullish number. On illustrative LITE inputs (105M fully-diluted shares, 3y, 12%): vision-realized path = $835/sh, but the *probability-weighted* optionality target ≈ **$489/sh** with `right_tail_share` 51% — i.e. in the same ballpark as the engine's $600 and *below* the market (~$865) and the bulls (~$1100). So Model D's value is **transparency, not auto-optimism**: it shows that honest right-tail weighting + dilution + discounting lands near the engine, and it makes explicit exactly which assumptions (fewer shares / nearer horizon / bigger TAM / higher P(vision)) the bull case must be leaning on. The system may be less mis-calibrated-bearish than it feels; the market is pricing a more aggressive scenario than honest discounting supports.
+
+### Hardened after a red-team pass (before any wiring)
+Found and fixed four money-path correctness bugs: (1) probabilities that don't sum to 1 **silently scaled** the target (sum 0.5 → $275 vs $550) — now raises `ValueError`, forcing a complete scenario set incl. the downside; (2) `discount_rate ≤ -1` threw `ZeroDivisionError` and negative rates silently amplified — now validated (`shares>0`, `discount_rate>-1`, `years≥0` all raise on violation); (3) negative terminal margin produced negative equity — now floored at 0 (worthless, not negative); (4) `bracket(engine_target=0)` dropped a key (0 is falsy) — now always present, `None` when floor missing/zero. The `right_tail_share` metric was renamed `vision_ev_share` and documented honestly (EV share of the highest-VALUE path — *low* when that path is low-probability, which is itself informative; the earlier "51%" reading was the metric pre-rename).
+
+### Verification & scope
+`pytest test_model_d.py` → **11 passed** (scenario math, discounting, equity floor, input-validation raises, prob-sum enforcement, weighting, vision_ev_share semantics incl. the low-prob case, monotonicity in TAM/discount/horizon, order independence, bracket edges). Full suite **106 passed**. **NOT wired into the live pipeline** — integration must route by archetype and present Model D *alongside* the engine floor, never overriding it; that's a separate reviewed step (and the scenario inputs must come from research, not be hand-set). Illustrative example inputs above are not a LITE valuation.
+
+## [2026-06-23] VIX tracker — the macro layer's first live signal
+
+**Theme:** The macro layer was a single hand-seeded `macro_environment` row. VIX is its first *live* input, making judgments volatility-aware (a spike = risk-off → discipline high-beta sizing). Built as a convergent goal-driven loop (Part B discipline): terminal state declared up front, atomic tested iterations, stop when met.
+
+### What shipped (`scripts/vix.py`, NEW)
+- `fetch_vix()` — live ^VIX snapshot via yfinance (level, prev close, day %, week-ago, trend, regime, 1-month history).
+- Pure, unit-tested: `classify_vix_regime` (calm <15 / normal 15–20 / elevated 20–28 / stress 28–40 / crisis 40+), `trend_label` (spiking/rising/flat/falling/collapsing vs a reference), `vix_context_line` (the `[VIX]` block).
+- CLI: `python scripts/vix.py` prints the current regime line.
+
+### Wired in (`scripts/run_socratic.py`)
+- `build_context` appends a `[VIX]` line to the macro context (best-effort; a fetch failure never breaks a run), so Socratic Models A/B/C now see the volatility regime alongside `[MACRO]`/`[WAVE]`.
+
+### Verification
+`pytest test_vix.py` → 5 passed; full suite `→ 91 passed`. Compiles. Live: VIX 20.21 — **elevated, spiking +17% today (2026-06-23)** — context line renders and injects. (Note: volatility is genuinely elevated right now, which is real macro signal for the judgment layer.)
+
+### Next (not in this change)
+- Daily VIX scheduled task + alert on regime change.
+- Persist VIX into `macro_environment` / wire `run_macro.py` (VIX = its first automated input).
+
+## [2026-06-05] Fix: spot price was the EOD provider close (~1 day stale)
+
+**Trigger:** Hume noticed `run_thesis LITE` used `spot=$945.08` while LITE was actually trading ~$865 — an 8.5% gap. LITE closed $945.08 on 06-04 and $864.88 on 06-05; the run (on 06-05) used `fin.price`, which is EODHD's **end-of-day** close = yesterday's. The trade-asymmetry ratio (`risk_adj_target / spot`) divides by spot, so a stale-high spot systematically **inflates bearishness** — and it poisoned the sealed `ref_price` the grader compares against.
+
+**Fix:** new `finance_data.fetch_live_price(ticker)` (yfinance fast_info intraday last). `run_thesis` and `run_socratic.build_context` now use the live quote for spot, falling back to the EOD provider when unavailable, and log the gap when it exceeds 1%. Verified: `fetch_live_price("LITE")` → $871.50 vs the EOD $945.08. At the live price LITE's ratio is ~0.54 (vs 0.50 at the stale price) — still under the 0.60 transformational floor, but the staleness was real and affected every ticker, not just LITE. `pytest` → 76 passed.
+
+## [2026-06-05] Fix: thesis prompt never received the archetype override ([ARCHETYPE_OVERRIDE])
+
+**Trigger:** a live `run_thesis LITE` returned `thesis_target $406` / `risk_adj_target $358` on a ~$945 stock — wildly below market (~$1100), the system's own Socratic range ($570–$1280, bear floor $521), and prior runs (800–900). The model's own notes flagged the cause: *"no [ARCHETYPE_OVERRIDE] block was actually populated in the prompt … This is decisive for Step 5."*
+
+**Root cause:** `thesis_v3.md` (v3.4.4) has an `[ARCHETYPE_OVERRIDE]` placeholder designed to anchor Step-5 multiple selection to regime-shift comps for transformational names — but `run_thesis.fill_placeholders` never passed it. The frontmatter even said *"smoke test pending on LITE-tagged vs COHR-untagged"* — the plumbing was written but never wired. So the engine (V2) and kill gate (D1) routed on the archetype, but the **thesis model didn't know**, and valued LITE like a mature company (~25–28x on FY27 EPS ≈ $14.50 → ~$406).
+
+**Fix (`scripts/run_thesis.py`):** new `_archetype_override_block(archetype)` builds the block (empty when no override, so the placeholder never ships as literal text again); `run_one` loads `_load_archetype_override(ticker)` and injects it via `fill_placeholders(..., archetype_override=...)`. For `transformational`: anchor to regime-shift comps (NVDA peak NTM ~59x, ASML pre-EUV 35–45x), disable the +25% carve-out ceiling, while keeping full tactical rigor on EPS/dilution/entry. This is the missing third leg of archetype-awareness (engine + kill gate + **prompt**).
+
+**Verification:** `pytest test_thesis_archetype_inject.py` (+ kill_gate) → **17 passed**. Confirms the placeholder is replaced for transformational, generic block for other tags, and removed cleanly when there's no override. Behavioural confirmation is a live re-run of LITE (expected: a materially higher target anchored to regime-shift comps — though tactical rigor may still flag overvaluation at $945, it will no longer be via mature-company multiple compression).
+
+## [2026-06-03] Fix: opus-4-8 rejects `temperature` + model-tier correction
+
+**Trigger:** a live `run_thesis LITE` failed with `400 — 'temperature' is deprecated for this model`. The opus-4-8 standardization broke every call site that sends `temperature` (run_socratic, run_thesis, and the requests.post scout/eval calls).
+
+**Fix — two parts:**
+1. **Judgment layer keeps opus-4-8, temperature handled.** New `utils.create_message(client, **kwargs)`: on the `temperature`-deprecation 400 it strips the param and retries once, caching the model so it never retries twice. Used by `run_thesis.call_claude_with_search` and `run_socratic.call_sonnet` (so all Socratic prompts + the thesis call are covered). Verified live: opus-4-8 + temperature → recovers, returns OK, caches the model.
+2. **Extraction/eval tier reverted to opus-4-6.** `event_reasoner`, `kill_condition_eval`, `generate_model` (primary), and the analytical scouts (`scout_moat/_fundamentals/_catalyst/_discovery/_filings`) are deterministic `temperature=0` calls — opus-4-6 honors that; opus-4-8 would force model-default sampling and lose reproducibility. Reverting is the better-results call for these, not a downgrade. Net tiering: **judgment = opus-4-8 (temperature-free), extraction/eval = opus-4-6 (deterministic), routing = Haiku, research = Perplexity, YouTube = Gemini.**
+
+`pytest` → **86 passed**. Compiles across all 11 touched files.
+
+## [2026-06-03] D1 — archetype-routed kill rule (deterministic, structured override)
+
+**Theme:** The thesis kill rule clamps trade conviction to BROKEN/0% whenever `risk_adj_ev_ratio < ~0.90`, uniformly. That over-fires on regime-shift / transformational names whose EV math is deliberately conservative (and, post-V2, uses DCF-as-floor). D1 routes the threshold by archetype. A kill clamp is a **Hard Gate** — per the filter philosophy it must be deterministic and ungameable, so it is enforced in code, not in model prose.
+
+### What shipped
+**`scripts/kill_gate.py`** (NEW, pure): `apply_kill_gate(parsed, archetype, pre_revenue)` relaxes a ratio-driven BROKEN **only** when the thesis is intact (`strategic_conviction != BROKEN`) and:
+- archetype is `transformational` and `ratio >= 0.60` (wider floor), or
+- the name is pre-revenue (≈zero TTM revenue → the ratio gate is disabled, no anchor).
+All other archetypes are a strict **no-op** (cyclical/garp/compounder/special unchanged). A relaxed trade becomes `LOW` conviction at the first-touch `5%` size (conservative; the judgment card can size up).
+
+**Structured override (per Hume's amendment).** The override is emitted as machine-readable `kill_gate_override = {raw_verdict, routed_verdict, raw/routed_position_pct, risk_adj_ev_ratio, archetype, archetype_floor, uniform_threshold, reason}` — not only a `kill_triggers` sentence — so the downstream checkpoint grader reads the **routed** verdict, not the raw "BROKEN", when it computes the reasoning fingerprint. A human-readable line is still appended to `kill_triggers`.
+
+**`scripts/run_thesis.py`**: applies the gate right after parsing (archetype from `_load_archetype_override`, pre-revenue from `fin.ttm_revenue()`); persists `kill_gate_override` into the `theses` row; `write_to_supabase` gains a one-shot schema-drift strip so the column is optional until the migration lands.
+
+**`supabase/2026-06-03_theses_kill_gate_override.sql`** (NEW): `ALTER TABLE theses ADD COLUMN IF NOT EXISTS kill_gate_override jsonb`.
+
+### Verification
+`pytest test_kill_gate.py + full suite` → **86 passed**. The suite is exhaustive over archetype × ratio band (transformational above/at/below 0.60; cyclical/garp/none no-op; pre-revenue disabled; real-thesis-break and non-BROKEN guards; no input mutation; structured-override fields). Demo on a LITE-shaped thesis: `BROKEN→LOW`, `0%→5%`, full structured override; cyclical at the same ratio is unchanged.
+
+### Scope + caveats (explicit)
+- **Thesis path only.** The Socratic-path version reuses `kill_gate.py` and carries the override into the `prediction_log` seal's `reasoning_fingerprint` — a separate, deliberate step (#3).
+- **The LITE live run is a WIRING check, not calibration.** It confirms the gate no longer false-kills LITE; it does **not** prove 0.60 is the right transformational floor. The unit suite validates the logic; whether 0.60 is calibrated is a question only the feedback loop can answer once outcomes exist.
+- Validate live: `python scripts/run_thesis.py LITE` → expect conviction no longer `BROKEN`, with a `[kill_gate]` log line and a populated `kill_gate_override`.
+
+## [2026-06-03] V2 — archetype-routed dcf_role (DCF-as-floor by default for regime-shift)
+
+**Theme:** Finishes the C1 reposition. DCF-as-floor was flag-gated only (`--dcf-as-floor`); now it routes by archetype automatically, so `analyst.py` (which passes archetype but not dcf_role) gets the right behavior with no flag. Precursor to D1 (kill-rule routing).
+
+### What shipped (`scripts/target_engine.py`)
+- `_default_dcf_role_for_archetype()` + `_DEFAULT_DCF_ROLE_BY_ARCHETYPE` (`transformational → downside_floor`; everything else `primary`).
+- `_load_overrides()` extracted; `_load_archetype_override()` now accepts BOTH the string form and an object form `{"archetype": ..., "dcf_role": ...}`; new `_load_dcf_role_override()` reads an explicit per-ticker dcf_role.
+- `build_target()`: `dcf_role` default changed `"primary"` → `None`; resolved early as **explicit arg > per-ticker config override > per-archetype default**, then logged. All downstream `_scenario_price` calls receive the resolved string.
+- `config/ticker_archetype_overrides.json` `_README` documents the optional object form.
+
+### Behaviour change (intended)
+Any caller that doesn't pass `dcf_role` (notably `analyst.py`, `verify_model.py`, `model_export.py`) now routes by archetype. LITE and AMD (transformational) use `downside_floor` everywhere by default; all other tickers are unchanged (`primary`). Compare against the `v3.5-foundation` baseline.
+
+### Verification
+`pytest test_dcf_role_routing.py + full suite` → **73 passed**. Against the *real* config: LITE/AMD → `downside_floor`, PLTR/CELH (no override) → `primary`. Precedence (explicit > per-ticker > archetype-default) unit-tested.
+
+### Deferred — D1 (kill-rule routing)
+Now unblocked. The V3.4.3 kill table (`prompts/thesis_v3.md:170`) fires uniformly at `risk_adj_ev_ratio < 0.90 → BROKEN`. D1 routes it by archetype (cyclical < 0.90, regime-shift < 0.60, pre-revenue disabled) via a Python post-processor in `run_thesis`. Held for a design decision + live validation because it alters a real trade gate (conviction / position size).
+
+## [2026-06-03] D2 — EDGAR cross-check is the hard gate; trajectory becomes advisory
+
+**Theme:** Data integrity. The quarterly-revenue guardrail used trajectory heuristics (rolling/YoY anomaly) as a *hard gate* — which over-fires on legitimate ramps (ASTS-style 50x QoQ from near-zero) and can't actually confirm a fact error. Per the filter philosophy (Hard Gate = fact error · Informational = trajectory), this rewires it: a quarter is rejected only when the provider's revenue materially disagrees with the SEC 10-Q actual.
+
+### What shipped (`scripts/finance_data.py`)
+- The old `_validate_quarterly_revenue` body is renamed `_trajectory_warnings` — unchanged logic, but its hard flags are no longer used to fail a build; its strings are relabelled `TRAJECTORY ANOMALY (advisory)`.
+- New `_validate_quarterly_revenue` orchestrator: runs trajectory (advisory) **+** an EDGAR cross-check (hard gate). `suspect_indices` — the set that can fail a build in `_validate_and_build` — is now populated **only** by an EDGAR fact-mismatch.
+- New helpers: `_edgar_revenue_by_quarter()` (uses the existing `edgar_xbrl.fetch_point_in_time`, keyed by calendar `(year, quarter)`), `_edgar_crosscheck()` (>30% off the 10-Q → hard reject; 15–30% → informational), `_period_quarter_key()` (aligns provider periods to EDGAR quarters).
+- **Graceful fallback:** when EDGAR is unavailable (no CIK, foreign filer, fetch failure) nothing is rejected on trajectory alone — it warns and trusts the provider. So `override_suspect_recent` is now rarely needed, and the `early_revenue_ramp` over-fire is fixed without a flag.
+
+### Verification
+`pytest test_finance_data_edgar.py test_run_checkpoint.py test_checkpoint_seal.py test_engine.py` → **70 passed**. Compiles + imports clean. The ASTS-style ramp test confirms a 50x QoQ jump passes when EDGAR agrees, and is advisory-only (not rejected) when EDGAR is absent; the MU-style 2.7x provider/SEC gap hard-rejects. **Live SEC check:** `_edgar_revenue_by_quarter("LITE")` returned the real 10-Q series ($0.425B → $0.534B → $0.665B → $0.808B), so the hard gate pulls genuine ground truth, not mocked data.
+
+### Notes
+- Behaviour change for `_validate_and_build`: recent-quarter hard-fails now fire only on EDGAR-confirmed mismatches, not trajectory. Foreign tickers (e.g. `6082.HK`) have no CIK → advisory-only, as intended.
+- Needs `data.sec.gov` reachable + the EDGAR rate-limit/user-agent already in `edgar_xbrl.py`.
+
+## [2026-06-03] Stage 1 — the grader (run_checkpoint.py): closes the feedback loop
+
+**Theme:** The seal layer was write-only. This adds the read/grade half: an async, idempotent, append-only grader that scores ripe sealed predictions at T+30/60/90 and writes outcomes. The main pipeline never waits on it; it never mutates a seal.
+
+### What shipped
+
+**`scripts/run_checkpoint.py`** (NEW): scans `prediction_log` (read-only), and for each record ripened to a horizon and not yet graded, fetches the date-pinned close (`checkpoint_seal.close_on_or_after` over a yfinance window) and writes `prediction_outcomes` via `record_price_outcome`. Idempotent (explicit skip + DB `UNIQUE(prediction_id, days_elapsed)`). CLI: `--ticker`, `--dry-run`, `--horizons`. Pure grading helpers (`expected_direction`, `directional_correct`, `band_label`, `return_pct`, `grade`, `ripe_horizons`) are unit-tested.
+
+**Direction grading — prefers the models, not the band.** A first cut scored direction from the band midpoint, but that's degenerate when the band straddles spot: LITE's mid ($925) is only −1.4% from ref ($938) → "flat", even though both directional models said *down*. Fix: `checkpoint_seal.net_direction()` records a `directional_lean` ("up"/"down"/None, None on genuine A-vs-B conflict) into `reasoning_fingerprint` at seal time; the grader grades against that lean and only falls back to the band when there's no clean lean (older seal or model conflict). `grade()` reports `direction_source: "models" | "band"`.
+
+**`scripts/prediction_logger.py`**: `record_price_outcome()` gains `actual_date_used` (the exact close date), schema-drift-stripped until the migration lands.
+
+### Verification
+`pytest test_run_checkpoint.py test_checkpoint_seal.py test_engine.py` → **63 passed**. Compiles; imports clean with heavy deps lazy-loaded. Worked demo (LITE-shape, lean=down): grade @ $812 → `down / models / correct / within band / −13.43%`; ripeness math confirmed.
+
+### Notes / next
+- Seals written before this (LITE 26/28, AMD 27) lack `directional_lean` → the grader falls back to the band rule for them until re-sealed. New seals carry it.
+- First real grades land in **July** (June-3 seals at T+30). The grader should run on a daily cron; wire that next.
+- Stage 1 produces graded outcomes only — `[CALIBRATION]` feedback into live analysis stays dark until N ≥ 10 (Stage 4).
+
+## [2026-06-03] Judgment layer → claude-opus-4-8 + logged same-provider fallback
+
+**Theme:** "Best results, price no object." Put the most capable model where reasoning happens, keep the A/B/C debate *fair* (one shared model so no capability bias), and add resilience that never silently corrupts a sealed verdict. `claude-opus-4-8` was probed live against the key and confirmed to resolve before adoption.
+
+### What shipped
+
+**Judgment layer → `claude-opus-4-8`:**
+- `run_socratic.py`: `SOCRATIC_MODEL` sonnet-4-6 → opus-4-8. The four judgment prompts + `rough_target_range`, `research_question`, `judgment_conversation` frontmatter → opus-4-8 (via `model:` line). `harness_routing` stays Haiku (mechanical), YouTube stays Gemini, research grounding stays Perplexity.
+- Other reasoning constants opus-4-6 → opus-4-8: `kill_condition_eval.py`, `event_reasoner.py`, `run_thesis.py` (primary; `ANTHROPIC_MODEL_MEMORY` stays sonnet), `generate_model.py` (primary; sonnet retry tier kept), and analytical scouts (`scout_moat/_fundamentals/_catalyst/_discovery/_filings`).
+
+**Logged same-provider fallback (`call_sonnet`):**
+- New `SOCRATIC_FALLBACK_MODEL = "claude-opus-4-6"`. On an API/404 error the call retries ONCE on the fallback Claude model — never a cross-provider swap (a GPT verdict sealed as Claude would corrupt calibration). The fallback is loud and the model that **actually ran** is returned as `model_used`.
+- `model_used` is threaded through `run_one_model` / `run_corpus_callosum` into the run result's new `models_used` map.
+
+**Seal records the truth, not the intent:**
+- `checkpoint_seal.resolve_model_ids()` prefers the actual `models_used` over the intended frontmatter for both the cohort key and the fingerprint; the fingerprint now carries `models_used`. So a fallback is auditable in the sealed record and shifts the cohort correctly.
+
+### Verification
+`pytest test_checkpoint_seal.py test_engine.py` → **55 passed**. All touched files compile. Live API checks: `claude-opus-4-8` resolves on the key; the fallback path was exercised against the real API (bad primary → `NotFoundError` → recovered on opus-4-6, `model_used` recorded as the fallback). Note: the model change flips the Socratic cohort (sonnet→opus), so the next seal for an already-seen ticker shows `version_cohort_break=true` once — correct.
+
+### Deferred (Phase 2)
+- **Cross-provider (OpenAI) backup for the judgment layer** — requires an OpenAI tool/response adapter and must be cohort-aware (a provider swap is a different reasoner). Scout-layer OpenAI backup is low-risk and can reuse the existing `scout_filings.analyze_with_openai` pattern.
+
 ## [2026-06-01] Async Checkpoint Feedback — rescoped P0/P1 (seal layer on prediction_log)
 
 **Theme:** Implements the rescoped checkpoint-feedback layer per `docs/CHECKPOINT_FEEDBACK_ASSESSMENT_2026-06-01.md` + `docs/CHECKPOINT_FEEDBACK_RESCOPE_RESOLUTIONS_2026-06-01.md`. The original spec proposed a parallel `thesis_predictions`/`thesis_outcomes` system; review squad found ~70% already exists (`prediction_log`, `prediction_outcomes`, `prediction_logger.py`) plus a name collision with the existing `thesis_outcomes`. We **extend** the existing stack instead.
@@ -28,6 +337,8 @@ All notable changes made to the project are documented here, with reasoning and 
 
 ### Verification
 `pytest test_checkpoint_seal.py test_engine.py` → **52 passed**. Touched files compile. Guarded seal degrades gracefully with no DB creds (warns, returns None). git system_version resolves (`8c4e505`). A red-team pass on the new code fixed three issues before commit: `direction_agreement` now divides by recognised-verdict count (not a hard 3); `close_on_or_after` skips non-ISO date rows instead of mis-comparing them; and a failed previous-cohort lookup now seals `version_cohort_break=None` (unknown) rather than `False`, so a transient DB error can't silently hide a real cohort break.
+
+**Model-aware cohort key (2026-06-01, follow-up):** `compute_cohort_key` now also folds in the resolved `model:` frontmatter of the four judgment prompts (`judgment_model_ids`), so a Socratic model swap (e.g. sonnet-4-6 → opus-4-8) trips a cohort break automatically — previously it would have landed in the same cohort unless every prompt version string was hand-bumped. (`kill_condition_eval.py`'s model was already covered via the judgment-file hash.) Note: this changes the cohort-key formula, so the first seal after this lands shows `version_cohort_break=true` once for already-seen tickers — a one-time artifact, not a real change. 54 tests pass.
 
 **First live run (LITE, socratic id=26) surfaced a real fingerprint bug, now fixed:** the verdict→direction map only knew generic/Chinese labels, not the models' actual enums — Model A `OVERVALUED/FAIRLY_VALUED/UNDERVALUED`, Model B `REGIME_UPSIDE/NO_REGIME_SHIFT/REGIME_DOWNSIDE` — so a LITE seal with `A:OVERVALUED B:REGIME_DOWNSIDE C:None` parsed only one direction and read a false unanimous agreement. Fixes: (1) verdict vocab expanded to the real enums; (2) Model C correctly treated as non-directional (adversarial, emits no verdict); (3) `conviction_proxy` scoped to the directional voters (A/B) so C's bear-case confidence can't pollute it; (4) added `directional_conflict` (A-vs-B) to the fingerprint, the meaningful 2-voter signal alongside `dissenting_model`. Any seal written before this fix should be re-run. (52 passed includes the new live-shape regression test.)
 

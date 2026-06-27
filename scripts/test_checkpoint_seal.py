@@ -53,6 +53,17 @@ def test_live_lite_shape_a_b_directional_c_no_verdict():
     assert conv > 0.7
 
 
+def test_net_direction():
+    # LITE: A overvalued (-1) + B regime_downside (-1) -> both bearish -> 'down'
+    assert cs.net_direction(_r("OVERVALUED", "HIGH", "REGIME_DOWNSIDE", "MEDIUM", None, "LOW")) == "down"
+    # both bullish -> 'up'
+    assert cs.net_direction(_r("UNDERVALUED", "HIGH", "REGIME_UPSIDE", "HIGH", None, "LOW")) == "up"
+    # AMD: A down vs B up -> genuine conflict -> None (no net lean to grade)
+    assert cs.net_direction(_r("OVERVALUED", "HIGH", "REGIME_UPSIDE", "HIGH", None, "LOW")) is None
+    # nothing recognised -> None
+    assert cs.net_direction(_r("garbage", "HIGH", "junk", "HIGH", None, "LOW")) is None
+
+
 def test_directional_conflict_states():
     # A overvalued (-1) vs B regime_upside (+1) -> conflict
     assert cs.directional_conflict(_r("OVERVALUED", "HIGH", "REGIME_UPSIDE", "HIGH", None, "LOW")) is True
@@ -124,6 +135,18 @@ def test_reasoning_fingerprint_shape_and_proxy_label():
     assert fp["model_confidences"] == {"a": "HIGH", "b": "HIGH", "c": "LOW"}
     assert fp["conviction_source"] == "proxy"
     assert 0.0 <= fp["conviction"] <= 1.0
+    # P1: with no aggregation (single sample), parsed dicts carry no consistency
+    assert fp["model_consistencies"] == {"a": None, "b": None, "c": None}
+
+
+def test_reasoning_fingerprint_carries_self_consistency():
+    # When round-1 was sampled mode-of-N, aggregate_samples writes a `consistency`
+    # field into each parsed dict; the seal must surface it per model.
+    r = {"a": {"verdict": "低估", "confidence": "HIGH", "consistency": 1.0},
+         "b": {"verdict": "低估", "confidence": "MEDIUM", "consistency": 0.6},
+         "c": {"confidence": "LOW", "consistency": 0.8}}  # C: confidence-based
+    fp = cs.reasoning_fingerprint(r, None)
+    assert fp["model_consistencies"] == {"a": 1.0, "b": 0.6, "c": 0.8}
 
 
 # ── cohort key ──────────────────────────────────────────────────────────────────
@@ -141,6 +164,39 @@ def test_cohort_key_stable_and_sensitive():
     assert cs.compute_cohort_key(pv_judge, "filehash_AAAA") != k1
     # judgment FILE change -> different key
     assert cs.compute_cohort_key(pv, "filehash_BBBB") != k1
+
+
+def test_cohort_key_tracks_model_swap():
+    pv = {"model_a": "v1", "model_b": "v1", "model_c": "v1", "corpus_callosum": "v1"}
+    sonnet = {"model_a": "claude-sonnet-4-6", "model_b": "claude-sonnet-4-6"}
+    k_sonnet = cs.compute_cohort_key(pv, "FH", sonnet)
+    # SAME prompts + files, only the model changes -> cohort MUST break
+    opus = {"model_a": "claude-opus-4-8", "model_b": "claude-sonnet-4-6"}
+    assert cs.compute_cohort_key(pv, "FH", opus) != k_sonnet
+    # identical model_ids -> stable
+    assert cs.compute_cohort_key(pv, "FH", dict(sonnet)) == k_sonnet
+
+
+def test_resolve_model_ids_prefers_actual_over_intended():
+    intended = {"model_a": "claude-opus-4-8", "model_b": "claude-opus-4-8"}
+    # a fallback fired on model_b -> use the ACTUAL models
+    actual = {"model_a": "claude-opus-4-8", "model_b": "claude-opus-4-6", "corpus_callosum": None}
+    assert cs.resolve_model_ids(actual, intended) == actual
+    # run didn't report models (all None / empty) -> fall back to intended frontmatter
+    assert cs.resolve_model_ids({"model_a": None}, intended) == intended
+    assert cs.resolve_model_ids(None, intended) == intended
+
+
+def test_judgment_model_ids_reads_frontmatter(tmp_path):
+    d = tmp_path / "scripts" / "prompts" / "socratic"
+    d.mkdir(parents=True)
+    (d / "model_a_fundamentals.md").write_text("---\nversion: v3\nmodel: claude-sonnet-4-6\n---\nbody\n")
+    (d / "model_b_regime.md").write_text("---\nmodel: claude-opus-4-8\n---\nbody\n")
+    # model_c + corpus_callosum absent -> None, no raise
+    ids = cs.judgment_model_ids(tmp_path)
+    assert ids["model_a"] == "claude-sonnet-4-6"
+    assert ids["model_b"] == "claude-opus-4-8"
+    assert ids["model_c"] is None and ids["corpus_callosum"] is None
 
 
 # ── date-pinned price pick (the P0 grading fix) ─────────────────────────────────

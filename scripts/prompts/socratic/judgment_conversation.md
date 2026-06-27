@@ -1,6 +1,6 @@
 ---
 version: v1
-model: claude-sonnet-4-6
+model: claude-opus-4-8
 max_tokens: 2000
 temperature: 0.2
 purpose: Phase 5 — detect vagueness in a user's judgment input and ask one clarifying follow-up
