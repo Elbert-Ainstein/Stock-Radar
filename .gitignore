@@ -11,6 +11,8 @@ data/*
 !data/operator_notes/
 !data/baselines/
 !data/change_cycles/
+!data/hypotheses/
+!data/memory/
 !data/validated_corrections.md
 !data/filter_audit_*.md
 !data/filter_philosophy.md
