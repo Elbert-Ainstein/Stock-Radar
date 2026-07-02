@@ -162,6 +162,19 @@ export default function NavBar() {
       const stocksRes = await fetch("/api/stocks", { cache: "no-store" });
       const stocksJson = await stocksRes.json();
       const tickers: string[] = (stocksJson.stocks || stocksJson.data || []).map((s: any) => s.ticker).filter(Boolean);
+      // 2026-07-02 (sprint 3.6): spend gate — this button fires one Opus +
+      // web-search run per ticker in parallel with no budget cap. Make the
+      // cost explicit and require confirmation before kicking.
+      if (
+        !window.confirm(
+          `Run ${tickers.length} thesis reruns in parallel?\n\n` +
+            `Each is an Opus + web-search call (~$3–$5), ` +
+            `estimated total $${tickers.length * 3}–$${tickers.length * 5}.`,
+        )
+      ) {
+        setThesesStatus("idle");
+        return;
+      }
       setThesesTotal(tickers.length);
       // Kick off in parallel — the rerun route is idempotent (returns 409 if
       // already running, which we treat as success since we'll poll for it).
