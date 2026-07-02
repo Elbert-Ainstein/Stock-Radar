@@ -138,10 +138,13 @@ def evaluate_kill_condition(
         }
 
     if not ANTHROPIC_API_KEY:
+        # 2026-07-02: fail CLOSED to 'unknown', not 'safe' — a dead evaluator
+        # must not present a green light (audit §4.2). UI renders no badge and
+        # shows the reasoning for any non-safe status.
         return {
-            "status": "safe",
+            "status": "unknown",
             "confidence": 0.0,
-            "reasoning": "Kill condition evaluation requires ANTHROPIC_API_KEY.",
+            "reasoning": "Evaluation unavailable: ANTHROPIC_API_KEY not set.",
             "evidence": [],
             "checked_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -164,7 +167,16 @@ def evaluate_kill_condition(
     if not signal_lines:
         signal_lines.append("  (No recent signals available)")
 
-    # Resolve archetype for kill condition context
+    # Resolve archetype for kill condition context. Callers (analyst.py) don't
+    # pass one, so fall back to the operator override config — without this the
+    # cyclical/transformational guidance never fired and every stock was
+    # kill-evaluated under GARP rules (2026-07-02; audit §4.2).
+    if not archetype:
+        try:
+            from target_engine import _load_archetype_override
+            archetype = _load_archetype_override(ticker)
+        except Exception:
+            archetype = None
     arch = (archetype or "garp").lower()
     arch_guidance = ARCHETYPE_KILL_GUIDANCE.get(arch, ARCHETYPE_KILL_GUIDANCE["garp"])
 
@@ -206,9 +218,10 @@ def evaluate_kill_condition(
         clean = re.sub(r'\s*```$', '', clean)
         parsed = json.loads(clean)
 
-        status = parsed.get("status", "safe")
+        status = parsed.get("status", "unknown")
         if status not in ("safe", "warning", "triggered"):
-            status = "safe"
+            # Garbage status from the model is an eval failure, not an all-clear.
+            status = "unknown"
 
         return {
             "status": status,
@@ -219,9 +232,11 @@ def evaluate_kill_condition(
         }
 
     except Exception as e:
+        # 2026-07-02: fail CLOSED — during an outage/timeout/billing lapse the
+        # one mechanism that forces a position review must not report all-clear.
         print(f"  [{ticker}] Kill condition eval failed: {e}")
         return {
-            "status": "safe",
+            "status": "unknown",
             "confidence": 0.0,
             "reasoning": f"Evaluation failed: {e}",
             "evidence": [],

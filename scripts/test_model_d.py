@@ -108,6 +108,7 @@ def test_order_independent():
 # ── bracket edge cases ──────────────────────────────────────────────────────────
 
 def test_bracket_normal_and_edges():
+    # rate 0.0 -> PV and forward frames coincide; ratio is the plain division
     r = md.optionality_value([_s("v", 1.0, 50e9, .2, .25, 40)], 100e6, 0.0, 0)  # $1000
     assert md.bracket(600, r)["vision_over_floor_x"] == round(1000 / 600, 2)
     # engine_target = 0 (falsy) must NOT KeyError and must NOT divide -> None, key present
@@ -115,3 +116,20 @@ def test_bracket_normal_and_edges():
     assert z["vision_over_floor_x"] is None and z["engine_floor"] == 0 and z["vision_ceiling"] == 1000.0
     # engine_target None -> None, key present
     assert md.bracket(None, r)["vision_over_floor_x"] is None
+
+
+def test_bracket_like_for_like_frame(  # 2026-07-02 frame fix (audit gap e)
+):
+    """At a real discount rate, the floor must be discounted to t=0 before the
+    ratio — the old raw ratio understated the vision lens by ~the 5y factor."""
+    r = md.optionality_value([_s("v", 1.0, 50e9, .2, .25, 40)], 100e6, 0.12, 5.0)
+    pv_ceiling = r["optionality_target"]              # 1000 / 1.12^5 ~= 567.43
+    b = md.bracket(436.0, r, floor_horizon_years=1.25)
+    floor_pv = 436.0 / (1.12 ** 1.25)                 # ~= 377.9
+    assert b["engine_floor_pv"] == round(floor_pv, 2)
+    assert b["vision_over_floor_x"] == round(pv_ceiling / floor_pv, 2)
+    assert b["vision_over_floor_x_raw"] == round(pv_ceiling / 436.0, 2)
+    # The fix direction: like-for-like ratio strictly exceeds the raw ratio
+    assert b["vision_over_floor_x"] > b["vision_over_floor_x_raw"]
+    # And the LITE-shaped case is no longer 'inverted' purely by frame:
+    # raw ~1.30 here, like-for-like ~1.50 — both consistent, no artifact.

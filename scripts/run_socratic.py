@@ -160,10 +160,22 @@ def fill(body: str, *, label: str = "?", strict: bool = True, **fields: Any) -> 
                 f"is intentional."
             )
 
-    out = body
-    for key, val in fields_lower.items():
-        out = out.replace(f"[{key.upper()}]", "" if val is None else str(val))
-    return out
+    # 2026-07-02 (audit gap d): single-pass substitution over the ORIGINAL body
+    # only. The old sequential str.replace loop re-scanned previously-inserted
+    # values, so a context block whose text contained another placeholder token
+    # (e.g. the macro block carrying a literal "[VIX]" or "[CHAIN]" line) got
+    # other blocks spliced into it mid-instruction — every judgment prompt
+    # carried context blocks 2-3x, mangling the anti-anchoring instructions.
+    # (Cohort note: this batch already touches JUDGMENT_FILES, so the cohort
+    # key resets with this change regardless — the honest moment to fix it.)
+    def _sub(m: "re.Match[str]") -> str:
+        key = m.group(1).lower()
+        if key in fields_lower:
+            val = fields_lower[key]
+            return "" if val is None else str(val)
+        return m.group(0)  # not provided (optional) — leave the token as-is
+
+    return _PLACEHOLDER_RE.sub(_sub, body)
 
 
 # ────────────────────────────────────────────────────────────────────

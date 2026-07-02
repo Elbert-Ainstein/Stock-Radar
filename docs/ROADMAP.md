@@ -45,6 +45,15 @@ worth building. (Owner task — the operator's edge is the input here.)
 
 ## Sequenced next steps (post-consolidation-sprint)
 
+**2026-07-02 addendum:** the operator-lessons spec
+(`docs/design/HORIZON_DISCOVERY_TYPEA_2026-07-02.md`) refines this list —
+notably: the trade gate is now horizon-aware (L1, shipped); discovery gen-2's
+revive-or-retire question is answered **revive**, with the six signature
+screens (S1–S6) as its intake and STALK-with-trigger-price as its output (L2);
+Type A decomposes into auditable bits (L3); and the [CHAIN] panel grows into
+the persisted cascade object with anointment events (L6). Its build table
+supersedes the ordering of items 3–6 below where they overlap.
+
 1. **Owner:** hand-validate on memory/HBM (above). Confirm archetype tags
    (`docs/decisions/ARCHETYPE_PROPOSALS_2026-07-02.md`) and the target
    source-of-truth decision (`docs/decisions/TARGET_SOURCE_OF_TRUTH_2026-07-02.md`).

@@ -87,7 +87,13 @@ jobs:
         # price-anchor data that #45 calibration eventually needs (LLM
         # variance every 12 hours = false signal). Use the dashboard
         # "Run all theses" button for ad-hoc thesis refreshes instead.
-        run: python run_pipeline.py --rebuild-only --no-thesis
+        #
+        # --no-models added 2026-07-02 (Option A, target source-of-truth
+        # decision): the twice-daily Opus scenario-model regeneration is
+        # retired — theses are the verdict of record; models regenerate
+        # on demand (new ticker / operator request). This also stops the
+        # scheduled run from ever touching operator-owned thesis/kill text.
+        run: python run_pipeline.py --rebuild-only --no-thesis --no-models
 
       - name: Upload logs
         if: always()
