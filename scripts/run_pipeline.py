@@ -569,6 +569,14 @@ def run():
                 print(f"  Failed scouts: {', '.join(failed)}")
                 for n in failed:
                     print(f"    - {n}: {scout_results[n][2]}")
+            # 2026-07-02 (sprint 3.2): a total scout wipeout must not report
+            # SUCCESS — previously error_msg stayed None here, so pipeline_runs
+            # and the Health panel showed a green run when every scout failed.
+            if scout_results and not succeeded:
+                error_msg = (
+                    f"all {len(failed)} scouts failed: "
+                    + "; ".join(f"{n}: {str(scout_results[n][2])[:80]}" for n in failed)
+                )
 
             # ─── Research Manager: Conflict & Sufficiency Analysis ─────
             if smart_mode and research_plans:
@@ -808,7 +816,10 @@ def run():
                 _spawn_auto_thesis(t)
 
     _clear_progress()
+    # 2026-07-02 (sprint 3.2): propagate the outcome — the old bare fall-through
+    # exited 0 on failure, keeping GitHub Actions green no matter what.
+    return success
 
 
 if __name__ == "__main__":
-    run()
+    sys.exit(0 if run() else 1)
