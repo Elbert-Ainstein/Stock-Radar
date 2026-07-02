@@ -114,6 +114,73 @@ ARCHETYPE_KILL_GUIDANCE: dict[str, str] = {
     ),
 }
 
+# ── L5 (2026-07-02): kill conditions are the actual product ────────────────────
+# Tripwires work when wired to DATED, EXTERNAL signposts — coverage decisions,
+# 1,000-unit deployments, capacity financings, renewal prints — never vibes
+# ("competition intensifies" is not falsifiable). Per-archetype signpost
+# classes; appended to the evaluator's guidance and used by the trigger linter.
+
+ARCHETYPE_KILL_TEMPLATES: dict[str, str] = {
+    "garp": (
+        "Signpost classes: scheduled earnings prints (N consecutive quarters of "
+        "revenue growth below guidance; operating margin down >X pp YoY); a dated "
+        "guidance cut. Anchor each trigger to a print date."
+    ),
+    "cyclical": (
+        "Signpost classes: industry capex announcements above $X (supply response), "
+        "ASP declines N consecutive quarters, inventory days above cycle norms, a "
+        "named capacity financing. Routine cyclical drawdowns are NOT triggers."
+    ),
+    "compounder": (
+        "Signpost classes: NRR below X% or renewal/seat commentary deteriorating on "
+        "two consecutive prints; a named flagship-account displacement; ROIC below "
+        "WACC for N quarters."
+    ),
+    "transformational": (
+        "Signpost classes: dated regulatory/certification decisions, deployment "
+        "counts hitting or missing announced scale (e.g. 1,000 units by <date>), "
+        "anchor-customer commitments slipping past their announced dates, capacity "
+        "financings failing to close."
+    ),
+    "special_situation": (
+        "Signpost classes: the event's own dates — deal votes, court/agency "
+        "deadlines, spin timelines. The trigger is the dated event breaking, "
+        "never price action."
+    ),
+}
+
+# Vibe phrases that make a kill trigger unfalsifiable (heuristic, lowercase).
+_VAGUE_KILL_PATTERNS = (
+    "competition intensif",
+    "competitive pressure",
+    "sentiment",
+    "execution risk",
+    "loses momentum",
+    "macro headwind",
+    "market share erosion",
+    "growth slows",
+)
+
+
+def lint_kill_triggers(kill_triggers, archetype: str | None = None) -> list[str]:
+    """Advisory linter (L5): a kill trigger must be a dated, external,
+    falsifiable signpost. Flags vibe phrases and number-free triggers.
+    Pure; returns warning strings (empty = all triggers are signpost-grade)."""
+    warnings: list[str] = []
+    for i, trig in enumerate(list(kill_triggers or [])[:12]):
+        text = str(trig)
+        low = text.lower()
+        vague = [p for p in _VAGUE_KILL_PATTERNS if p in low]
+        if vague:
+            warnings.append(
+                f"trigger {i + 1}: vibe phrase ({vague[0]!r}) — not falsifiable: '{text[:90]}'"
+            )
+        elif not any(ch.isdigit() for ch in text):
+            warnings.append(
+                f"trigger {i + 1}: no number/date/threshold — not falsifiable: '{text[:90]}'"
+            )
+    return warnings
+
 
 def evaluate_kill_condition(
     ticker: str,
@@ -179,6 +246,9 @@ def evaluate_kill_condition(
             archetype = None
     arch = (archetype or "garp").lower()
     arch_guidance = ARCHETYPE_KILL_GUIDANCE.get(arch, ARCHETYPE_KILL_GUIDANCE["garp"])
+    # L5: give the evaluator the archetype's signpost classes, so "approaching
+    # the kill" is judged against dated external markers, not vibes.
+    arch_guidance += "\n" + ARCHETYPE_KILL_TEMPLATES.get(arch, ARCHETYPE_KILL_TEMPLATES["garp"])
 
     prompt = _EVAL_PROMPT.format(
         ticker=ticker,
