@@ -299,6 +299,15 @@ def extract_closing_json(text: str) -> Optional[dict]:
         return None
 
 
+def thesis_output_usable(parsed: Optional[dict]) -> bool:
+    """Truncation-guard predicate (2026-07-02, sprint 2.4): a thesis output is
+    persistable only if the closing JSON carries at least one verdict field.
+    A max_tokens truncation or parse failure yields {}/None -> refuse, so an
+    all-null row never masks the previous good thesis in the latest-wins API."""
+    p = parsed or {}
+    return any(p.get(k) is not None for k in ("thesis_target", "conviction", "risk_adj_target"))
+
+
 def extract_cited_domains(blocks: list[dict]) -> list[str]:
     """Pull the host of every URL Claude cited."""
     from urllib.parse import urlparse
@@ -856,6 +865,37 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     # 5. Parse output
     text = result["text"]
     parsed = extract_closing_json(text) or {}
+    # 2026-07-02 truncation guard (sprint 2.4): a max_tokens truncation or an
+    # unparseable closing JSON used to persist an all-null verdict row that
+    # masked the previous good thesis in the latest-wins API. Fail loudly
+    # instead — no row is written, yesterday's thesis stays authoritative.
+    if not thesis_output_usable(parsed):
+        raise RuntimeError(
+            f"thesis output unusable for {ticker}: stop_reason="
+            f"{result.get('stop_reason')!r}, closing JSON "
+            f"{'missing' if not parsed else 'has no verdict fields'} "
+            f"({len(text)} chars of text) — refusing to persist an all-null row"
+        )
+    if result.get("stop_reason") == "max_tokens":
+        print(f"  [run_thesis] WARN: {ticker} output hit max_tokens but closing JSON "
+              f"parsed with verdict fields — proceeding", file=sys.stderr, flush=True)
+
+    # 2026-07-02 — HARD GATE ENFORCED IN CODE (sprint 2.1). The Step-12 clamp
+    # table was prompt-prose only: nothing recomputed risk_adj_ev_ratio (both
+    # operands in hand right here) and nothing clamped downward, so a model
+    # arithmetic slip or optimistic self-report bypassed the gate (audit §4.2).
+    # enforce_trade_gate is pure and never raises — a hard gate must not fail
+    # open via an exception path. Runs BEFORE the kill gate so D1 reads the
+    # honest ratio when deciding an archetype-routed relax.
+    from trade_gate import enforce_trade_gate, format_enforcement
+    parsed, _tg = enforce_trade_gate(parsed, spot)
+    if _tg:
+        print(f"  [trade_gate] {ticker}: {format_enforcement(_tg)}", flush=True)
+        if (_tg.get("conviction_after") == "BROKEN"
+                and parsed.get("buy_below") in (None, 0)):
+            print(f"  [trade_gate] WARN: {ticker} clamped to BROKEN without a "
+                  f"buy_below price — not actionable (prompt requires one)",
+                  file=sys.stderr, flush=True)
 
     # D1 (2026-06-03): archetype-routed kill gate. A ratio-driven BROKEN on a
     # regime-shift / pre-revenue name is relaxed deterministically (a Hard Gate
