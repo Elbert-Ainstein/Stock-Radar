@@ -439,18 +439,36 @@ def reason_events(events: list[dict], stock_context: dict) -> list[dict]:
     # expected_contribution_pct is rebalanced to reflect correlated facets.
     _apply_type_stack_cap(reasoned)
 
-    # Apply calibration ratios from feedback loop (if available).
-    # These scale predictions toward historically-observed magnitudes.
+    # Event-magnitude calibration — LOG-ONLY since 2026-07-02 (audit §4.3,
+    # gap (a)): the ratio math attributes each stock's TOTAL price move to
+    # every individual pending event and pseudo-replicates daily rows into
+    # correlated "samples", so a single 30% earnings pop could triple every
+    # event type's weight (clamped at 3.0x). Until the attribution math is
+    # rebuilt, ratios are recorded on the event for observability but NEVER
+    # scale expected_contribution_pct. Re-enable deliberately via
+    # CALIBRATION_APPLY=1 once the math is fixed.
     try:
+        import os
         from calibration import get_event_calibration_ratios
         cal_ratios = get_event_calibration_ratios()
+        apply_ratios = os.environ.get("CALIBRATION_APPLY", "") == "1"
         if cal_ratios:
             for ev in reasoned:
                 ratio = cal_ratios.get(ev.get("type", ""), 1.0)
                 if ratio != 1.0:
-                    ev["pre_calibration_pct"] = ev["expected_contribution_pct"]
-                    ev["expected_contribution_pct"] = round(ev["expected_contribution_pct"] * ratio, 2)
-                    ev["calibration_ratio"] = ratio
+                    ev["calibration_ratio"] = ratio  # observability only
+                    if apply_ratios:
+                        ev["pre_calibration_pct"] = ev["expected_contribution_pct"]
+                        ev["expected_contribution_pct"] = round(
+                            ev["expected_contribution_pct"] * ratio, 2
+                        )
+            if not apply_ratios and any(r != 1.0 for r in cal_ratios.values()):
+                print(
+                    "  [event_reasoner] calibration ratios recorded but NOT applied "
+                    "(disabled 2026-07-02 — invalid attribution math; "
+                    "set CALIBRATION_APPLY=1 only after the fix)",
+                    file=sys.stderr,
+                )
     except ImportError:
         pass  # calibration module not available
 
