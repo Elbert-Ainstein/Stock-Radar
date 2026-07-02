@@ -91,27 +91,45 @@ def _strip_bad_column(rows: list[dict], error_msg: str) -> str | None:
 
 def _upsert_with_retry(table: str, rows: list[dict], on_conflict: str | None = None) -> list[dict]:
     """
-    Upsert rows into `table`, retrying up to 5 times and stripping unknown
-    columns on each PostgREST schema-mismatch error. Mirrors the pattern
-    used in analyst.py for schema-drift resilience.
+    Upsert rows into `table`, stripping unknown columns on each PostgREST
+    schema-mismatch error and retrying. Mirrors the pattern used in
+    analyst.py for schema-drift resilience.
+
+    The retry budget is one attempt per strippable column plus one. The old
+    fixed range(5) was exactly exhausted by the 5 optional checkpoint-seal
+    columns while their migration was unapplied, silently losing the ENTIRE
+    row (2026-07-02 fix; audit §4.3).
     """
     sb = get_client()
-    for attempt in range(5):
+    max_attempts = (len(rows[0]) if rows else 0) + 1
+    stripped: list[str] = []
+    for attempt in range(max_attempts):
         try:
             if on_conflict:
                 resp = sb.table(table).upsert(rows, on_conflict=on_conflict).execute()
             else:
                 resp = sb.table(table).insert(rows).execute()
+            if stripped:
+                print(
+                    f"  [prediction_logger] Wrote {len(resp.data or [])} row(s) to '{table}' "
+                    f"after stripping {len(stripped)} missing column(s): {stripped}",
+                    file=sys.stderr,
+                )
             return resp.data or []
         except Exception as e:
             msg = str(e)
             bad_col = _strip_bad_column(rows, msg)
             if bad_col:
+                stripped.append(bad_col)
                 continue  # retry without that column
             # Not a schema error — give up
             print(f"  [prediction_logger] DB error on '{table}': {e}", file=sys.stderr)
             return []
-    print(f"  [prediction_logger] Failed to write to '{table}' after 5 retries.", file=sys.stderr)
+    print(
+        f"  [prediction_logger] Failed to write to '{table}' after {max_attempts} attempts "
+        f"(stripped: {stripped}).",
+        file=sys.stderr,
+    )
     return []
 
 
