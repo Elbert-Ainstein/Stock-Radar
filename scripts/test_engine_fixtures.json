@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "captured_at": "2026-05-01T18:53:56.328957",
+    "captured_at": "2026-07-02T09:49:49.562186",
     "purpose": "Regression fixture: low/base/high tolerance bands + method-equality + TTM data-layer canary. Updated only when an engine change is intentional.",
     "tolerance_pct": 50.0,
     "skip_floor": 2,
@@ -17,11 +17,11 @@
       "spot": 45.720001220703125,
       "method": "cyclical",
       "low": 0.0,
-      "base": 42.15060596736494,
-      "high": 127.9156338328689,
+      "base": 44.096527963503696,
+      "high": 107.66409657191133,
       "pinned_data": {
-        "ttm_revenue": 1380100000.0,
-        "ttm_ebitda": 35100000.0
+        "ttm_revenue": 1333600000.0,
+        "ttm_ebitda": 14300000.0
       },
       "note": "deep cyclical trough"
     },
@@ -34,12 +34,12 @@
       "tolerance_pct": 20.0,
       "spot": 97.1500015258789,
       "method": "cyclical",
-      "low": 21.02191605159848,
-      "base": 68.60360269738841,
-      "high": 122.09313668117815,
+      "low": 18.172429499798497,
+      "base": 56.96314056527449,
+      "high": 93.59492115904304,
       "pinned_data": {
-        "ttm_revenue": 1738800000.0,
-        "ttm_ebitda": 721100000.0
+        "ttm_revenue": 1706700000.0,
+        "ttm_ebitda": 690300000.0
       },
       "note": "AI-optical peak"
     },
@@ -50,14 +50,14 @@
       "archetype": "compounder",
       "expected_method": null,
       "tolerance_pct": 20.0,
-      "spot": 914.129638671875,
+      "spot": 914.1295776367188,
       "method": "ev_ebitda",
-      "low": 241.11178285003496,
-      "base": 479.32873778799575,
-      "high": 597.6412432951869,
+      "low": 212.6614552376352,
+      "base": 372.2571391958434,
+      "high": 448.9514428136588,
       "pinned_data": {
-        "ttm_revenue": 26102300000.0,
-        "ttm_ebitda": 9206500000.0
+        "ttm_revenue": 25442800000.0,
+        "ttm_ebitda": 8982337100.0
       },
       "note": "Q3 2024 guidance cut"
     },
@@ -70,12 +70,12 @@
       "tolerance_pct": 20.0,
       "spot": 618.8150024414062,
       "method": "ev_ebitda",
-      "low": 313.86302257202703,
-      "base": 545.797430030186,
-      "high": 688.0773439887956,
+      "low": 352.6466824410215,
+      "base": 625.5336308920281,
+      "high": 805.3845067047041,
       "pinned_data": {
-        "ttm_revenue": 13978400000.0,
-        "ttm_ebitda": 4541800000.0
+        "ttm_revenue": 15901700000.0,
+        "ttm_ebitda": 5675700000.0
       },
       "note": "post-COVID semi supercycle"
     },
@@ -86,14 +86,14 @@
       "archetype": "compounder",
       "expected_method": null,
       "tolerance_pct": 20.0,
-      "spot": 638.995849609375,
+      "spot": 638.9957275390625,
       "method": "ev_ebitda",
-      "low": 333.44730090443767,
-      "base": 530.2637597890173,
-      "high": 663.4705173054551,
+      "low": 435.50078776504336,
+      "base": 606.41799915769,
+      "high": 719.9013491824071,
       "pinned_data": {
-        "ttm_revenue": 21173400000.0,
-        "ttm_ebitda": 7100500000.0
+        "ttm_revenue": 24385200000.0,
+        "ttm_ebitda": 8658849857.0
       },
       "note": "mid-cycle stable"
     },
@@ -104,14 +104,14 @@
       "archetype": null,
       "expected_method": "ev_ebitda",
       "tolerance_pct": 50.0,
-      "spot": 165.15,
+      "spot": 272.05,
       "method": "ev_ebitda",
-      "low": 113.14978563264685,
-      "base": 226.28691139861624,
-      "high": 290.1575696818533,
+      "low": 88.8748971923463,
+      "base": 163.60134750922893,
+      "high": 216.28400991958512,
       "pinned_data": {
-        "ttm_revenue": 8194600000.0,
-        "ttm_ebitda": 4531800000.0
+        "ttm_revenue": 8717100000.0,
+        "ttm_ebitda": 4618500000.0
       },
       "note": "post-Inphi; must NOT auto-promote (live)"
     },
@@ -124,12 +124,12 @@
       "tolerance_pct": 20.0,
       "spot": 85.18000030517578,
       "method": "ev_ebitda",
-      "low": 69.22275973371318,
-      "base": 207.45416094401517,
-      "high": 277.11080722659847,
+      "low": 82.23285320371491,
+      "base": 173.32738231094115,
+      "high": 228.86751043317193,
       "pinned_data": {
-        "ttm_revenue": 22828000000.0,
-        "ttm_ebitda": 4229000000.0
+        "ttm_revenue": 23601000000.0,
+        "ttm_ebitda": 3372000000.0
       },
       "note": "GARP, AI-cycle inflection"
     },
@@ -142,12 +142,12 @@
       "tolerance_pct": 25.0,
       "spot": 29.5,
       "method": "revenue_multiple",
-      "low": 10.37846360397601,
-      "base": 21.941624578855926,
-      "high": 35.39022373300238,
+      "low": 11.857840721917068,
+      "base": 20.3356244407654,
+      "high": 28.753495412622236,
       "pinned_data": {
-        "ttm_revenue": 339262000.0,
-        "ttm_ebitda": -130475000.0
+        "ttm_revenue": 354330000.0,
+        "ttm_ebitda": -140463000.0
       },
       "note": "pre-profit, P/S routing"
     },
@@ -160,12 +160,12 @@
       "tolerance_pct": 25.0,
       "spot": 110.04733276367188,
       "method": "ev_ebitda",
-      "low": 37.91248965374944,
-      "base": 94.73387854054603,
-      "high": 126.1364503205543,
+      "low": 27.683935401585703,
+      "base": 56.361523949436716,
+      "high": 69.33599188259913,
       "pinned_data": {
-        "ttm_revenue": 26021676000.0,
-        "ttm_ebitda": 3117916000.0
+        "ttm_revenue": 25708000000.0,
+        "ttm_ebitda": 3513851000.0
       },
       "note": "transformational tilts + 25% Gordon floor"
     },
@@ -178,12 +178,12 @@
       "tolerance_pct": 30.0,
       "spot": 168.20773315429688,
       "method": "ev_ebitda",
-      "low": 34.792513329448454,
-      "base": 65.15801241245592,
-      "high": 76.19534264941421,
+      "low": 52.28470865981255,
+      "base": 79.24495715807602,
+      "high": 111.39844810054495,
       "pinned_data": {
-        "ttm_revenue": 46434000000.0,
-        "ttm_ebitda": 8103000000.0
+        "ttm_revenue": 46773000000.0,
+        "ttm_ebitda": 8252000000.0
       },
       "note": "post-spin GE Aerospace"
     }
