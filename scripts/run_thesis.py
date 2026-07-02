@@ -299,6 +299,22 @@ def extract_closing_json(text: str) -> Optional[dict]:
         return None
 
 
+def _load_thesis_horizon(ticker: str) -> Optional[float]:
+    """Per-name thesis horizon in years (config/thesis_horizons.json).
+
+    Lesson L1 (2026-07-02): the clamp table's 12-18mo clock must be a declared,
+    per-name parameter, not a silent constant. Returns None when unset (the
+    gate then uses its default and the verdict still states the clock)."""
+    try:
+        import json as _json
+        path = REPO_ROOT / "config" / "thesis_horizons.json"
+        data = _json.loads(path.read_text())
+        v = data.get(ticker.upper())
+        return float(v) if isinstance(v, (int, float)) else None
+    except Exception:
+        return None
+
+
 def thesis_output_usable(parsed: Optional[dict]) -> bool:
     """Truncation-guard predicate (2026-07-02, sprint 2.4): a thesis output is
     persistable only if the closing JSON carries at least one verdict field.
@@ -887,8 +903,12 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     # enforce_trade_gate is pure and never raises — a hard gate must not fail
     # open via an exception path. Runs BEFORE the kill gate so D1 reads the
     # honest ratio when deciding an archetype-routed relax.
+    # Lesson L1 (2026-07-02): the gate is judged on the thesis's OWN clock —
+    # per-name horizon from config/thesis_horizons.json, default 1.25y
+    # (identical to the original table), stated with every verdict.
     from trade_gate import enforce_trade_gate, format_enforcement
-    parsed, _tg = enforce_trade_gate(parsed, spot)
+    parsed, _tg = enforce_trade_gate(parsed, spot,
+                                     horizon_years=_load_thesis_horizon(ticker))
     if _tg:
         print(f"  [trade_gate] {ticker}: {format_enforcement(_tg)}", flush=True)
         if (_tg.get("conviction_after") == "BROKEN"
@@ -977,6 +997,7 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
         "conviction": parsed.get("conviction"),                       # Type B — trade-level (price-dependent)
         "strategic_conviction": parsed.get("strategic_conviction"),   # Type A — structural (price-independent); was computed then dropped
         "risk_adj_ev_ratio": parsed.get("risk_adj_ev_ratio"),         # the trade-asymmetry ratio that drives the BROKEN clamp; persist it so the verdict is auditable
+        "thesis_horizon_years": parsed.get("thesis_horizon_years"),   # L1: the clock this verdict was judged on (gate thresholds are annualized-equivalent)
         "position_size_pct": parsed.get("position_size_pct"),
         "buy_below": parsed.get("buy_below"),
         "trim_above": parsed.get("trim_above"),

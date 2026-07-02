@@ -1,0 +1,21 @@
+{
+  "_README": [
+    "Per-name thesis horizon in YEARS (lesson L1, 2026-07-02 —",
+    "docs/design/HORIZON_DISCOVERY_TYPEA_2026-07-02.md).",
+    "",
+    "The Step-12 trade-gate clamp table was written for the ~12-18-month",
+    "clock of the memory-cycle trade (default 1.25y). A name whose thesis",
+    "plays out on a longer clock (robotics-class: 3y+) gets its clamp",
+    "thresholds scaled to annualized-return equivalence: t^(h/1.25).",
+    "",
+    "Tickers not listed use the default 1.25y — behavior identical to the",
+    "pre-L1 gate. Valid range 0.25-10.0; out-of-bounds values fall back to",
+    "the default and are flagged in the verdict's enforcement record.",
+    "",
+    "Example (uncomment by adding a real entry):",
+    "  \"ACHR\": 3.0    — eVTOL certification-to-scale clock",
+    "",
+    "Every verdict states which clock it was judged on (run log +",
+    "theses.thesis_horizon_years once the migration is applied)."
+  ]
+}

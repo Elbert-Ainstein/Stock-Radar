@@ -103,6 +103,80 @@ def test_garbage_inputs_never_raise():
         assert isinstance(out, dict)
 
 
+# ── horizon-aware clamp (lesson L1, 2026-07-02) ─────────────────────────────────
+
+from trade_gate import (
+    DEFAULT_HORIZON_YEARS,
+    horizon_adjusted_table,
+)
+
+
+def test_default_horizon_is_identity():
+    """At the table's native clock the scaled table is byte-identical —
+    the L1 change must not move any existing verdict."""
+    for (a, ca, pa), (b, cb, pb) in zip(
+        horizon_adjusted_table(DEFAULT_HORIZON_YEARS),
+        (
+            (1.25, "HIGH", 35.0),
+            (1.10, "MEDIUM", 25.0),
+            (1.00, "MEDIUM", 15.0),
+            (0.95, "LOW", 10.0),
+            (float("-inf"), "BROKEN", 0.0),
+        ),
+    ):
+        assert (ca, pa) == (cb, pb)
+        assert a == b or abs(a - b) < 1e-9
+
+
+def test_same_ratio_different_clock_different_verdict():
+    """The lesson's own example: 1.3x is HIGH-grade on the native ~15-month
+    clock but only MEDIUM-grade money on a 3-year clock (~9%/yr)."""
+    assert clamp_for_ratio(1.30) == ("HIGH", 35.0)
+    assert clamp_for_ratio(1.30, horizon_years=3.0) == ("MEDIUM", 25.0)
+
+
+def test_long_clock_big_ratio_compares_honestly():
+    """2.5x over 3 years (~36%/yr) clears the HIGH bar (1.25^(3/1.25) ~= 1.71)."""
+    assert clamp_for_ratio(2.50, horizon_years=3.0) == ("HIGH", 35.0)
+
+
+def test_long_clock_lowers_broken_threshold_too():
+    """0.90x is BROKEN on the native clock but a 3-year 0.90 (-3.4%/yr)
+    sits above the scaled BROKEN edge (0.95^2.4 ~= 0.884) -> LOW band."""
+    assert clamp_for_ratio(0.90) == ("BROKEN", 0.0)
+    assert clamp_for_ratio(0.90, horizon_years=3.0) == ("LOW", 10.0)
+
+
+def test_enforce_reads_horizon_and_states_the_clock():
+    parsed = {"risk_adj_target": 130.0, "conviction": "HIGH",
+              "position_size_pct": 35, "thesis_horizon_years": 3.0}
+    out, tg = enforce_trade_gate(parsed, spot=100.0)
+    # ratio 1.3 on a 3y clock -> MEDIUM/25 (would be untouched on the default)
+    assert out["conviction"] == "MEDIUM"
+    assert out["position_size_pct"] == 25.0
+    assert tg["horizon_years"] == 3.0
+    assert tg["annualized_return"] == pytest.approx(1.3 ** (1 / 3) - 1, abs=1e-4)
+    assert "3.0y clock" in format_enforcement(tg)
+    assert out["thesis_horizon_years"] == 3.0  # persisted with the verdict
+
+
+def test_enforce_default_clock_unchanged_behavior():
+    parsed = {"risk_adj_target": 130.0, "conviction": "HIGH", "position_size_pct": 35}
+    out, tg = enforce_trade_gate(parsed, spot=100.0)
+    assert out["conviction"] == "HIGH"          # 1.3 >= 1.25 at the native clock
+    assert tg["horizon_years"] == DEFAULT_HORIZON_YEARS
+    assert out["thesis_horizon_years"] == DEFAULT_HORIZON_YEARS
+
+
+def test_out_of_bounds_horizon_falls_back_loudly():
+    parsed = {"risk_adj_target": 130.0, "conviction": "HIGH",
+              "position_size_pct": 35, "thesis_horizon_years": 50.0}
+    out, tg = enforce_trade_gate(parsed, spot=100.0)
+    assert tg["horizon_years"] == DEFAULT_HORIZON_YEARS
+    assert tg["horizon_fallback"] is True
+    assert "out of bounds" in format_enforcement(tg)
+
+
 # ── truncation-guard predicate (sprint 2.4) ─────────────────────────────────────
 
 def test_truncated_or_empty_output_rejected():

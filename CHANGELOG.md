@@ -2,6 +2,14 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-07-02] Lesson L1 shipped — the trade gate's clock is now visible, per-name, and annualized
+
+Operator lessons from today's external session formalized as specs in `docs/design/HORIZON_DISCOVERY_TYPEA_2026-07-02.md` (L1 horizon clocks · L2 dual-mode gating + discovery revival via six signature screens · L3 Type A as bits · L4 no invisible opinions · L5 kill conditions as dated signposts · L6 cascade/anointment object · L7 human-hypothesis intake · L8 ledger-first ordering, with the status correction that the prediction-ledger poisoning was already fixed and merged this morning). ROADMAP updated to absorb the sequencing. **L1 implemented immediately:**
+
+- **The Step-12 clamp table silently encoded the 12–18-month clock of the memory-cycle trade it was born from** — applied to a 3-year thesis it clamps everything to no-buy because the ruler is wrong for the object, not because the market is expensive. Now: `thesis_horizon_years` is a per-name field (`config/thesis_horizons.json`, empty = default 1.25y), the clamp thresholds scale to **annualized-return equivalence** (`t^(h/1.25)`, `trade_gate.horizon_adjusted_table`), and **every verdict states which clock it was judged on** (enforcement record + run log `judged on Xy clock (+Y%/yr annualized)` + persisted `theses.thesis_horizon_years`, migration `supabase/2026-07-02_theses_horizon.sql` — one column, apply in the SQL editor).
+- Honest comparisons now hold in both directions: 1.3× @ native clock = HIGH but 1.3× @ 3y = MEDIUM (~9%/yr); 2.5× @ 3y = HIGH (~36%/yr); AND 0.90× @ 3y is LOW, not BROKEN (−3.4%/yr sits above the scaled kill edge) — long clocks both demand more upside and forgive shallow drawdowns proportionally.
+- Guardrails: horizon precedence parsed-field > config > default; out-of-bounds (outside 0.25–10y) falls back to default **flagged in the record** (no invisible opinions, L4); default-horizon behavior is regression-pinned byte-identical to the pre-L1 gate. Suite **208 → 215 passing** (+7 tests incl. the lesson's own examples).
+
 ## [2026-07-02] Post-sprint decisions implemented — archetypes, Option A, audit gaps (a)–(e)
 
 Owner decisions from the sprint report, executed same day. Suite **199 → 208 passing**; `tsc --noEmit` clean.
