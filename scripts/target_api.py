@@ -173,7 +173,12 @@ def payload_for(
 
     # Enrich with slider metadata so the frontend can render sliders without
     # hardcoding ranges. Use cyclical-specific sliders when in cyclical mode.
-    is_cyclical = t.valuation_method == "cyclical_normalized"
+    # 2026-07-02 fix: build_target emits valuation_method="cyclical"; the old
+    # check for "cyclical_normalized" never matched, so cyclical stocks shipped
+    # standard sliders (ev_ebitda_multiple, ebitda_margin_target) that
+    # _scenario_price_cyclical ignores — silent no-op sliders. Accept both
+    # spellings ("cyclical_normalized" survives in older stored payloads).
+    is_cyclical = t.valuation_method in ("cyclical", "cyclical_normalized")
     slider_keys = CYCLICAL_SLIDER_KEYS if is_cyclical else DEFAULT_SLIDER_KEYS
     all_meta = {**DRIVER_META, **CYCLICAL_DRIVER_META} if is_cyclical else DRIVER_META
     all_defaults = {**DEFAULT_DRIVERS, **CYCLICAL_DRIVERS} if is_cyclical else DEFAULT_DRIVERS
