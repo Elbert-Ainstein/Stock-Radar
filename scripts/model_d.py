@@ -111,12 +111,37 @@ def optionality_value(scenarios: list[VisionScenario], shares: float,
     }
 
 
-def bracket(engine_target: float | None, model_d: dict) -> dict:
-    """Frame the two lenses together: engine = floor, Model D = vision ceiling."""
+def bracket(engine_target: float | None, model_d: dict,
+            *, floor_horizon_years: float = 1.25) -> dict:
+    """Frame the two lenses together: engine = floor, Model D = vision ceiling.
+
+    2026-07-02 frame fix (audit gap e): vision_ceiling is a t=0 PRESENT VALUE
+    (terminal equity discounted over `years` at `discount_rate`), while the
+    engine floor (risk_adj_target) is an UNDISCOUNTED ~12-18-month forward
+    price. Ratio-ing them raw deflated the vision lens by roughly the
+    multi-year discount factor — the LITE '0.8x inverted bracket' datum
+    (2026-06-26) was substantially this artifact (~1.4x like-for-like).
+
+    The headline `vision_over_floor_x` is now like-for-like: the floor is
+    discounted to t=0 over `floor_horizon_years` (default 1.25 = midpoint of
+    the 12-18mo thesis horizon) at the SAME rate the vision PV used. The raw
+    inputs and the old frame-mismatched ratio stay in the record for audit.
+    """
     opt = model_d.get("optionality_target")
-    # Always include vision_over_floor_x (None when the floor is missing or zero —
+    rate = model_d.get("discount_rate", 0.12)
+    # Always include the keys (None when the floor is missing or zero —
     # 0 is falsy, so it must be checked explicitly, not lumped with None).
-    out = {"engine_floor": engine_target, "vision_ceiling": opt, "vision_over_floor_x": None}
+    out = {
+        "engine_floor": engine_target,
+        "vision_ceiling": opt,
+        "vision_over_floor_x": None,       # like-for-like (headline)
+        "engine_floor_pv": None,
+        "floor_horizon_years": floor_horizon_years,
+        "vision_over_floor_x_raw": None,   # pre-2026-07-02 frame-mismatched ratio
+    }
     if engine_target is not None and engine_target > 0 and opt is not None:
-        out["vision_over_floor_x"] = round(opt / engine_target, 2)
+        floor_pv = engine_target / ((1.0 + rate) ** floor_horizon_years)
+        out["engine_floor_pv"] = round(floor_pv, 2)
+        out["vision_over_floor_x"] = round(opt / floor_pv, 2) if floor_pv > 0 else None
+        out["vision_over_floor_x_raw"] = round(opt / engine_target, 2)
     return out

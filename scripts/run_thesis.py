@@ -937,8 +937,10 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
                                          shares=float(_shares), engine_target=_eng)
                 parsed["model_d_bracket"] = _md["bracket"]
                 b = _md["bracket"]
-                print(f"  [model_d] vision ceiling ${b.get('vision_ceiling')} vs engine floor "
-                      f"${b.get('engine_floor')} ({b.get('vision_over_floor_x')}x) — additive, not a verdict",
+                print(f"  [model_d] vision ceiling ${b.get('vision_ceiling')} (PV) vs engine floor "
+                      f"${b.get('engine_floor')} (${b.get('engine_floor_pv')} PV) — "
+                      f"{b.get('vision_over_floor_x')}x like-for-like "
+                      f"(raw {b.get('vision_over_floor_x_raw')}x) — additive, not a verdict",
                       flush=True)
             else:
                 print("  [model_d] skipped — no diluted share count", flush=True)
