@@ -37,9 +37,9 @@ import os
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path as _Path
-from typing import Any
+from typing import Any, Optional
 
 
 class EarningsFetchError(Exception):
@@ -284,8 +284,14 @@ def _archetype_threshold_multiplier(ticker: str | None) -> tuple[float, str | No
     return mult, arch
 
 
-def _validate_quarterly_revenue(periods: list[dict], ticker: str | None = None) -> tuple[list[str], set[int]]:
-    """Detect quarters with suspicious revenue spikes.
+def _trajectory_warnings(periods: list[dict], ticker: str | None = None) -> tuple[list[str], set[int]]:
+    """Detect quarters with suspicious revenue spikes via TRAJECTORY heuristics.
+
+    NOTE (D2, 2026-06-03): this is now an ADVISORY (Category-3 informational)
+    check. Its `suspect_indices` are no longer used as a hard gate — the hard
+    gate is the EDGAR cross-check in `_validate_quarterly_revenue`. Trajectory
+    heuristics over-fire on legitimate ramps (e.g. ASTS 50x QoQ from near-zero),
+    so they warn but never reject a quarter on their own.
 
     Checks two signals for each quarter:
     1. Revenue > Nx the trailing 4Q average (rolling anomaly)
@@ -362,7 +368,7 @@ def _validate_quarterly_revenue(periods: list[dict], ticker: str | None = None) 
                 # Exceeds the applied threshold (with multiplier) — real suspect.
                 ratio = rev / trailing_avg
                 warnings.append(
-                    f"SUSPECT DATA: {period_label} revenue "
+                    f"TRAJECTORY ANOMALY (advisory): {period_label} revenue "
                     f"${rev/1e9:.2f}B is {ratio:.1f}x the trailing "
                     f"{len(prior_revs)}Q avg ${trailing_avg/1e9:.2f}B "
                     f"(threshold: {trailing_thresh:.1f}x for this revenue scale"
@@ -425,6 +431,146 @@ def _validate_quarterly_revenue(periods: list[dict], ticker: str | None = None) 
                     )
 
     return warnings, suspect_indices
+
+
+# ── D2: EDGAR cross-check — the HARD gate (Category 1, fact error) ──────────────
+# Philosophy: a quarter is only REJECTED when the provider's revenue materially
+# disagrees with the SEC 10-Q actual (a real data fault). Trajectory smoothness
+# is advisory only. When EDGAR is unavailable (no CIK, foreign filer, fetch fail)
+# nothing is rejected on trajectory alone — we warn and trust the provider.
+
+_EDGAR_HARD_MISMATCH = 0.30   # >30% off the 10-Q actual -> reject the quarter
+_EDGAR_SOFT_MISMATCH = 0.15   # 15-30% -> informational (restatement / concept drift)
+# Align a provider quarter to the SEC quarter whose period-END date is nearest,
+# within this many days. < half a quarter (~45.5d) so the nearest match is always
+# unambiguous; a provider quarter with no SEC end within tolerance is skipped, not
+# rejected. This replaces calendar-quarter bucketing, which false-rejected fiscal-
+# calendar names (e.g. SanDisk: quarter-ends ~Jan 2 / ~Apr 3 straddle boundaries).
+_EDGAR_MATCH_TOLERANCE_DAYS = 45
+
+
+def _period_end_date(p: dict) -> datetime | None:
+    """Best available period-END date for a provider quarter, for aligning to EDGAR.
+
+    Prefers an explicit `_date` (the statement period-end); else parses the period
+    label. Returned tz-naive (date precision) so it compares cleanly to EDGAR ends.
+    Note: many providers omit `_date`, so the label-derived date can be a few weeks
+    off the true fiscal end — the EDGAR match tolerance absorbs that.
+    """
+    d = p.get("_date")
+    if d is None or not hasattr(d, "year"):
+        d = _parse_period_to_date(p.get("period", ""))
+    if d is None or not hasattr(d, "year"):
+        return None
+    try:
+        return datetime(d.year, d.month, d.day)
+    except (TypeError, ValueError):
+        return None
+
+
+def _edgar_revenue_by_quarter(ticker: str | None) -> list[tuple[datetime, float]] | None:
+    """[(period_end, revenue), ...] from SEC EDGAR 10-Q/10-K, or None if unavailable.
+
+    Returns ACTUAL SEC period-end dates (not calendar-quarter buckets) so the cross-
+    check can align provider quarters to the right SEC quarter by end-date proximity.
+    Calendar-quarter bucketing previously false-rejected fiscal-calendar names whose
+    quarter-ends straddle calendar boundaries.
+    """
+    if not ticker:
+        return None
+    try:
+        from edgar_xbrl import fetch_point_in_time
+        data = fetch_point_in_time(ticker)
+    except Exception as e:  # network, no module, etc. — degrade gracefully
+        print(f"  [{ticker}] EDGAR fetch failed ({e}); cross-check skipped", file=sys.stderr)
+        return None
+    if not data:
+        return None
+    out: list[tuple[datetime, float]] = []
+    for q in data.get("revenue_quarterly", []):
+        try:
+            end = datetime.strptime(q["end"], "%Y-%m-%d")
+            out.append((end, float(q["value"])))
+        except (ValueError, KeyError, TypeError):
+            continue
+    return out or None
+
+
+def _edgar_crosscheck(periods: list[dict], edgar_quarters: list[tuple[datetime, float]],
+                      ticker: str | None = None) -> tuple[list[str], set[int]]:
+    """Compare provider revenue to the EDGAR 10-Q actual. Hard-reject on a material gap.
+
+    Aligns each provider quarter to the SEC quarter whose period-END date is NEAREST
+    (within `_EDGAR_MATCH_TOLERANCE_DAYS`), not by calendar-quarter bucket — so a name
+    whose fiscal quarter-ends straddle calendar boundaries (e.g. SanDisk ~Jan 2 / ~Apr 3)
+    is matched to the correct SEC quarter instead of an off-by-one neighbour. A provider
+    quarter with no SEC end inside the tolerance is skipped (never rejected on a non-match).
+    """
+    warnings: list[str] = []
+    suspect: set[int] = set()
+    start_idx = max(0, len(periods) - 8)
+    for i, p in enumerate(periods):
+        if i < start_idx:
+            continue
+        rev = p.get("Total Revenue")
+        if rev is None or rev <= 0:
+            continue
+        pend = _period_end_date(p)
+        if pend is None:
+            continue
+        match = min(edgar_quarters, key=lambda eq: abs((eq[0] - pend).days), default=None)
+        if match is None:
+            continue
+        ed_end, ed = match
+        if ed <= 0 or abs((ed_end - pend).days) > _EDGAR_MATCH_TOLERANCE_DAYS:
+            continue  # no SEC quarter lines up with this provider quarter — don't reject
+        diff = abs(rev - ed) / ed
+        label = p.get("period", f"idx-{i}")
+        if diff > _EDGAR_HARD_MISMATCH:
+            warnings.append(
+                f"EDGAR MISMATCH (hard): {label} provider ${rev/1e9:.2f}B vs "
+                f"SEC 10-Q ${ed/1e9:.2f}B — {diff*100:.0f}% off. Data fault; "
+                f"quarter rejected."
+            )
+            suspect.add(i)
+        elif diff > _EDGAR_SOFT_MISMATCH:
+            warnings.append(
+                f"[informational] EDGAR variance: {label} provider ${rev/1e9:.2f}B "
+                f"vs SEC 10-Q ${ed/1e9:.2f}B — {diff*100:.0f}% off; within tolerance "
+                f"(possible restatement / XBRL concept drift)."
+            )
+    return warnings, suspect
+
+
+def _validate_quarterly_revenue(periods: list[dict], ticker: str | None = None) -> tuple[list[str], set[int]]:
+    """Validate quarterly revenue. EDGAR cross-check is the hard gate; trajectory is advisory.
+
+    Returns (warnings, suspect_indices). `suspect_indices` (the hard gate that can
+    fail a build) is populated ONLY by an EDGAR fact-mismatch. Trajectory anomalies
+    are advisory and never reject a quarter on their own (the D2 fix for ASTS-style
+    legitimate ramps that the old heuristic blocked).
+    """
+    warnings: list[str] = []
+    suspect: set[int] = set()
+    if not periods:
+        return warnings, suspect
+
+    # Category 3 — trajectory heuristics (advisory only; ignore their hard flags)
+    traj_warnings, _ = _trajectory_warnings(periods, ticker)
+    warnings.extend(traj_warnings)
+
+    # Category 1 — EDGAR cross-check (the hard gate)
+    edgar = _edgar_revenue_by_quarter(ticker)
+    if edgar:
+        ew, suspect = _edgar_crosscheck(periods, edgar, ticker)
+        warnings.extend(ew)
+    else:
+        warnings.append(
+            f"  [{ticker}] EDGAR cross-check unavailable (no CIK / fetch failed) — "
+            f"trajectory checks are ADVISORY ONLY; no quarter rejected on trajectory alone."
+        )
+
+    return warnings, suspect
 
 
 def _check_required(periods: list[dict], category: str) -> list[str]:
@@ -867,6 +1013,24 @@ class FinancialData:
 # ---------------------------------------------------------------------------
 # Live price helper (Alpha Vantage GLOBAL_QUOTE)
 # ---------------------------------------------------------------------------
+
+def fetch_live_price(ticker: str) -> float | None:
+    """Live intraday last price via yfinance fast_info, or None if unavailable.
+
+    The EOD provider (EODHD) price lags ~1 trading day. Use this for 'spot' so the
+    trade-asymmetry ratio divides by today's price, not yesterday's close — on a
+    volatile day that gap is material (e.g. LITE 2026-06-05: EODHD $945 close vs
+    live ~$865, an 8.5% gap that inflated the bearishness).
+    """
+    try:
+        import yfinance as yf
+        fi = yf.Ticker(ticker).fast_info
+        p = fi.get("last_price") or fi.get("lastPrice") or 0
+        p = float(p)
+        return p if p > 0 else None
+    except Exception:
+        return None
+
 
 def _fetch_live_price_av(ticker: str) -> dict[str, float | None]:
     """Fetch current price + market cap from Alpha Vantage GLOBAL_QUOTE.
@@ -1596,8 +1760,59 @@ def get_provider(name: str | None = None) -> DataProvider:
     return YFinanceProvider()
 
 
+def _period_public_date(p: dict) -> Optional[datetime]:
+    """Best-available period-END date for a statement period: the provider's
+    'date' field first (true fiscal end), then '_date', then the parsed label
+    (approximate, month-boundary). Returns a tz-naive datetime or None."""
+    for key in ("date", "_date"):
+        v = p.get(key)
+        if v:
+            try:
+                d = v if isinstance(v, datetime) else datetime.fromisoformat(str(v)[:19])
+                return d.replace(tzinfo=None)
+            except (ValueError, TypeError):
+                pass
+    try:
+        d = _parse_period_to_date(str(p.get("period", "")))
+        return d.replace(tzinfo=None) if d else None
+    except Exception:
+        return None
+
+
+def _filter_financials_as_of(fin: FinancialData, as_of: datetime,
+                             filing_lag_days: int = 45) -> tuple[FinancialData, int]:
+    """Point-in-time view for backtests (2026-07-02, sprint 2.6): drop
+    statement periods that were not yet FILED at `as_of`. A period is treated
+    as public `filing_lag_days` after its end date (10-Q deadline ~40-45 days
+    for large/accelerated filers). Mutates `fin` in place; returns
+    (fin, dropped_count). Price/market_cap are NOT rewound — backtest callers
+    inject the historical spot themselves.
+    """
+    cutoff = (as_of.replace(tzinfo=None) if as_of.tzinfo else as_of) - timedelta(days=filing_lag_days)
+    dropped = 0
+    for attr in ("quarterly_income", "quarterly_cashflow", "quarterly_balance",
+                 "annual_income", "annual_cashflow", "annual_balance"):
+        periods = getattr(fin, attr, None) or []
+        kept = []
+        for p in periods:
+            d = _period_public_date(p)
+            if d is not None and d <= cutoff:
+                kept.append(p)
+            else:
+                dropped += 1
+        setattr(fin, attr, kept)
+    if dropped:
+        fin.warnings.append(
+            f"AS_OF_FILTER: dropped {dropped} period(s) not publicly filed by "
+            f"{as_of.date()} (filing lag {filing_lag_days}d)"
+        )
+    return fin, dropped
+
+
 def fetch_financials(ticker: str, min_quarters: int = 4,
-                     override_suspect_recent: bool = False) -> FinancialData:
+                     override_suspect_recent: bool = False,
+                     as_of: Optional[datetime] = None,
+                     filing_lag_days: int = 45) -> FinancialData:
     """Fetch historical financials for `ticker` using a provider chain.
 
     Per-ticker chain logic (config/data_provider_overrides.json):
@@ -1626,11 +1841,21 @@ def fetch_financials(ticker: str, min_quarters: int = 4,
     override_suspect_recent : bool
         If True, allow data even if the sanity check flags recent quarters
         as anomalous. Use only after manually verifying against the 10-Q.
+    as_of : datetime, optional
+        Point-in-time view for backtests/fixtures: drop statement periods
+        not publicly filed by this date (period end + `filing_lag_days`).
+        Restored 2026-07-02 — the kwarg was dropped in the provider-abstraction
+        refactor (~2026-05-07) while backtest_targets / capture_engine_fixtures /
+        test_engine_fixtures kept passing it, so all three died on TypeError
+        and the fixture suite silently skipped 100% of cases.
+    filing_lag_days : int
+        Days after a period's end when its filing is treated as public.
 
     Raises
     ------
     EarningsFetchError
-        If ALL providers in the chain fail. The last error is included.
+        If ALL providers in the chain fail, or too few quarters remain
+        public at `as_of`. The last error is included.
     """
     _ensure_env_loaded()
     upper = ticker.upper()
@@ -1720,6 +1945,16 @@ def fetch_financials(ticker: str, min_quarters: int = 4,
                 f"PROVIDER_OVERRIDE: forced through {prov_name} "
                 f"(reason: {cfg.get('reason', 'see config')[:120]})"
             )
+
+        # ── Point-in-time filter for backtests/fixtures (2026-07-02) ──
+        if as_of is not None:
+            result, _dropped = _filter_financials_as_of(result, as_of, filing_lag_days)
+            if len(result.quarterly_income) < min_quarters:
+                raise EarningsFetchError(
+                    f"{ticker}: only {len(result.quarterly_income)} quarter(s) "
+                    f"publicly filed by {as_of.date()} (need {min_quarters}) — "
+                    f"as_of window too early for this data set"
+                )
 
         print(f"  [finance_data] {ticker} served by {prov_name} (chain: {chain})", file=sys.stderr)
         return result

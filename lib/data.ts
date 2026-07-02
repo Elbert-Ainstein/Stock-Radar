@@ -209,10 +209,11 @@ export async function loadStocks(): Promise<Stock[]> {
     .limit(1000);
 
   const thesesMap: Record<string, ThesisRun> = {};
-  for (const t of thesesRows || []) {
+  // Dynamic select string -> supabase-js can't infer the row shape; cast once.
+  for (const t of (thesesRows || []) as unknown as ThesisRun[]) {
     if (!thesesMap[t.ticker]) {
       // First (most recent) row per ticker, since query is ordered DESC
-      thesesMap[t.ticker] = t as ThesisRun;
+      thesesMap[t.ticker] = t;
     }
   }
 
@@ -420,8 +421,9 @@ export async function loadStocksForModel(): Promise<any[]> {
     .order("run_at", { ascending: false })
     .limit(1000);
   const thesesMapM: Record<string, ThesisRun> = {};
-  for (const t of thesesRowsM || []) {
-    if (!thesesMapM[t.ticker]) thesesMapM[t.ticker] = t as ThesisRun;
+  // Dynamic select string -> supabase-js can't infer the row shape; cast once.
+  for (const t of (thesesRowsM || []) as unknown as ThesisRun[]) {
+    if (!thesesMapM[t.ticker]) thesesMapM[t.ticker] = t;
   }
 
 

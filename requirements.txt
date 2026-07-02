@@ -11,6 +11,20 @@ pandas>=2.0
 # Environment + secrets
 python-dotenv>=1.0.0
 
+# LLM (thesis/socratic/judgment money path — run_thesis.py, run_socratic.py,
+# generate_model.py, kill_condition_eval.py). Missing until 2026-07-02: CI
+# thesis stages silently no-op'd and fresh clones crashed on import.
+anthropic>=0.40.0
+
+# YAML frontmatter (run_thesis.py, run_socratic.py prompt files)
+PyYAML>=6.0
+
+# HTTP (EODHD/AlphaVantage providers, EDGAR XBRL, Perplexity scouts)
+requests>=2.31.0
+
+# Test suite (pre-commit hook + CI)
+pytest>=8.0
+
 # Supabase client (scouts + analyst persistence)
 supabase>=2.0.0
 

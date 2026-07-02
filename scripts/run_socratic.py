@@ -35,7 +35,7 @@ import yaml
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from utils import load_env
+from utils import load_env, create_message
 load_env()
 
 for _stream in (sys.stdout, sys.stderr):
@@ -54,10 +54,21 @@ SOCRATIC_DIR = REPO_ROOT / "data" / "socratic"
 OPERATOR_NOTES_DIR = REPO_ROOT / "data" / "operator_notes"
 VALIDATED_CORRECTIONS_PATH = REPO_ROOT / "data" / "validated_corrections.md"  # 2026-05-26 cross-ticker fact layer
 
-SOCRATIC_MODEL = "claude-sonnet-4-6"
+# Judgment layer runs on the most capable model (best results, price no object).
+# A/B/C share this one model so the debate is fair (no capability bias).
+# Resolved 2026-06-03 against the live API: claude-opus-4-8 exists on this key.
+SOCRATIC_MODEL = "claude-opus-4-8"
+# Same-provider fallback if the primary errors/404s — keeps Claude as the reasoner
+# (a cross-provider swap mid-debate would corrupt the sealed verdict). The model
+# that ACTUALLY ran is recorded per call and flows into the seal.
+SOCRATIC_FALLBACK_MODEL = "claude-opus-4-6"
 MAX_TOOL_ITER_PER_MODEL = 5
 DEFAULT_MAX_TOKENS = 1500
 DEFAULT_TEMPERATURE = 0.3
+# Self-consistency (P1): when SELF_CONSISTENCY_N>1 each model is sampled N times.
+# Cap concurrent round-1 calls so a high N can't stampede the opus-4-8 rate limit;
+# 3N tasks drain in waves of at most this many.
+SELF_CONSISTENCY_MAX_WORKERS = 6
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -170,6 +181,7 @@ def call_sonnet(
     max_iter: int = MAX_TOOL_ITER_PER_MODEL,
     allowed_domains: Optional[list[str]] = None,
     label: str = "",
+    fallback_model: str = SOCRATIC_FALLBACK_MODEL,
 ) -> dict:
     try:
         import anthropic
@@ -198,18 +210,33 @@ def call_sonnet(
     output_tokens_total = 0
     web_search_count = 0
     stop_reason = ""
+    model_used = model  # the model that ACTUALLY produced the output (may fall back)
 
     for iteration in range(max_iter):
         print(f"  [{label}] API call {iteration + 1}/{max_iter}...", file=sys.stderr, flush=True)
         kwargs: dict[str, Any] = {
-            "model": model,
+            "model": model_used,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "messages": messages,
         }
         if tools:
             kwargs["tools"] = tools
-        resp = client.messages.create(**kwargs)
+        try:
+            resp = create_message(client, **kwargs)
+        except Exception as e:
+            # Same-provider fallback: if the primary model errors (404 bad model,
+            # transient API error), retry ONCE on the fallback Claude model. We do
+            # NOT swap providers here — a GPT verdict sealed as if Claude made it
+            # would corrupt calibration. The fallback is loud and recorded.
+            if model_used != fallback_model and fallback_model:
+                print(f"  [{label}] WARN: '{model_used}' failed ({type(e).__name__}); "
+                      f"falling back to '{fallback_model}'.", file=sys.stderr, flush=True)
+                model_used = fallback_model
+                kwargs["model"] = fallback_model
+                resp = client.messages.create(**kwargs)
+            else:
+                raise
 
         input_tokens_total += resp.usage.input_tokens
         output_tokens_total += resp.usage.output_tokens
@@ -248,6 +275,7 @@ def call_sonnet(
         "output_tokens": output_tokens_total,
         "web_search_count": web_search_count,
         "stop_reason": stop_reason,
+        "model_used": model_used,
     }
 
 
@@ -616,17 +644,39 @@ def fetch_validated_corrections() -> str:
 # Context: build the placeholder dict each model gets
 # ────────────────────────────────────────────────────────────────────
 
-def build_context(ticker: str, *, override_suspect_recent: bool = False) -> dict:
+def build_context(ticker: str, *, override_suspect_recent: bool = False,
+                  include_chain: bool = True, spot_override: Optional[float] = None) -> dict:
     """Gather price, sector, market cap, company name for the three model prompts.
 
     override_suspect_recent: passed through to fetch_financials to bypass Module 1's
     recent-quarter sanity check. Use ONLY when operator has cross-checked against the
     10-Q. See main() --override-suspect-recent flag for full caveat.
+
+    spot_override: pin the spot price (skip the live fetch). Used by the stability
+    harness (`stability_check.py --price`) to freeze price across conditions/runs so
+    a verdict-variance A/B isn't confounded by intraday drift. NOT for production
+    judgment runs — those must use the real live price for an honest sealed ref.
     """
     from finance_data import fetch_financials
 
     fin = fetch_financials(ticker, override_suspect_recent=override_suspect_recent)
     spot = fin.price or 0.0
+    if spot_override is not None and spot_override > 0:
+        spot = float(spot_override)
+        print(f"  [price] pinned ${spot:.2f} (--price override; live fetch skipped)", flush=True)
+    else:
+        # Prefer a live quote — fin.price (EOD provider) lags ~1 day, which also poisons
+        # the sealed ref_price the grader later compares against.
+        try:
+            from finance_data import fetch_live_price
+            _live = fetch_live_price(ticker)
+            if _live and _live > 0:
+                if spot and abs(_live - spot) / spot > 0.01:
+                    print(f"  [price] live ${_live:.2f} vs EOD ${spot:.2f} "
+                          f"({(_live/spot - 1) * 100:+.1f}%) — using live", flush=True)
+                spot = _live
+        except Exception:
+            pass
     sector = getattr(fin, "sector", "") or ""
     meta = get_ir_metadata(ticker)
 
@@ -654,6 +704,29 @@ def build_context(ticker: str, *, override_suspect_recent: bool = False) -> dict
     macro_row = fetch_current_macro()
     wave_row = fetch_wave_context_for_ticker(ticker)
     macro_context = format_macro_context(macro_row)
+    # VIX — the macro layer's first LIVE signal. Append a [VIX] line so judgments
+    # are volatility-aware (a spike = risk-off, discipline high-beta sizing).
+    # Best-effort: a fetch failure must not break the run.
+    try:
+        from vix import fetch_vix, vix_context_line
+        _vix = fetch_vix()
+        if _vix:
+            macro_context = f"{macro_context}\n\n{vix_context_line(_vix)}"
+            print(f"  {vix_context_line(_vix)}", flush=True)
+    except Exception as e:
+        print(f"  [vix] skipped — {e}", file=sys.stderr, flush=True)
+    # [CHAIN] — cross-node supply-chain view from the analyst panel. Load-only and
+    # cheap (a file read of the panel's last run); the panel itself runs on its own
+    # cadence. Gives the per-stock judgment the chain context no single-stock run sees.
+    if include_chain:
+        try:
+            from analyst_panel import load_chain_context
+            _chain = load_chain_context()
+            if _chain:
+                macro_context = f"{macro_context}\n\n{_chain}"
+                print("  [chain] loaded supply-chain context into macro block", flush=True)
+        except Exception as e:
+            print(f"  [chain] skipped — {e}", file=sys.stderr, flush=True)
     wave_context = format_wave_context(wave_row, ticker=ticker)
 
     # 2026-05-24: per-ticker operator notes (Hume's subjective view). Read from
@@ -732,26 +805,78 @@ def run_one_model(role: str, ctx: dict, allowed_domains: list[str]) -> dict:
         "output_tokens": result["output_tokens"],
         "web_search_count": result["web_search_count"],
         "prompt_version": front.get("version", "v1"),
+        "model_used": result.get("model_used"),
     }
 
 
 def run_round_1_parallel(ctx: dict, allowed_domains: list[str]) -> dict[str, dict]:
-    """Fire the three Round-1 calls in parallel. Fail fast if any returns no JSON."""
-    ticker = ctx["ticker"]
-    print(f"  [round_1] firing 3 parallel Sonnet calls for {ticker}...", flush=True)
-    results: dict[str, dict] = {}
-    with cf.ThreadPoolExecutor(max_workers=3) as pool:
-        futures = {pool.submit(run_one_model, role, ctx, allowed_domains): role for role in ("a", "b", "c")}
-        for fut in cf.as_completed(futures):
-            role = futures[fut]
-            try:
-                results[role] = fut.result()
-            except Exception as e:
-                raise RuntimeError(f"model_{role} failed: {e}") from e
+    """Fire the three Round-1 calls in parallel. Fail fast if any returns no JSON.
 
-    for role, r in results.items():
-        if r["parsed"] is None:
-            raise RuntimeError(f"model_{role} returned unparseable output; aborting Socratic run")
+    Self-consistency (P1, env-gated): with SELF_CONSISTENCY_N>1 each model is
+    sampled N times and the per-model CONSENSUS is sealed (mode-of-N), damping
+    opus-4-8 sampling noise — see consensus.py. N=1 (default) is the unchanged
+    single-sample path below; behavior and cost are identical to pre-P1.
+    """
+    from consensus import self_consistency_n, aggregate_samples
+
+    ticker = ctx["ticker"]
+    n = self_consistency_n()
+    roles = ("a", "b", "c")
+
+    if n <= 1:
+        print(f"  [round_1] firing 3 parallel Sonnet calls for {ticker}...", flush=True)
+        results: dict[str, dict] = {}
+        with cf.ThreadPoolExecutor(max_workers=3) as pool:
+            futures = {pool.submit(run_one_model, role, ctx, allowed_domains): role for role in roles}
+            for fut in cf.as_completed(futures):
+                role = futures[fut]
+                try:
+                    results[role] = fut.result()
+                except Exception as e:
+                    raise RuntimeError(f"model_{role} failed: {e}") from e
+
+        for role, r in results.items():
+            if r["parsed"] is None:
+                raise RuntimeError(f"model_{role} returned unparseable output; aborting Socratic run")
+
+        return results
+
+    # ── self-consistency: sample each model N times, seal the consensus ──
+    print(f"  [round_1] self-consistency N={n}: firing {len(roles) * n} parallel "
+          f"Sonnet calls for {ticker}...", flush=True)
+    tasks = [(role, i) for role in roles for i in range(n)]
+    samples: dict[str, list[dict]] = {role: [] for role in roles}
+    with cf.ThreadPoolExecutor(max_workers=min(len(tasks), SELF_CONSISTENCY_MAX_WORKERS)) as pool:
+        futures = {pool.submit(run_one_model, role, ctx, allowed_domains): (role, i)
+                   for (role, i) in tasks}
+        for fut in cf.as_completed(futures):
+            role, i = futures[fut]
+            try:
+                samples[role].append(fut.result())
+            except Exception as e:
+                raise RuntimeError(f"model_{role} sample {i + 1}/{n} failed: {e}") from e
+
+    results = {}
+    for role in roles:
+        parsed_list = [r["parsed"] for r in samples[role] if r.get("parsed") is not None]
+        if not parsed_list:
+            raise RuntimeError(f"model_{role} returned no parseable samples; aborting Socratic run")
+        agg = aggregate_samples(parsed_list)
+        # Carry the consensus on a representative raw record — pick a sample whose
+        # verdict matches the modal one so its text stays coherent with the sealed
+        # verdict. Sum tokens/searches so cost accounting reflects all N calls.
+        modal_verdict = agg.get("verdict")
+        rep = next((r for r in samples[role]
+                    if (r.get("parsed") or {}).get("verdict") == modal_verdict), samples[role][0])
+        rec = dict(rep)
+        rec["parsed"] = agg
+        rec["input_tokens"] = sum(r.get("input_tokens", 0) or 0 for r in samples[role])
+        rec["output_tokens"] = sum(r.get("output_tokens", 0) or 0 for r in samples[role])
+        rec["web_search_count"] = sum(r.get("web_search_count", 0) or 0 for r in samples[role])
+        rec["n_samples"] = len(samples[role])
+        results[role] = rec
+        print(f"    [round_1] model_{role}: verdict={modal_verdict} "
+              f"consistency={agg.get('consistency')} (n={len(samples[role])})", flush=True)
 
     return results
 
@@ -792,6 +917,7 @@ def run_corpus_callosum(ctx: dict, round_1: dict[str, dict]) -> dict:
         "input_tokens": result["input_tokens"],
         "output_tokens": result["output_tokens"],
         "prompt_version": front.get("version", "v1"),
+        "model_used": result.get("model_used"),
     }
 
 
@@ -920,6 +1046,7 @@ def run_rough_target_range(
         "input_tokens": result["input_tokens"],
         "output_tokens": result["output_tokens"],
         "prompt_version": front.get("version", "v1"),
+        "model_used": result.get("model_used"),
     }
 
 
@@ -1141,9 +1268,7 @@ def run_socratic(ticker: str, *, trigger_reason: str = "manual", supabase: bool 
     else:
         print("  [supabase] skipped (--no-supabase)", flush=True)
 
-    print(f"=== run_socratic done: {ticker} ===\n", flush=True)
-
-    return {
+    result = {
         "ticker": ticker.upper(),
         "run_at": run_at.isoformat(),
         "socratic_analyses_id": row_id,
@@ -1152,7 +1277,36 @@ def run_socratic(ticker: str, *, trigger_reason: str = "manual", supabase: bool 
         "corpus_callosum": cc["parsed"],
         "research_findings": research_findings,
         "rough_target_range": target["parsed"],
+        # ── Checkpoint-seal inputs (2026-06-01) ──
+        "ref_price": ctx.get("spot_raw", ctx.get("price")),
+        "prompt_versions": {
+            "model_a": round_1["a"].get("prompt_version"),
+            "model_b": round_1["b"].get("prompt_version"),
+            "model_c": round_1["c"].get("prompt_version"),
+            "corpus_callosum": cc.get("prompt_version"),
+        },
+        # The models that ACTUALLY ran (may differ from the prompt frontmatter if
+        # the same-provider fallback fired). The seal uses these — not the intended
+        # model — so a fallback is visible and the cohort key reflects reality.
+        "models_used": {
+            "model_a": round_1["a"].get("model_used"),
+            "model_b": round_1["b"].get("model_used"),
+            "model_c": round_1["c"].get("model_used"),
+            "corpus_callosum": cc.get("model_used"),
+        },
     }
+
+    # Async Checkpoint Feedback (rescoped P0/P1): seal the reasoning fingerprint
+    # + system version into prediction_log. Best-effort — never aborts the run.
+    if supabase:
+        try:
+            from checkpoint_seal import seal_socratic_prediction
+            seal_socratic_prediction(result)
+        except Exception as e:
+            print(f"  [checkpoint_seal] WARN: {e}", file=sys.stderr, flush=True)
+
+    print(f"=== run_socratic done: {ticker} ===\n", flush=True)
+    return result
 
 
 # ────────────────────────────────────────────────────────────────────

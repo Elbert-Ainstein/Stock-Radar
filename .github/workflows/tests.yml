@@ -1,0 +1,23 @@
+# Deterministic test suite on every push/PR (consolidation sprint 3.3).
+# The suite is offline-safe (<1s); only the network-gated engine fixtures are
+# deselected (they require live data providers, unavailable on runners).
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run deterministic suite
+        run: python -m pytest scripts/ -q -k "not skip_floor"

@@ -190,6 +190,9 @@ export interface StockData {
   name: string;
   sector: string;
   thesis: string;
+  // Watchlist one-liner rendered by TargetPriceModel; loadStocksForModel
+  // supplies it (typed 2026-07-02 — was read untyped through an any[] escape).
+  watchlistThesis?: string;
   killCondition: string;
   archetype?: ArchetypeInfo | null;
   target: StockTarget;

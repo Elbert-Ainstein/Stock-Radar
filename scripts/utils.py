@@ -41,6 +41,28 @@ def get_run_id() -> str | None:
     return _current_run_id
 
 
+# Models that reject the `temperature` parameter (e.g. claude-opus-4-8). Learned
+# at runtime so we don't maintain a brittle list.
+_TEMP_UNSUPPORTED: set[str] = set()
+
+
+def create_message(client, **kwargs):
+    """`client.messages.create(**kwargs)` that tolerates models which reject
+    `temperature` (newer Claude models deprecate it). On that specific 400, strip
+    temperature and retry once, remembering the model so later calls skip it."""
+    model = kwargs.get("model")
+    if model in _TEMP_UNSUPPORTED:
+        kwargs.pop("temperature", None)
+    try:
+        return client.messages.create(**kwargs)
+    except Exception as e:
+        if "temperature" in str(e).lower() and "temperature" in kwargs:
+            _TEMP_UNSUPPORTED.add(model)
+            kwargs.pop("temperature", None)
+            return client.messages.create(**kwargs)
+        raise
+
+
 def load_env():
     """Load .env file into os.environ."""
     if ENV_FILE.exists():

@@ -569,6 +569,14 @@ def run():
                 print(f"  Failed scouts: {', '.join(failed)}")
                 for n in failed:
                     print(f"    - {n}: {scout_results[n][2]}")
+            # 2026-07-02 (sprint 3.2): a total scout wipeout must not report
+            # SUCCESS — previously error_msg stayed None here, so pipeline_runs
+            # and the Health panel showed a green run when every scout failed.
+            if scout_results and not succeeded:
+                error_msg = (
+                    f"all {len(failed)} scouts failed: "
+                    + "; ".join(f"{n}: {str(scout_results[n][2])[:80]}" for n in failed)
+                )
 
             # ─── Research Manager: Conflict & Sufficiency Analysis ─────
             if smart_mode and research_plans:
@@ -738,63 +746,22 @@ def run():
                     print(f"  Thesis stage failed: {e}")
                     print("  Continuing without thesis updates...")
 
-            # ─── Prediction Logging ────────────────────────────────────
-            # Log prediction snapshots immediately after model generation.
-            # This data is irreplaceable — every week of delay is a week of
-            # prediction history that cannot be recovered.
-            #
-            # We read the already-computed targets from the analysis results
-            # (written to Supabase by the analyst) instead of re-running the
-            # engine for each stock. This avoids 12+ redundant EODHD API calls
-            # and engine computations.
-            try:
-                from prediction_logger import log_predictions_batch
-                from utils import get_watchlist as _get_wl_pred
-
-                wl_pred = _get_wl_pred()
-                predictions = []
-                for s in wl_pred:
-                    t = s["ticker"]
-                    try:
-                        # Read targets from the analysis result the analyst just saved
-                        analysis_entry = None
-                        if result:
-                            analysis_entry = next(
-                                (a for a in result if a.get("ticker") == t), None
-                            )
-                        if not analysis_entry:
-                            continue
-
-                        archetype_obj = s.get("archetype") or {}
-                        arch_primary = archetype_obj.get("primary") if isinstance(archetype_obj, dict) else None
-                        target_price = analysis_entry.get("target_price") or 0
-                        current_price = analysis_entry.get("current_price") or s.get("price") or 0
-
-                        predictions.append({
-                            "ticker": t,
-                            "current_price": current_price,
-                            "target_base": target_price,
-                            "target_low": target_price * 0.7,   # approximate from analyst
-                            "target_high": target_price * 1.3,
-                            "valuation_method": analysis_entry.get("valuation_method", "ev_ebitda"),
-                            "archetype": arch_primary or "",
-                            "routing_score": 0.0,
-                            "projection_score": 0.0,
-                            "event_weight": 0.0,
-                            "final_target": target_price,
-                            "sigmoid_params": {},
-                            "context_inputs": {},
-                            "scenario_probabilities": {"bear": 0.2, "base": 0.6, "bull": 0.2},
-                        })
-                    except Exception as pe:
-                        print(f"  [prediction] Could not snapshot {t}: {pe}")
-
-                if predictions:
-                    log_predictions_batch(predictions)
-                    print(f"\n  [prediction] Logged {len(predictions)} prediction snapshots")
-            except Exception as pred_err:
-                print(f"  [prediction] Logging failed (non-fatal): {pred_err}")
-                print("  Continuing without prediction snapshots...")
+            # ─── Prediction Logging (engine path) — DISABLED 2026-07-02 ────
+            # The snapshot read analysis_entry["target_price"] and
+            # ["current_price"], keys analyst.py never emits (real values live
+            # at event_impacts.final_target / price_data.price), so every row
+            # it logged was all-zeros with a fabricated ±30% band and hardcoded
+            # 0.2/0.6/0.2 probabilities — junk that contaminated the append-only
+            # calibration record (docs/reports/CODEBASE_ASSESSMENT_2026-07-02.md
+            # §4.3). Deliberately DISABLED rather than wired to the legacy blend:
+            # the blend's fate is an open decision (consolidation sprint 4.2).
+            # Socratic seals (checkpoint_seal.seal_socratic_prediction) are the
+            # calibration record and are unaffected.
+            print(
+                "\n  [prediction] Engine-path snapshot DISABLED (2026-07-02): it logged "
+                "all-zero rows via keys the analyst never emits; see CHANGELOG. "
+                "Socratic seals unaffected."
+            )
 
         # End of rebuild phase (scouts_only skips to here)
 
@@ -849,7 +816,10 @@ def run():
                 _spawn_auto_thesis(t)
 
     _clear_progress()
+    # 2026-07-02 (sprint 3.2): propagate the outcome — the old bare fall-through
+    # exited 0 on failure, keeping GitHub Actions green no matter what.
+    return success
 
 
 if __name__ == "__main__":
-    run()
+    sys.exit(0 if run() else 1)

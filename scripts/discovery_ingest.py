@@ -492,36 +492,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-    print()
-
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-    # Summary
-    print("\n" + "-" * 60)
-    print("  SUMMARY")
-    print("-" * 60)
-    print(f"  {'market':<8} {'fetched':>8} {'deduped':>8} {'fx_fail':>8} {'inserted':>9}")
-    print(f"  {'-'*8} {'-'*8} {'-'*8} {'-'*8} {'-'*9}")
-    total_inserted = 0
-    total_fx_fail = 0
-    for m in markets:
-        s = summary[m]
-        print(f"  {m:<8} {s['fetched']:>8} {s['deduped']:>8} {s['fx_failures']:>8} {s['inserted']:>9}")
-        total_inserted += s["inserted"]
-        total_fx_fail += s["fx_failures"]
-    print("-" * 60)
-    print(f"  total to insert: {total_inserted}  fx_failures: {total_fx_fail}")
-    if total_inserted and total_fx_fail:
-        print("  WARNING: FX failures occurred. Review log for affected tickers.")
-    print()
-
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-xit(main())

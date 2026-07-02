@@ -1616,11 +1616,17 @@ def _scenario_price(
         else:
             terminal_ev = (ev_from_ebitda + ev_from_fcf) / 2
 
-    # Discount back from valuation year to target horizon.
-    # For archetype-extended horizons, discount_years is calculated relative to
-    # the archetype's valuation_year (not the global VALUATION_YEAR).
-    actual_discount_years = max(0, val_year - (val_year - discount_years))  # preserve original semantics
-    discount = (1 + d["discount_rate"]) ** discount_years
+    # Discount back from the archetype's valuation year to the target horizon.
+    # `discount_years` arrives Y3-based from _discount_years_for_horizon
+    # (12mo→2, 24mo→1, 36mo→0), so first recover the horizon in years, then
+    # re-anchor the discount on the archetype's val_year.
+    # 2026-07-02 fix: the old code discounted a Y4/Y5 terminal by only the
+    # Y3-based discount_years (the previous line here was an algebraic
+    # tautology), letting 1-2 years of growth accrue undiscounted for
+    # transformational/compounder/cyclical archetypes (~+19.5% on a stub).
+    years_to_target = VALUATION_YEAR - discount_years
+    actual_discount_years = max(0, val_year - years_to_target)
+    discount = (1 + d["discount_rate"]) ** actual_discount_years
     pv_ev = terminal_ev / discount
     pv_ev_ebitda = ev_from_ebitda / discount
     pv_ev_fcf = ev_from_fcf / discount
@@ -1630,9 +1636,10 @@ def _scenario_price(
     equity_ebitda_only = pv_ev_ebitda - net_debt
     equity_fcf_only = pv_ev_fcf - net_debt
 
-    # Share count at target year after dilution (consistent with target horizon)
+    # Share count at the target date: dilution accrues from today to the
+    # horizon (years_to_target), independent of the archetype's terminal year.
     shares_0 = fin.shares_diluted or 0.0
-    shares_t = shares_0 * (1 + d["share_change_pct"]) ** (val_year - discount_years)
+    shares_t = shares_0 * (1 + d["share_change_pct"]) ** years_to_target
 
     price = max(0.0, equity / shares_t) if shares_t > 0 else 0.0
     price_ebitda = max(0.0, equity_ebitda_only / shares_t) if shares_t > 0 else 0.0
@@ -2098,8 +2105,12 @@ def _scenario_price_revenue_multiple(
     pv_ev_ebitda = ev_from_ebitda / discount
     pv_ev_fcf = ev_from_fcf / discount
 
-    net_debt = fin.net_debt or 0.0
-    equity = pv_ev - net_debt
+    # P/S is an EQUITY multiple (terminal_ps is anchored to market_cap/ttm_rev
+    # and P/S sector benchmarks), so Rev × P/S is already an equity value.
+    # 2026-07-02 fix: the old `equity = pv_ev - net_debt` double-counted cash
+    # and double-penalized debt by exactly |net_debt|/share (+27% measured on
+    # a $2B-net-cash stub) in the mode used for the hardest-to-value names.
+    equity = pv_ev
 
     shares_0 = fin.shares_diluted or 0.0
     shares_t = shares_0 * (1 + d["share_change_pct"]) ** (VALUATION_YEAR - discount_years)
@@ -2881,14 +2892,8 @@ _ARCHETYPE_OVERRIDES_PATH = _Path_for_overrides(__file__).resolve().parent.paren
 _ARCHETYPE_OVERRIDES_CACHE: dict | None = None
 
 
-def _load_archetype_override(ticker: str) -> str | None:
-    """Load operator-set archetype override from config/ticker_archetype_overrides.json.
-
-    Schema: {TICKER: archetype_string, ...}. Keys starting with underscore (e.g. "_README")
-    are skipped. Returns the override (lowercased) or None.
-
-    The cache is populated on first call and reused — config changes require restart.
-    """
+def _load_overrides() -> dict:
+    """Load + cache config/ticker_archetype_overrides.json (config changes need restart)."""
     global _ARCHETYPE_OVERRIDES_CACHE
     if _ARCHETYPE_OVERRIDES_CACHE is None:
         try:
@@ -2905,8 +2910,43 @@ def _load_archetype_override(ticker: str) -> str | None:
                 file=sys.stderr,
             )
             _ARCHETYPE_OVERRIDES_CACHE = {}
-    val = _ARCHETYPE_OVERRIDES_CACHE.get(ticker.upper())
-    return val.lower() if isinstance(val, str) else None
+    return _ARCHETYPE_OVERRIDES_CACHE
+
+
+def _load_archetype_override(ticker: str) -> str | None:
+    """Operator-set archetype override. A value may be a plain archetype string OR an
+    object {"archetype": ..., "dcf_role": ...}. Returns the archetype (lowercased) or None."""
+    val = _load_overrides().get(ticker.upper())
+    if isinstance(val, str):
+        return val.lower()
+    if isinstance(val, dict):
+        a = val.get("archetype")
+        return a.lower() if isinstance(a, str) else None
+    return None
+
+
+def _load_dcf_role_override(ticker: str) -> str | None:
+    """Optional per-ticker dcf_role from the override config (object form only)."""
+    val = _load_overrides().get(ticker.upper())
+    if isinstance(val, dict):
+        r = val.get("dcf_role")
+        return r.lower() if isinstance(r, str) else None
+    return None
+
+
+# V2 (2026-06-03): per-archetype default dcf_role. Regime-shift / right-tail names
+# use DCF as a downside FLOOR (exit multiples drive the primary target — C1);
+# everything else keeps DCF primary. Operators can override per-ticker via the
+# object form in ticker_archetype_overrides.json.
+_DEFAULT_DCF_ROLE_BY_ARCHETYPE = {
+    "transformational": "downside_floor",
+}
+
+
+def _default_dcf_role_for_archetype(archetype: str | None) -> str:
+    if not archetype:
+        return "primary"
+    return _DEFAULT_DCF_ROLE_BY_ARCHETYPE.get(archetype.lower(), "primary")
 
 
 def build_target(
@@ -2917,7 +2957,7 @@ def build_target(
     horizon_months: int = 12,
     archetype: str | None = None,
     analyst_confidence: float | None = None,
-    dcf_role: str = "primary",
+    dcf_role: str | None = None,
 ) -> TargetResult:
     """Construct a three-scenario price-target range.
 
@@ -2959,6 +2999,18 @@ def build_target(
             archetype = override
             print(
                 f"  [target_engine] {fin.ticker}: archetype override loaded from config: '{archetype}'",
+                file=sys.stderr,
+            )
+
+    # V2 (2026-06-03): route dcf_role by archetype when the caller didn't specify one.
+    # Precedence: explicit arg > per-ticker config override > per-archetype default.
+    # This makes analyst.py (which passes archetype but not dcf_role) auto-route
+    # transformational/regime-shift names through DCF-as-floor — no flag needed.
+    if dcf_role is None:
+        dcf_role = _load_dcf_role_override(fin.ticker) or _default_dcf_role_for_archetype(archetype)
+        if dcf_role != "primary":
+            print(
+                f"  [target_engine] {fin.ticker}: dcf_role='{dcf_role}' routed by archetype='{archetype}'",
                 file=sys.stderr,
             )
 
@@ -3350,18 +3402,13 @@ def build_target(
                 "x",
             ),
             DeductionStep(
-                "Terminal EV",
-                f"Rev Y3 × {terminal_ps_base:.1f}x P/S",
+                "Terminal equity value",
+                f"Rev Y3 × {terminal_ps_base:.1f}x P/S (equity multiple)",
                 f_b(base_s.terminal_ev_blended), "$B",
             ),
             DeductionStep(
-                "PV of terminal EV",
-                f"÷ (1 + {base_drivers['discount_rate']:.1%})^{discount_years}",
-                f_b(base_s.pv_ev_blended), "$B",
-            ),
-            DeductionStep(
-                "Equity value",
-                "PV EV − Net debt",
+                "Equity value (PV)",
+                f"÷ (1 + {base_drivers['discount_rate']:.1%})^{discount_years} — P/S is an equity multiple, no net-debt bridge",
                 f_b(base_s.equity_value), "$B",
             ),
             DeductionStep(
@@ -3380,6 +3427,11 @@ def build_target(
         ]
     else:
         # Standard EV/EBITDA deduction chain
+        # Display the ACTUAL discount exponent (archetype-adjusted, 2026-07-02):
+        # terminal sits at the archetype's val_year, target at years_to_target.
+        _, _chain_val_year, _ = _archetype_params(archetype)
+        _chain_years_to_target = VALUATION_YEAR - discount_years
+        _chain_discount_years = max(0, _chain_val_year - _chain_years_to_target)
         steps: list[DeductionStep] = [
             DeductionStep("TTM revenue", "sum(last 4Q revenue)", f_b(ttm_rev), "$B"),
             DeductionStep(
@@ -3418,7 +3470,7 @@ def build_target(
             ),
             DeductionStep(
                 "PV of terminal EV",
-                f"÷ (1 + {base_drivers['discount_rate']:.1%})^{discount_years}",
+                f"÷ (1 + {base_drivers['discount_rate']:.1%})^{_chain_discount_years}",
                 f_b(base_s.pv_ev_blended), "$B",
             ),
             DeductionStep(

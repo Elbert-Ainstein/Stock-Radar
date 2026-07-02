@@ -1,6 +1,6 @@
 ---
 version: v1
-model: claude-sonnet-4-6
+model: claude-opus-4-8
 max_tokens: 8000
 temperature: 0.2
 purpose: Socratic Mode Phase 4 — resolve one RESEARCH-type disagreement with web search

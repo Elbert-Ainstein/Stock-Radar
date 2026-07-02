@@ -17,7 +17,12 @@
     "(7-year forecast horizon, Y4 exit, bull-tail-tilted scenarios, 3.5% terminal cap when",
     "growth signals > 30%), (c) the thesis prompt just needs to read it.",
     "",
-    "Schema: { TICKER: <archetype_string> }. Tickers not listed get default behavior."
+    "Schema: { TICKER: <archetype_string> }. Tickers not listed get default behavior.",
+    "",
+    "V2 (2026-06-03): a value may ALSO be an object to pin dcf_role explicitly:",
+    "  { TICKER: { \"archetype\": \"transformational\", \"dcf_role\": \"downside_floor\" } }",
+    "By default dcf_role is routed per-archetype (transformational -> downside_floor,",
+    "all others -> primary), so the string form below is sufficient for LITE/AMD."
   ],
   "LITE": "transformational",
   "AMD": "transformational"

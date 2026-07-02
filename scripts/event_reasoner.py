@@ -123,13 +123,22 @@ def _days_since(date_str: str | None) -> float:
     """
     if not date_str:
         return 30.0
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"):
+    # 2026-07-02 fix: the old slice len(fmt.replace('%','')) truncated every
+    # date to garbage ('2026-01-15' -> '2026-'), so strptime failed for ALL
+    # formats and every dated event fell through to 0.0 days = permanent
+    # full weight (no decay ever). Parse ISO forms directly instead.
+    s = str(date_str).strip()
+    for candidate in (s.replace("Z", "+00:00"), s[:19], s[:10]):
         try:
-            d = datetime.strptime(date_str[:len(fmt.replace('%', ''))], fmt)
-            return max(0.0, (datetime.now(timezone.utc) - d.replace(tzinfo=timezone.utc)).total_seconds() / 86400.0)
+            d = datetime.fromisoformat(candidate)
         except (ValueError, TypeError):
             continue
-    return 0.0
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - d).total_seconds() / 86400.0)
+    # Unparseable date == unknown date: same moderate-recency default as
+    # undated (the old 0.0 here meant "brand-new", contradicting the docstring).
+    return 30.0
 
 
 def _recency_weight(days_old: float) -> float:

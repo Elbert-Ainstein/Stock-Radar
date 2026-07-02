@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Stock Radar tracked pre-commit hook (consolidation sprint 3.4).
+#
+# The 2026-06-27 QA pass found the documented hook "was never installed";
+# the local install then didn't travel with clones (.git/hooks is unversioned).
+# This tracked copy + scripts/hooks/install.sh fixes that. CI (tests.yml) is
+# the backstop for clones that skip installation.
+#
+# Runs the deterministic suite (offline, <1s) when Python files are staged.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+if git diff --cached --name-only | grep -qE '\.py$'; then
+    echo "[pre-commit] Python files staged — running deterministic test suite..."
+    if ! python -m pytest scripts/ -q -k "not skip_floor"; then
+        echo "[pre-commit] Tests failed — commit blocked. (Bypass ONLY with git commit --no-verify and a reason.)"
+        exit 1
+    fi
+fi

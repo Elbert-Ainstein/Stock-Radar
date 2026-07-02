@@ -1,0 +1,227 @@
+<svg viewBox="0 0 1800 1480" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- background -->
+  <rect x="0" y="0" width="1800" height="1480" fill="#f6f4f0"/>
+
+  <!-- title -->
+  <text x="60" y="50" font-size="30" font-weight="700" fill="#1f2933">Stock Radar — System Mind Map</text>
+  <text x="60" y="78" font-size="15" fill="#6b7280">Full architecture as of 2026-06-01 · scouts → analyst → engine + reasoning + macro → dashboard → feedback loop</text>
+
+  <!-- legend -->
+  <text x="1240" y="44" font-size="13" fill="#16a34a" font-weight="700">● live</text>
+  <text x="1320" y="44" font-size="13" fill="#ca8a04" font-weight="700">◐ partial</text>
+  <text x="1420" y="44" font-size="13" fill="#b45309" font-weight="700">○ to build</text>
+
+  <!-- ===================== CONNECTORS (drawn first, under boxes) ===================== -->
+  <g fill="none" stroke-width="2.5" opacity="0.55">
+    <!-- left branches from hub left edge (740,560) -->
+    <path d="M740,560 C620,560 540,170 400,170" stroke="#2563eb"/>
+    <path d="M740,560 C620,560 540,360 400,360" stroke="#16a34a"/>
+    <path d="M740,560 C640,560 560,520 400,520" stroke="#0d9488"/>
+    <path d="M740,560 C620,560 540,690 400,690" stroke="#0891b2"/>
+    <path d="M740,560 C620,560 540,860 400,860" stroke="#db2777"/>
+    <!-- right branches from hub right edge (1060,560) -->
+    <path d="M1060,560 C1180,560 1260,170 1400,170" stroke="#7c3aed"/>
+    <path d="M1060,560 C1180,560 1260,360 1400,360" stroke="#ea580c"/>
+    <path d="M1060,560 C1160,560 1240,540 1400,540" stroke="#ca8a04"/>
+    <path d="M1060,560 C1180,560 1260,710 1400,710" stroke="#4f46e5"/>
+    <path d="M1060,560 C1180,560 1260,880 1400,880" stroke="#57534e"/>
+    <!-- hub to backlog -->
+    <path d="M900,640 C900,800 900,880 900,1010" stroke="#b45309" stroke-dasharray="7 5"/>
+  </g>
+
+  <!-- ===================== HUB ===================== -->
+  <g>
+    <rect x="740" y="480" width="320" height="160" rx="16" fill="#111827" filter="url(#sh)"/>
+    <text x="900" y="540" text-anchor="middle" font-size="28" font-weight="700" fill="#ffffff">STOCK RADAR</text>
+    <text x="900" y="572" text-anchor="middle" font-size="14" fill="#cbd5e1">AI agent research platform</text>
+    <text x="900" y="596" text-anchor="middle" font-size="13" fill="#94a3b8">Next.js 16 · Python · Supabase</text>
+    <text x="900" y="618" text-anchor="middle" font-size="13" fill="#94a3b8">Watchlist: LITE PLTR RKLB ACHR CELH SNDK</text>
+  </g>
+
+  <!-- ===================== LEFT BRANCHES ===================== -->
+  <!-- L1 External APIs -->
+  <g>
+    <rect x="60" y="100" width="340" height="140" rx="12" fill="#ffffff" stroke="#2563eb" stroke-width="1.5" filter="url(#sh)"/>
+    <rect x="60" y="100" width="6" height="140" rx="3" fill="#2563eb"/>
+    <text x="84" y="128" font-size="17" font-weight="700" fill="#2563eb">External APIs / Inputs</text>
+    <text x="84" y="154" font-size="13" fill="#374151">Claude — analysis, models, Socratic</text>
+    <text x="84" y="174" font-size="13" fill="#374151">Perplexity Sonar — forward research</text>
+    <text x="84" y="194" font-size="13" fill="#374151">Gemini — YouTube transcripts</text>
+    <text x="84" y="214" font-size="13" fill="#374151">EODHD / AlphaVantage / yfinance</text>
+    <text x="84" y="232" font-size="13" fill="#374151">SEC EDGAR XBRL · Supabase</text>
+  </g>
+
+  <!-- L2 Scout Layer -->
+  <g>
+    <rect x="60" y="290" width="340" height="140" rx="12" fill="#ffffff" stroke="#16a34a" stroke-width="1.5" filter="url(#sh)"/>
+    <rect x="60" y="290" width="6" height="140" rx="3" fill="#16a34a"/>
+    <text x="84" y="318" font-size="17" font-weight="700" fill="#16a34a">Scout Layer ×10</text>
+    <text x="84" y="344" font-size="13" fill="#374151">quant · news · catalyst · moat</text>
+    <text x="84" y="364" font-size="13" fill="#374151">social · insider · filings</text>
+    <text x="84" y="384" font-size="13" fill="#374151">fundamentals · youtube · discovery</text>
+    <text x="84" y="410" font-size="12" fill="#6b7280">independent signal gatherers → Supabase</text>
+  </g>
+
+  <!-- L3 Analyst / Scoring -->
+  <g>
+    <rect x="60" y="460" width="340" height="120" rx="12" fill="#ffffff" stroke="#0d9488" stroke-width="1.5" filter="url(#sh)"/>
+    <rect x="60" y="460" width="6" height="120" rx="3" fill="#0d9488"/>
+    <text x="84" y="488" font-size="17" font-weight="700" fill="#0d9488">Analyst / Scoring</text>
+    <text x="84" y="514" font-size="13" fill="#374151">analyst.py — composite scoring</text>
+    <text x="84" y="534" font-size="13" fill="#374151">adaptive_scoring · confidence</text>
+    <text x="84" y="554" font-size="13" fill="#374151">research_memo</text>
+  </g>
+
+  <!-- L4 Discovery / Universe -->
+  <g>
+    <rect x="60" y="620" width="340" height="140" rx="12" fill="#ffffff" stroke="#0891b2" stroke-width="1.5" filter="url(#sh)"/>
+    <rect x="60" y="620" width="6" height="140" rx="3" fill="#0891b2"/>
+    <text x="84" y="648" font-size="17" font-weight="700" fill="#0891b2">Discovery / Universe</text>
+    <text x="84" y="674" font-size="13" fill="#374151">discovery_scan (3-stage funnel)</text>
+    <text x="84" y="694" font-size="13" fill="#374151">ingest · 13F · bootstrap · calibrate</text>
+    <text x="84" y="714" font-size="13" fill="#374151">convergence_detector</text>
+    <text x="84" y="740" font-size="12" fill="#6b7280">feeds candidates into watchlist</text>
+  </g>
+
+  <!-- L5 Calibration / Feedback -->
+  <g>
+    <rect x="60" y="790" width="340" height="140" rx="12" fill="#ffffff" stroke="#db2777" stroke-width="1.5" filter="url(#sh)"/>
+    <rect x="60" y="790" width="6" height="140" rx="3" fill="#db2777"/>
+    <text x="84" y="818" font-size="17" font-weight="700" fill="#db2777">Calibration / Feedback ◐</text>
+    <text x="84" y="844" font-size="13" fill="#374151">feedback_loop · calibration</text>
+    <text x="84" y="864" font-size="13" fill="#374151">drift_monitor · backtest (CPCV)</text>
+    <text x="84" y="884" font-size="13" fill="#374151">prediction_logger · outcome tracker</text>
+    <text x="84" y="910" font-size="12" fill="#b45309">prior-only until N≥10/20 outcomes (AXON T+30)</text>
+  </g>
+
+  <!-- ===================== RIGHT BRANCHES ===================== -->
+  <!-- R1 Target Engine -->
+  <g>
+    <rect x="1400" y="90" width="340" height="160" rx="12" fill="#ffffff" stroke="#7c3aed" stroke-width="1.5" filter="url(#sh)"/>
+    <rect x="1734" y="90" width="6" height="160" rx="3" fill="#7c3aed"/>
+    <text x="1424" y="118" font-size="17" font-weight="700" fill="#7c3aed">Target Engine / DCF ●</text>
+    <text x="1424" y="144" font-size="13" fill="#374151">target_engine · target_blend</text>
+    <text x="1424" y="164" font-size="13" fill="#374151">event_reasoner · forward_drivers</text>
+    <text x="1424" y="184" font-size="13" fill="#374151">generate_model · verify_model</text>
+    <text x="1424" y="208" font-size="12" fill="#6b7280">methods: PE · PS · Cyclical(EV/EBIT)</text>
+    <text x="1424" y="228" font-size="12" fill="#6b7280">5 archetypes · DCF = floor for regime-shift</text>
+  </g>
+
+  <!-- R2 Reasoning / Judgment -->
+  <g>
+    <rect x="1400" y="280" width="340" height="160" rx="12" fill="#ffffff" stroke="#ea580c" stroke-width="1.5" filter="url(#sh)"/>
+    <rect x="1734" y="280" width="6" height="160" rx="3" fill="#ea580c"/>
+    <text x="1424" y="308" font-size="17" font-weight="700" fill="#ea580c">Reasoning / Judgment ●</text>
+    <text x="1424" y="334" font-size="13" fill="#374151">Socratic Models A/B/C</text>
+    <text x="1424" y="354" font-size="13" fill="#374151">+ corpus callosum reconciler</text>
+    <text x="1424" y="374" font-size="13" fill="#374151">run_thesis · kill_condition_eval</text>
+    <text x="1424" y="394" font-size="13" fill="#374151">self_consistency · convergence</text>
+    <text x="1424" y="420" font-size="12" fill="#6b7280">anti-sycophancy + future-pricing rules</text>
+  </g>
+
+  <!-- R3 Macro + Wave Health -->
+  <g>
+    <rect x="1400" y="470" width="340" height="140" rx="12" fill="#ffffff" stroke="#ca8a04" stroke-width="1.5" filter="url(#sh)"/>
+    <rect x="1734" y="470" width="6" height="140" rx="3" fill="#ca8a04"/>
+    <text x="1424" y="498" font-size="17" font-weight="700" fill="#ca8a04">Macro + Wave Health ◐</text>
+    <text x="1424" y="524" font-size="13" fill="#374151">regime_detection · macro_environment</text>
+    <text x="1424" y="544" font-size="13" fill="#374151">wave overlay → [MACRO]/[WAVE] blocks</text>
+    <text x="1424" y="564" font-size="13" fill="#374151">feeds Socratic A/B/C context</text>
+    <text x="1424" y="590" font-size="12" fill="#b45309">○ run_macro.py cron not built (1 seeded row)</text>
+  </g>
+
+  <!-- R4 Frontend -->
+  <g>
+    <rect x="1400" y="640" width="340" height="150" rx="12" fill="#ffffff" stroke="#4f46e5" stroke-width="1.5" filter="url(#sh)"/>
+    <rect x="1734" y="640" width="6" height="150" rx="3" fill="#4f46e5"/>
+    <text x="1424" y="668" font-size="17" font-weight="700" fill="#4f46e5">Frontend (Next.js) ●</text>
+    <text x="1424" y="694" font-size="13" fill="#374151">dashboard · model builder · discovery</text>
+    <text x="1424" y="714" font-size="13" fill="#374151">ask · stock/[ticker] · logs</text>
+    <text x="1424" y="734" font-size="13" fill="#374151">17 API routes · health panel</text>
+    <text x="1424" y="760" font-size="12" fill="#6b7280">React 19 · Tailwind · Three.js globe</text>
+    <text x="1424" y="780" font-size="12" fill="#b45309">○ migration to v2 wireframe pending</text>
+  </g>
+
+  <!-- R5 Data / Storage -->
+  <g>
+    <rect x="1400" y="820" width="340" height="130" rx="12" fill="#ffffff" stroke="#57534e" stroke-width="1.5" filter="url(#sh)"/>
+    <rect x="1734" y="820" width="6" height="130" rx="3" fill="#57534e"/>
+    <text x="1424" y="848" font-size="17" font-weight="700" fill="#57534e">Data / Storage</text>
+    <text x="1424" y="874" font-size="13" fill="#374151">Supabase: stocks · signals · theses</text>
+    <text x="1424" y="894" font-size="13" fill="#374151">socratic · bets · revolutions · waves</text>
+    <text x="1424" y="914" font-size="13" fill="#374151">data/ artifacts · config/ (watchlist:6)</text>
+    <text x="1424" y="938" font-size="12" fill="#b45309">⚠ schema drift — columns added manually</text>
+  </g>
+
+  <!-- ===================== BACKLOG PANEL ===================== -->
+  <g>
+    <rect x="60" y="1010" width="1680" height="430" rx="14" fill="#fffaf2" stroke="#b45309" stroke-width="2" stroke-dasharray="9 6" filter="url(#sh)"/>
+    <text x="84" y="1048" font-size="20" font-weight="700" fill="#b45309">ROADMAP — What Is To Be Built</text>
+    <text x="560" y="1048" font-size="13" fill="#6b7280">authoritative: data/todo_master_2026_05_26.md · Tier 1 (DCF reposition) CLOSED 2026-05-26</text>
+
+    <!-- col 1: Tier 2 -->
+    <rect x="84" y="1070" width="390" height="340" rx="10" fill="#ffffff" stroke="#e5e0d8"/>
+    <text x="104" y="1098" font-size="15" font-weight="700" fill="#7c3aed">Tier 2 — build next (unblocked)</text>
+    <text x="104" y="1126" font-size="13" fill="#374151">V2 · config-routed dcf_role per archetype</text>
+    <text x="104" y="1150" font-size="13" fill="#374151">D1 · kill-rule contextual routing</text>
+    <text x="104" y="1174" font-size="13" fill="#374151">D-v2 · archetype auto-promote audit</text>
+    <text x="104" y="1198" font-size="13" fill="#374151">D2 · Module 1 EDGAR guardrail rewrite</text>
+    <text x="104" y="1222" font-size="13" fill="#374151">D3 · routing by timing × held status</text>
+    <text x="104" y="1246" font-size="13" fill="#374151">D4 · §10b tactical signals layer</text>
+    <text x="104" y="1270" font-size="13" fill="#374151">D5 · §7c expectations decomposition</text>
+    <text x="104" y="1306" font-size="14" font-weight="700" fill="#0891b2">Tier 3 — investigate first</text>
+    <text x="104" y="1332" font-size="13" fill="#374151">E1 · non-US discovery archetype bypass</text>
+    <text x="104" y="1356" font-size="13" fill="#374151">E2 · signal-store census</text>
+    <text x="104" y="1380" font-size="13" fill="#374151">E3 · insider-selling deviation framing</text>
+
+    <!-- col 2: Deferred F1-F9 -->
+    <rect x="500" y="1070" width="390" height="340" rx="10" fill="#ffffff" stroke="#e5e0d8"/>
+    <text x="520" y="1098" font-size="15" font-weight="700" fill="#ca8a04">Deferred — awaiting trigger</text>
+    <text x="520" y="1126" font-size="13" fill="#374151">F1 · Model D (optionality / TAM frame)</text>
+    <text x="520" y="1150" font-size="13" fill="#374151">F2 · lateral-trace discovery</text>
+    <text x="520" y="1174" font-size="13" fill="#374151">F3 · revolution impact spectrum</text>
+    <text x="520" y="1198" font-size="13" fill="#374151">F4 · 灵感 / Spark conversation mode</text>
+    <text x="520" y="1222" font-size="13" fill="#374151">F5 · 影响图谱 impact-graph frontend</text>
+    <text x="520" y="1246" font-size="13" fill="#374151">F6 · position sizing by signal maturity</text>
+    <text x="520" y="1270" font-size="13" fill="#374151">F7 · timing categorization schema</text>
+    <text x="520" y="1294" font-size="13" fill="#374151">F8 · COHR threat notification on LITE</text>
+    <text x="520" y="1318" font-size="13" fill="#374151">F9 · adversarial filter prepass v3</text>
+    <text x="520" y="1352" font-size="12" fill="#6b7280">triggers: AXON T+30 (~06-08), ≥20</text>
+    <text x="520" y="1372" font-size="12" fill="#6b7280">closed outcomes, calibration complete</text>
+
+    <!-- col 3: Frontend + Infra -->
+    <rect x="916" y="1070" width="390" height="340" rx="10" fill="#ffffff" stroke="#e5e0d8"/>
+    <text x="936" y="1098" font-size="15" font-weight="700" fill="#4f46e5">Frontend</text>
+    <text x="936" y="1124" font-size="13" fill="#374151">v2 production wireframe migration (9 ph.)</text>
+    <text x="936" y="1148" font-size="13" fill="#374151">Phase 7: macro tab · tech-revolution graph</text>
+    <text x="936" y="1172" font-size="13" fill="#374151">judgment-card Option C · Spark mode</text>
+    <text x="936" y="1196" font-size="13" fill="#374151">model sandbox P2/P3 (Excel grid, AI scenarios)</text>
+    <text x="936" y="1220" font-size="13" fill="#374151">whatif-engine.ts fidelity gap</text>
+    <text x="936" y="1256" font-size="15" font-weight="700" fill="#57534e">Infrastructure</text>
+    <text x="936" y="1282" font-size="13" fill="#374151">run_macro.py daily orchestrator</text>
+    <text x="936" y="1306" font-size="13" fill="#374151">lockfile → Supabase (cross-env)</text>
+    <text x="936" y="1330" font-size="13" fill="#374151">hard cost cap on Opus calls</text>
+    <text x="936" y="1354" font-size="13" fill="#374151">Module 9 calibration (blocked, N≥20)</text>
+    <text x="936" y="1378" font-size="13" fill="#374151">refresh stale CLAUDE.md (6 stocks / 37 tests)</text>
+
+    <!-- col 4: Open questions (Hume) -->
+    <rect x="1332" y="1070" width="384" height="340" rx="10" fill="#ffffff" stroke="#e5e0d8"/>
+    <text x="1352" y="1098" font-size="15" font-weight="700" fill="#dc2626">Open Questions — need Hume</text>
+    <text x="1352" y="1126" font-size="13" fill="#374151">G1 · concentration/leverage = gate or</text>
+    <text x="1352" y="1146" font-size="13" fill="#374151">      contextual routing?</text>
+    <text x="1352" y="1172" font-size="13" fill="#374151">G2 · is "&lt;10 hard gates" budget arbitrary?</text>
+    <text x="1352" y="1198" font-size="13" fill="#374151">G3 · LITE at ~$947 (basis $70):</text>
+    <text x="1352" y="1218" font-size="13" fill="#374151">      trim / hold / split ⏰ time-sensitive</text>
+    <text x="1352" y="1244" font-size="13" fill="#374151">G4 · AXON T+30 outcome (~2026-06-08)</text>
+    <text x="1352" y="1270" font-size="13" fill="#374151">G5 · COHR after NO_REGIME_SHIFT</text>
+    <text x="1352" y="1314" font-size="14" font-weight="700" fill="#16a34a">Next sequence</text>
+    <text x="1352" y="1340" font-size="13" fill="#374151">commit → D2 + D1 → E1-E3 → D3/D4/D5</text>
+    <text x="1352" y="1362" font-size="13" fill="#374151">watch AXON 06-08 · audit ~08-26</text>
+  </g>
+</svg>
