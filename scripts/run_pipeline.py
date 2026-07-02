@@ -99,14 +99,21 @@ def _clear_progress():
 
 def _spawn_auto_thesis(ticker: str) -> None:
     """Fire-and-forget: spawn run_thesis.py <ticker> as a detached subprocess.
-    Used after run_single_ticker(t) when --auto-thesis-after is passed.
     Detached so it survives the parent run_pipeline.py exiting.
 
-    NOTE: this costs ~$3-5 of Opus tokens per ticker. Only invoked when the
-    parent has --auto-thesis-after, which itself is only set by user-driven
-    /api/stocks/add — never by cron. See project memory `project_ci_cost_runaway_fix`."""
+    2026-07-02 (audit gap c): HERE/REPO_ROOT were never defined, so every call
+    died with NameError AFTER the mini-pipeline completed — killing the process
+    before _clear_progress() and leaving a stale progress file. Fixed — but
+    note run_single_ticker() already runs the thesis inline (Stage 4), so the
+    post-mini-pipeline call sites were ALSO redundant $3-5 double-runs and have
+    been removed. This helper is kept for callers that genuinely need a
+    detached thesis without a mini-pipeline.
+
+    NOTE: this costs ~$3-5 of Opus tokens per ticker. Never invoked by cron."""
     import subprocess
-    thesis_script = HERE / "run_thesis.py"
+    here = Path(__file__).resolve().parent
+    repo_root = here.parent
+    thesis_script = here / "run_thesis.py"
     if not thesis_script.exists():
         print(f"  [auto-thesis] run_thesis.py not found at {thesis_script}", file=sys.stderr)
         return
@@ -116,7 +123,7 @@ def _spawn_auto_thesis(ticker: str) -> None:
             "stdin": subprocess.DEVNULL,
             "stdout": subprocess.DEVNULL,
             "stderr": subprocess.DEVNULL,
-            "cwd": str(REPO_ROOT),
+            "cwd": str(repo_root),
         }
         if sys.platform == "win32":
             # On Windows, DETACHED_PROCESS makes the child survive parent exit
@@ -326,19 +333,22 @@ def run():
     scouts_only = "--scouts-only" in sys.argv
     rebuild_only = "--rebuild-only" in sys.argv
     no_thesis = "--no-thesis" in sys.argv
-    # --auto-thesis-after: after run_single_ticker(t), spawn run_thesis.py for t
-    # Used by /api/stocks/add to auto-thesis a freshly-added ticker. Fire-and-
-    # forget — does NOT wait, so the pipeline returns immediately and the
-    # thesis runs in background. Cost: ~$3-5 of Opus per ticker.
+    no_models = "--no-models" in sys.argv
+    # --auto-thesis-after: accepted for CLI compatibility (/api/stocks/add
+    # passes it) but a no-op since 2026-07-02 — run_single_ticker() already
+    # runs the thesis inline (Stage 4), so the old post-pipeline spawn was a
+    # redundant $3-5 double-run that ALSO crashed on undefined names,
+    # killing the process before progress cleanup (audit gap c).
     auto_thesis_after = "--auto-thesis-after" in sys.argv
 
     # Single-ticker mode (called from stock add)
     if single_ticker:
         run_single_ticker(single_ticker)
         if auto_thesis_after:
-            _spawn_auto_thesis(single_ticker)
+            print("  [auto-thesis] flag accepted but skipped — the mini-pipeline "
+                  "already ran the thesis inline (Stage 4)")
         _clear_progress()
-        return
+        return True
 
     # Generate unique run ID
     mode_tag = "scouts" if scouts_only else ("rebuild" if rebuild_only else "full")
@@ -669,7 +679,13 @@ def run():
                 print(f"  Calibration failed (non-fatal): {e}")
 
             # Target Price Model Generation (requires Perplexity + Claude keys)
-            if not free_only:
+            # 2026-07-02 (Option A): --no-models skips the Opus scenario-model
+            # regeneration. Scheduled Actions pass it — theses are the verdict
+            # of record; models regenerate on demand (new ticker / operator).
+            if no_models:
+                print("\n  [skip] Model generation skipped (--no-models; Option A — "
+                      "models regenerate on demand, theses are the verdict of record).")
+            elif not free_only:
                 stage_idx += 1
                 _write_progress("models", "Generating target price models via Perplexity + Claude...", stage_idx, total_stages)
                 print("\n\n" + "=" * 60)
@@ -811,9 +827,7 @@ def run():
         print(f"\n  Found {len(queued)} stock(s) queued during pipeline: {', '.join(queued)}")
         for t in queued:
             _write_progress("queued", f"Running queued pipeline for {t}...", 0, 1)
-            run_single_ticker(t)
-            if auto_thesis_after:
-                _spawn_auto_thesis(t)
+            run_single_ticker(t)  # includes the inline thesis stage — no extra spawn
 
     _clear_progress()
     # 2026-07-02 (sprint 3.2): propagate the outcome — the old bare fall-through
