@@ -7,6 +7,9 @@ import fs from "fs";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 const SCRIPTS_DIR = path.join(process.cwd(), "scripts");
+// 2026-07-02: was hardcoded to a retired 2025 Opus snapshot; the judgment
+// tier elsewhere in the repo runs claude-opus-4-8.
+const ASK_MODEL = "claude-opus-4-8";
 
 // ─── Tool definitions for Claude ─────────────────────────────────────────────
 
@@ -394,7 +397,7 @@ export async function POST(req: Request) {
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await client.messages.create({
-        model: "claude-opus-4-20250514",
+        model: ASK_MODEL,
         max_tokens: 4096,
         system: systemPrompt,
         tools: TOOLS,
@@ -445,7 +448,7 @@ export async function POST(req: Request) {
     // If we hit max iterations, return what we have
     return NextResponse.json({
       answer: "I ran into my action limit for this question. Here's what I was able to do so far — please ask a follow-up to continue.",
-      model: "claude-opus-4-20250514",
+      model: ASK_MODEL,
       tokens_used: totalTokens,
       actions: actionsLog,
     });
@@ -464,10 +467,11 @@ interface PortfolioContext {
   stocks: any[];
   signals: any[];
   pipelineRun: any | null;
+  theses: Record<string, any>;
 }
 
 async function buildContext(): Promise<PortfolioContext> {
-  const [stocksRes, signalsRes, pipelineRes] = await Promise.all([
+  const [stocksRes, signalsRes, pipelineRes, thesesRes] = await Promise.all([
     supabase.from("stocks").select("*").eq("active", true),
     supabase.from("latest_signals").select("*"),
     supabase
@@ -476,13 +480,49 @@ async function buildContext(): Promise<PortfolioContext> {
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // 2026-07-02 (Option A): the theses row is the verdict of record — Ask AI
+    // previously reasoned only from generate_model-era stocks.* data and gave
+    // buy verdicts that ignored the trade gate entirely (audit §4.6).
+    supabase
+      .from("theses")
+      .select(
+        "ticker,run_at,conviction,strategic_conviction,thesis_target," +
+        "risk_adj_target,risk_adj_ev_ratio,position_size_pct,buy_below," +
+        "trim_above,spot_at_run,kill_gate_override,model_d_bracket",
+      )
+      .order("run_at", { ascending: false })
+      .limit(500),
   ]);
+
+  const theses: Record<string, any> = {};
+  for (const t of (thesesRes.data || []) as any[]) {
+    if (t.ticker && !theses[t.ticker]) theses[t.ticker] = t; // latest per ticker
+  }
 
   return {
     stocks: stocksRes.data || [],
     signals: signalsRes.data || [],
     pipelineRun: pipelineRes.data,
+    theses,
   };
+}
+
+function thesisVerdictLine(t: any | undefined): string {
+  if (!t) return "no thesis run recorded — decline to give a buy/sell verdict; suggest running one";
+  const num = (v: any) => (typeof v === "number" ? `$${v.toFixed(0)}` : "?");
+  const parts = [
+    `trade=${t.conviction ?? "?"}`,
+    `strategic=${t.strategic_conviction ?? "?"}`,
+    `target=${num(t.thesis_target)}`,
+    `risk-adj=${num(t.risk_adj_target)}`,
+    `ratio=${t.risk_adj_ev_ratio ?? "?"}`,
+    `size=${t.position_size_pct ?? "?"}%`,
+    `buy_below=${num(t.buy_below)}`,
+    `trim_above=${num(t.trim_above)}`,
+    `as-of=${(t.run_at || "").slice(0, 10)} (spot ${num(t.spot_at_run)})`,
+  ];
+  if (t.kill_gate_override) parts.push("kill-gate=relaxed(archetype-routed)");
+  return parts.join(" | ");
 }
 
 function buildPortfolioSummaryText(ctx: PortfolioContext): string {
@@ -521,11 +561,12 @@ function buildSystemPrompt(ctx: PortfolioContext): string {
     return `### ${s.ticker} — ${s.name || ""}
 Sector: ${s.sector || "N/A"} | Archetype: ${archetype}
 Price: $${s.price_data?.price || "?"} | Market cap: ${s.price_data?.market_cap_b ? `$${s.price_data.market_cap_b.toFixed(1)}B` : "?"}
+VERDICT OF RECORD (latest thesis run — authoritative for buy/sell): ${thesisVerdictLine(ctx.theses[s.ticker])}
 Composite score: ${s.composite_score || "?"}/100
 Signal consensus: ${bullish}B / ${bearish}Be / ${neutral}N (${signals.length} total)
 Thesis: ${s.thesis || "none"}
 Kill condition: ${s.kill_condition || "none"} → Status: ${killStatus}
-Targets: Base=${scenarioBase?.price ? `$${scenarioBase.price.toFixed(0)}` : "?"} | Bear=${scenarioDown?.price ? `$${scenarioDown.price.toFixed(0)}` : "?"} | Bull=${scenarioUp?.price ? `$${scenarioUp.price.toFixed(0)}` : "?"}
+Legacy model scenarios (display-only; NOT the verdict): Base=${scenarioBase?.price ? `$${scenarioBase.price.toFixed(0)}` : "?"} | Bear=${scenarioDown?.price ? `$${scenarioDown.price.toFixed(0)}` : "?"} | Bull=${scenarioUp?.price ? `$${scenarioUp.price.toFixed(0)}` : "?"}
 Drivers: rev=${defaults.revenue_b ? `$${defaults.revenue_b}B` : "?"}, margin=${defaults.op_margin ? (defaults.op_margin * 100).toFixed(0) + "%" : "?"}, PE=${defaults.pe_multiple || "?"}, PS=${defaults.ps_multiple || "n/a"}
 Signals:
 ${signalSummaries || "  (no signals)"}`;
@@ -556,6 +597,8 @@ ${signalSummaries || "  (no signals)"}`;
 - After running a tool, ALWAYS explain the results in plain language with specific numbers.
 
 ## ANALYSIS RULES
+- **THE VERDICT OF RECORD IS THE THESIS LINE.** For any buy/sell/size question, lead with the latest thesis verdict (trade conviction, risk-adj target, ratio, buy_below) — it passed the code-enforced trade gate and kill gate. Legacy model scenarios are context, never the recommendation. If the thesis is BROKEN with a buy_below, say "don't buy here; the system's entry is $X". If no thesis run exists, say so and decline a verdict.
+- A trade=BROKEN with strategic=HIGH means "thesis real, wrong price" — present it that way, not as a broken company.
 - Always cite specific data (scores, signals, targets) — never make up numbers.
 - When recommending, explain WHY using the archetype framework (GARP, Cyclical, Compounder, Transformational, Special Situation).
 - Flag any stock where kill_condition status is "warning" or "triggered".
@@ -570,7 +613,7 @@ When your answer relates to specific stocks, proactively direct the user to the 
 - For signal/thesis questions: "The **Dashboard** shows all scout signals for [TICKER] in one view — look at the signal panel for the latest bullish/bearish consensus."
 - For event impacts: "Open the **Model page** for [TICKER] and scroll to the **Event Impacts** panel — it shows exactly how each catalyst or risk shifts the target price."
 - For discovery/new stocks: "Check the **Discovery** page — it scans the universe for 10x candidates and ranks them through a 3-stage funnel."
-- For kill conditions: "The kill condition status is shown on the Dashboard card for [TICKER] — green means safe, amber means warning, red means the thesis may be broken."
+- For kill conditions: "Open the **Model page** for [TICKER] — the kill-condition panel shows SAFE/WATCH/THESIS BREAK with the evaluator's reasoning." (It is NOT on the dashboard card.)
 - Always reference specific pages by name (Dashboard, Brief Model, Model, Discovery) so the user knows where to look.
 
 ## PORTFOLIO SNAPSHOT (${ctx.stocks.length} stocks)

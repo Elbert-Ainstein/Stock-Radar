@@ -118,7 +118,7 @@ export default function EventImpactsPanel({
             </div>
             <div className="text-[10px] text-[var(--faint)] mt-1">
               {impacts.merge_enabled
-                ? "Events are merged into the authoritative target."
+                ? "Signal blend (display-only) — the verdict of record is the thesis on the Dashboard."
                 : "Events displayed side-by-side with criteria target for sanity check."}
             </div>
           </div>
