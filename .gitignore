@@ -15,3 +15,4 @@ data/*
 !data/filter_audit_*.md
 !data/filter_philosophy.md
 !data/todo_master_*.md
+tsconfig.tsbuildinfo
