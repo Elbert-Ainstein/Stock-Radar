@@ -181,6 +181,74 @@ def enforce_trade_gate(parsed: dict, spot,
     return out, enforcement
 
 
+# ── L4 zero-result auto-diagnosis (2026-07-02): tape vs ruler ──────────────────
+
+LOW_ESCAPE_THRESHOLD = 0.95  # native-clock ratio bound of the BROKEN band
+
+
+def is_actionable(conviction) -> bool:
+    """A verdict the operator could act on (anything better than BROKEN)."""
+    return str(conviction or "").upper() in ("LOW", "MEDIUM", "HIGH")
+
+
+def horizon_to_clear_low(ratio) -> float | None:
+    """Shortest thesis horizon (years) at which `ratio` escapes the BROKEN
+    band on the annualized-equivalent table, or None if no clock within
+    MAX_HORIZON_YEARS clears it. Solves 0.95^(h/1.25) <= ratio."""
+    import math
+    r = _as_float(ratio)
+    if r is None or r <= 0:
+        return None
+    if r >= LOW_ESCAPE_THRESHOLD:
+        return DEFAULT_HORIZON_YEARS
+    h = DEFAULT_HORIZON_YEARS * math.log(r) / math.log(LOW_ESCAPE_THRESHOLD)
+    return round(h, 2) if h <= MAX_HORIZON_YEARS else None
+
+
+def gate_artifact_analysis(entries: list[dict]) -> str:
+    """When a sweep produces ZERO actionable verdicts, answer the question the
+    6/6-BROKEN incident never got: is everything expensive, or is the ruler
+    wrong? (Lesson L4: the engine must never end a run with a silent shrug.)
+
+    entries: [{ticker, ratio, horizon_years, conviction}, ...]. Pure; returns
+    a multi-line report for the run log.
+    """
+    lines = ["[gate-artifact] ZERO ACTIONABLE VERDICTS — diagnosing tape vs ruler:"]
+    ruler_suspects, tape_calls = 0, 0
+    for e in sorted(entries, key=lambda x: str(x.get("ticker", ""))):
+        ticker = e.get("ticker", "?")
+        r = _as_float(e.get("ratio"))
+        h = _as_float(e.get("horizon_years")) or DEFAULT_HORIZON_YEARS
+        if r is None or r <= 0:
+            lines.append(f"  {ticker}: no usable ratio — data/parse problem, not a market read")
+            continue
+        ann = r ** (1.0 / h) - 1.0
+        clears_at = horizon_to_clear_low(r)
+        if clears_at is None:
+            tape_calls += 1
+            verdict = "no clock within 10y clears this — the tape is expensive on this name"
+        elif clears_at <= h:
+            verdict = ("clears the BROKEN band at its own clock — clamped by an upper "
+                       "band (conviction/position), not killed")
+        else:
+            ruler_suspects += 1
+            verdict = (f"would escape BROKEN on a >= {clears_at}y clock — RULER SUSPECT "
+                       f"(is {h}y the right horizon for this thesis?)")
+        lines.append(f"  {ticker}: ratio {r} @ {h}y ({ann:+.1%}/yr) — {verdict}")
+    n = ruler_suspects + tape_calls
+    if ruler_suspects and ruler_suspects >= tape_calls:
+        lines.append(
+            f"[gate-artifact] SUMMARY: {ruler_suspects}/{n or len(entries)} names are ruler-suspect — "
+            "review config/thesis_horizons.json before concluding the market is expensive."
+        )
+    else:
+        lines.append(
+            f"[gate-artifact] SUMMARY: predominantly a tape call ({tape_calls} expensive vs "
+            f"{ruler_suspects} ruler-suspect) — the clamps look honest; consider discovery mode (STALK), not force-buying."
+        )
+    return "\n".join(lines)
+
+
 def format_enforcement(enforcement: dict) -> str:
     """One-line human summary for the run log."""
     parts = []

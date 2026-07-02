@@ -736,6 +736,7 @@ def run():
                     wl_t = _get_wl_t()
                     thesis_count = 0
                     thesis_errors = 0
+                    sweep_verdicts = []  # L4 zero-result auto-diagnosis input
                     for s in wl_t:
                         t = s["ticker"]
                         if _is_cancelled(t):
@@ -752,12 +753,28 @@ def run():
                             if row and not row.get("dry_run"):
                                 thesis_count += 1
                                 print(f"  [OK] {t} thesis generated")
+                                sweep_verdicts.append({
+                                    "ticker": t,
+                                    "ratio": row.get("risk_adj_ev_ratio"),
+                                    "horizon_years": row.get("thesis_horizon_years"),
+                                    "conviction": row.get("conviction"),
+                                })
                             else:
                                 print(f"  [SKIP] {t} — no thesis returned")
                         except Exception as te:
                             thesis_errors += 1
                             print(f"  [FAIL] {t} thesis error: {te}")
                     print(f"\n  Theses generated: {thesis_count}/{len(wl_t)} (errors: {thesis_errors})")
+                    # L4 (2026-07-02): a sweep that clamps EVERYTHING must
+                    # diagnose itself — tape vs ruler — never end in a shrug.
+                    try:
+                        from trade_gate import gate_artifact_analysis, is_actionable
+                        if sweep_verdicts and not any(
+                            is_actionable(v["conviction"]) for v in sweep_verdicts
+                        ):
+                            print("\n" + gate_artifact_analysis(sweep_verdicts), flush=True)
+                    except Exception as ge:
+                        print(f"  [gate-artifact] diagnosis failed (non-fatal): {ge}")
                 except Exception as e:
                     print(f"  Thesis stage failed: {e}")
                     print("  Continuing without thesis updates...")
