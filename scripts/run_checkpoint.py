@@ -123,6 +123,39 @@ def grade(seal: dict, actual_price: float) -> dict:
     }
 
 
+# ── Seal source/integrity filter (pure; 2026-07-02) ───────────────────────────
+
+SEAL_RUN_PREFIX = "soc-"  # checkpoint_seal.seal_socratic_prediction stamps run_id "soc-<id>"
+
+
+def is_gradeable_seal(row: dict) -> tuple[bool, str]:
+    """Decide whether a prediction_log row is a genuine, gradeable Socratic seal.
+
+    The legacy engine pipeline wrote snapshot rows into the same table with
+    fabricated ±30% bands and — due to reading keys analyst.py never emits —
+    all-zero targets and ref prices (audit 2026-07-02 §4.3). Grading those
+    would poison prediction_outcomes, which is append-only by design.
+
+    Returns (ok, reason). Reasons: ok | quarantined | not_socratic |
+    zero_ref_price | no_target_band.
+    """
+    if row.get("quarantined"):
+        return False, "quarantined"
+    run_id = str(row.get("run_id") or "")
+    fingerprint = row.get("reasoning_fingerprint") or {}
+    # Socratic seals carry the soc- run prefix (base-schema column, survives
+    # pre-migration column stripping); a non-empty reasoning_fingerprint also
+    # qualifies (post-migration seals whose run_id used the run_at fallback).
+    if not (run_id.startswith(SEAL_RUN_PREFIX) or fingerprint):
+        return False, "not_socratic"
+    ref = row.get("current_price")
+    if ref in (None, 0) or float(ref) == 0.0:
+        return False, "zero_ref_price"
+    if all(row.get(k) in (None, 0) for k in ("target_low", "target_base", "target_high")):
+        return False, "no_target_band"
+    return True, "ok"
+
+
 # ── Ripeness (pure) ────────────────────────────────────────────────────────────
 
 def _parse_dt(value) -> Optional[datetime]:
@@ -184,12 +217,21 @@ def _already_graded(sb, prediction_id, days_elapsed: int) -> bool:
 
 
 def _load_seals(sb, ticker: Optional[str]) -> list[dict]:
-    cols = ("id,ticker,run_id,created_at,current_price,target_low,target_base,"
-            "target_high,archetype,cohort_key,reasoning_fingerprint")
-    q = sb.table("prediction_log").select(cols).order("created_at", desc=True)
-    if ticker:
-        q = q.eq("ticker", ticker.upper())
-    return q.execute().data or []
+    base_cols = ("id,ticker,run_id,created_at,current_price,target_low,target_base,"
+                 "target_high,archetype,cohort_key,reasoning_fingerprint")
+    # Prefer to read the quarantine flag; fall back if the column predates the
+    # 2026-07-02 consolidated migration (is_gradeable_seal treats absent as false).
+    for cols in (base_cols + ",quarantined", base_cols):
+        q = sb.table("prediction_log").select(cols).order("created_at", desc=True)
+        if ticker:
+            q = q.eq("ticker", ticker.upper())
+        try:
+            return q.execute().data or []
+        except Exception as e:
+            if "quarantined" in str(e) and "quarantined" in cols:
+                continue  # pre-migration schema — retry without the flag
+            raise
+    return []
 
 
 def run_checkpoint(*, dry_run: bool = False, ticker: Optional[str] = None,
@@ -200,8 +242,17 @@ def run_checkpoint(*, dry_run: bool = False, ticker: Optional[str] = None,
 
     today = today or datetime.now(timezone.utc).date()
     sb = get_client()
-    seals = _load_seals(sb, ticker)
-    print(f"[checkpoint] {len(seals)} sealed record(s) to check (today={today}, dry_run={dry_run})", flush=True)
+    rows = _load_seals(sb, ticker)
+    seals: list[dict] = []
+    excluded: dict[str, int] = {}
+    for row in rows:
+        ok, reason = is_gradeable_seal(row)
+        if ok:
+            seals.append(row)
+        else:
+            excluded[reason] = excluded.get(reason, 0) + 1
+    print(f"[checkpoint] {len(rows)} row(s) loaded; grading {len(seals)} genuine seal(s); "
+          f"excluded {excluded or 'none'} (today={today}, dry_run={dry_run})", flush=True)
 
     graded = skipped = no_price = 0
     for s in seals:
@@ -226,8 +277,9 @@ def run_checkpoint(*, dry_run: bool = False, ticker: Optional[str] = None,
                 record_price_outcome(s["ticker"], s["id"], h, price, actual_date_used=date_used)
             graded += 1
 
-    print(f"[checkpoint] done — graded={graded} skipped(existing)={skipped} no_price={no_price}", flush=True)
-    return {"graded": graded, "skipped": skipped, "no_price": no_price}
+    print(f"[checkpoint] done — graded={graded} skipped(existing)={skipped} no_price={no_price} "
+          f"excluded={excluded or 'none'}", flush=True)
+    return {"graded": graded, "skipped": skipped, "no_price": no_price, "excluded": excluded}
 
 
 def main():

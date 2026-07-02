@@ -70,6 +70,57 @@ def test_grade_falls_back_to_band_without_lean():
     assert g["direction_source"] == "band"
 
 
+# ── seal source/integrity filter (2026-07-02) ───────────────────────────────────
+
+def test_gradeable_socratic_seal_passes():
+    seal = {"run_id": "soc-98", "current_price": 786.9, "target_low": 512.0,
+            "target_base": None, "target_high": 1506.0, "reasoning_fingerprint": {}}
+    assert rc.is_gradeable_seal(seal) == (True, "ok")
+
+
+def test_legacy_pipeline_row_excluded_as_not_socratic():
+    # The engine-path snapshot rows: pipeline run_id, empty fingerprint,
+    # all-zero targets (the bug that motivated the filter).
+    junk = {"run_id": "e2f1c0aa-run", "current_price": 0, "target_low": 0.0,
+            "target_base": 0, "target_high": 0.0, "reasoning_fingerprint": {}}
+    assert rc.is_gradeable_seal(junk) == (False, "not_socratic")
+
+
+def test_legacy_row_with_real_targets_still_excluded():
+    # Even a well-formed legacy row is not a Socratic seal — source filter, not
+    # just a junk filter.
+    row = {"run_id": "pipeline-2026-06-01", "current_price": 100.0,
+           "target_low": 70.0, "target_base": 100.0, "target_high": 130.0}
+    assert rc.is_gradeable_seal(row) == (False, "not_socratic")
+
+
+def test_seal_with_zero_ref_price_excluded():
+    seal = {"run_id": "soc-77", "current_price": 0, "target_low": 512.0,
+            "target_high": 1506.0}
+    assert rc.is_gradeable_seal(seal) == (False, "zero_ref_price")
+
+
+def test_seal_with_no_band_excluded():
+    seal = {"run_id": "soc-77", "current_price": 786.9, "target_low": None,
+            "target_base": 0, "target_high": None}
+    assert rc.is_gradeable_seal(seal) == (False, "no_target_band")
+
+
+def test_quarantined_row_excluded_first():
+    seal = {"run_id": "soc-98", "current_price": 786.9, "target_low": 512.0,
+            "target_high": 1506.0, "quarantined": True}
+    assert rc.is_gradeable_seal(seal) == (False, "quarantined")
+
+
+def test_fingerprint_qualifies_when_run_id_used_fallback():
+    # seal_socratic_prediction falls back to run_at when socratic_id is None;
+    # a non-empty fingerprint still marks it as a genuine seal post-migration.
+    seal = {"run_id": "2026-06-03T22:00:00+00:00", "current_price": 938.0,
+            "target_low": 570.0, "target_high": 1280.0,
+            "reasoning_fingerprint": {"directional_lean": "down"}}
+    assert rc.is_gradeable_seal(seal) == (True, "ok")
+
+
 # ── ripeness ────────────────────────────────────────────────────────────────────
 
 def test_ripe_horizons():
