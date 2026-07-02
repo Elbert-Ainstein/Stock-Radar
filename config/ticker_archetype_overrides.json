@@ -24,6 +24,19 @@
     "By default dcf_role is routed per-archetype (transformational -> downside_floor,",
     "all others -> primary), so the string form below is sufficient for LITE/AMD."
   ],
+  "_2026_07_02": [
+    "Full watchlist tagged per docs/decisions/ARCHETYPE_PROPOSALS_2026-07-02.md",
+    "(owner-approved 2026-07-02: proposals as-is; Model D stays archetype-gated,",
+    "so it runs on all transformational names — 'more data the better').",
+    "SNDK: NAND memory mid-supercycle — cyclical kill guidance + normalized-EBIT.",
+    "RKLB/ACHR: pre-profit right-tail names — the uniform ratio clamp was the",
+    "documented false-kill risk. PLTR: moat-durability frame. CELH: Lynch frame."
+  ],
   "LITE": "transformational",
-  "AMD": "transformational"
+  "AMD": "transformational",
+  "SNDK": "cyclical",
+  "RKLB": "transformational",
+  "ACHR": "transformational",
+  "PLTR": "compounder",
+  "CELH": "garp"
 }
