@@ -1616,11 +1616,17 @@ def _scenario_price(
         else:
             terminal_ev = (ev_from_ebitda + ev_from_fcf) / 2
 
-    # Discount back from valuation year to target horizon.
-    # For archetype-extended horizons, discount_years is calculated relative to
-    # the archetype's valuation_year (not the global VALUATION_YEAR).
-    actual_discount_years = max(0, val_year - (val_year - discount_years))  # preserve original semantics
-    discount = (1 + d["discount_rate"]) ** discount_years
+    # Discount back from the archetype's valuation year to the target horizon.
+    # `discount_years` arrives Y3-based from _discount_years_for_horizon
+    # (12mo→2, 24mo→1, 36mo→0), so first recover the horizon in years, then
+    # re-anchor the discount on the archetype's val_year.
+    # 2026-07-02 fix: the old code discounted a Y4/Y5 terminal by only the
+    # Y3-based discount_years (the previous line here was an algebraic
+    # tautology), letting 1-2 years of growth accrue undiscounted for
+    # transformational/compounder/cyclical archetypes (~+19.5% on a stub).
+    years_to_target = VALUATION_YEAR - discount_years
+    actual_discount_years = max(0, val_year - years_to_target)
+    discount = (1 + d["discount_rate"]) ** actual_discount_years
     pv_ev = terminal_ev / discount
     pv_ev_ebitda = ev_from_ebitda / discount
     pv_ev_fcf = ev_from_fcf / discount
@@ -1630,9 +1636,10 @@ def _scenario_price(
     equity_ebitda_only = pv_ev_ebitda - net_debt
     equity_fcf_only = pv_ev_fcf - net_debt
 
-    # Share count at target year after dilution (consistent with target horizon)
+    # Share count at the target date: dilution accrues from today to the
+    # horizon (years_to_target), independent of the archetype's terminal year.
     shares_0 = fin.shares_diluted or 0.0
-    shares_t = shares_0 * (1 + d["share_change_pct"]) ** (val_year - discount_years)
+    shares_t = shares_0 * (1 + d["share_change_pct"]) ** years_to_target
 
     price = max(0.0, equity / shares_t) if shares_t > 0 else 0.0
     price_ebitda = max(0.0, equity_ebitda_only / shares_t) if shares_t > 0 else 0.0
@@ -2098,8 +2105,12 @@ def _scenario_price_revenue_multiple(
     pv_ev_ebitda = ev_from_ebitda / discount
     pv_ev_fcf = ev_from_fcf / discount
 
-    net_debt = fin.net_debt or 0.0
-    equity = pv_ev - net_debt
+    # P/S is an EQUITY multiple (terminal_ps is anchored to market_cap/ttm_rev
+    # and P/S sector benchmarks), so Rev × P/S is already an equity value.
+    # 2026-07-02 fix: the old `equity = pv_ev - net_debt` double-counted cash
+    # and double-penalized debt by exactly |net_debt|/share (+27% measured on
+    # a $2B-net-cash stub) in the mode used for the hardest-to-value names.
+    equity = pv_ev
 
     shares_0 = fin.shares_diluted or 0.0
     shares_t = shares_0 * (1 + d["share_change_pct"]) ** (VALUATION_YEAR - discount_years)
@@ -3391,18 +3402,13 @@ def build_target(
                 "x",
             ),
             DeductionStep(
-                "Terminal EV",
-                f"Rev Y3 × {terminal_ps_base:.1f}x P/S",
+                "Terminal equity value",
+                f"Rev Y3 × {terminal_ps_base:.1f}x P/S (equity multiple)",
                 f_b(base_s.terminal_ev_blended), "$B",
             ),
             DeductionStep(
-                "PV of terminal EV",
-                f"÷ (1 + {base_drivers['discount_rate']:.1%})^{discount_years}",
-                f_b(base_s.pv_ev_blended), "$B",
-            ),
-            DeductionStep(
-                "Equity value",
-                "PV EV − Net debt",
+                "Equity value (PV)",
+                f"÷ (1 + {base_drivers['discount_rate']:.1%})^{discount_years} — P/S is an equity multiple, no net-debt bridge",
                 f_b(base_s.equity_value), "$B",
             ),
             DeductionStep(
@@ -3421,6 +3427,11 @@ def build_target(
         ]
     else:
         # Standard EV/EBITDA deduction chain
+        # Display the ACTUAL discount exponent (archetype-adjusted, 2026-07-02):
+        # terminal sits at the archetype's val_year, target at years_to_target.
+        _, _chain_val_year, _ = _archetype_params(archetype)
+        _chain_years_to_target = VALUATION_YEAR - discount_years
+        _chain_discount_years = max(0, _chain_val_year - _chain_years_to_target)
         steps: list[DeductionStep] = [
             DeductionStep("TTM revenue", "sum(last 4Q revenue)", f_b(ttm_rev), "$B"),
             DeductionStep(
@@ -3459,7 +3470,7 @@ def build_target(
             ),
             DeductionStep(
                 "PV of terminal EV",
-                f"÷ (1 + {base_drivers['discount_rate']:.1%})^{discount_years}",
+                f"÷ (1 + {base_drivers['discount_rate']:.1%})^{_chain_discount_years}",
                 f_b(base_s.pv_ev_blended), "$B",
             ),
             DeductionStep(
