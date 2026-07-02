@@ -298,7 +298,7 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
       scoreDelta: 0,
       scoreHistory: [0],
       signals: [],
-      thesis: pipelineRunning
+      watchlistThesis: pipelineRunning
         ? "Queued — will be analyzed when current pipeline finishes."
         : "Added to watchlist — running pipeline...",
       killCondition: "",
