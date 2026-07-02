@@ -315,6 +315,18 @@ def _load_thesis_horizon(ticker: str) -> Optional[float]:
         return None
 
 
+def _load_hypothesis(ticker: str) -> Optional[str]:
+    """L7 human-hypothesis intake: data/hypotheses/<TICKER>.md (see the
+    TEMPLATE.md there: claim / mechanism / signatures S1-S6 / kill conditions
+    with dates / horizon / status). Returns None when absent."""
+    try:
+        path = REPO_ROOT / "data" / "hypotheses" / f"{ticker.upper()}.md"
+        text = path.read_text().strip()
+        return text or None
+    except Exception:
+        return None
+
+
 def thesis_output_usable(parsed: Optional[dict]) -> bool:
     """Truncation-guard predicate (2026-07-02, sprint 2.4): a thesis output is
     persistable only if the closing JSON carries at least one verdict field.
@@ -396,8 +408,12 @@ def write_to_supabase(row: dict) -> int | None:
         sb = get_client()
     import re as _re
     result = None
-    for _attempt in range(5):  # strip up to 5 unknown columns (e.g. kill_gate_override,
-        try:                    # model_d_bracket) before their migrations land
+    # Budget: one attempt per strippable column + 1 (2026-07-02 — the old
+    # fixed range(5) sat at exact capacity vs the pending-migration columns;
+    # one more pre-migration field would have failed the ENTIRE insert.
+    # Same fix as prediction_logger's strip loop.)
+    for _attempt in range(len(row) + 1):
+        try:
             result = sb.table("theses").insert(row).execute()
             break
         except Exception as e:
@@ -833,6 +849,19 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     if memory_md:
         print(f"  memory: {len(memory_md)} chars (prior runs detected)", flush=True)
 
+    # 3b. L7 (2026-07-02): human-hypothesis intake. The human is the hypothesis
+    # generator; the engine is the falsifier. Rides the memory block so no
+    # prompt-file change (and no cohort churn) is needed.
+    hypothesis_md = _load_hypothesis(ticker)
+    if hypothesis_md:
+        memory_section += (
+            "\n\n### OPERATOR HYPOTHESIS (human-originated — your job is to FALSIFY, "
+            "not flatter)\nGround every claimed signature in evidence; challenge the "
+            "mechanism; if it survives, say precisely which parts carried the weight.\n\n"
+            + hypothesis_md
+        )
+        print(f"  hypothesis: {len(hypothesis_md)} chars loaded from data/hypotheses/", flush=True)
+
     # Build scout-verified financials block from Module 1 fetch (already passed
     # the recent-quarter sanity check). Inject at the [VERIFIED_FINANCIALS]
     # placeholder in thesis_v3.md (added v3.3, 2026-05-07). The prompt body
@@ -967,6 +996,19 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     except Exception as e:
         print(f"  [model_d] skipped — {e}", file=sys.stderr, flush=True)
 
+    # L5 (2026-07-02, advisory): kill triggers must be dated external signposts.
+    try:
+        from kill_condition_eval import lint_kill_triggers
+        _kt = parsed.get("kill_triggers") or []
+        _lint = lint_kill_triggers(_kt, _arch)
+        if _lint:
+            print(f"  [kill_lint] {ticker}: {len(_lint)}/{len(_kt)} trigger(s) below "
+                  f"signpost grade (dated, external, falsifiable):", flush=True)
+            for _w in _lint[:5]:
+                print(f"    - {_w}", flush=True)
+    except Exception as _le:
+        print(f"  [kill_lint] skipped — {_le}", file=sys.stderr, flush=True)
+
     cited = extract_cited_domains(result["raw_blocks"])
     coverage = coverage_quality(len(cited))
     print(f"  cited domains ({len(cited)}, {coverage}): {', '.join(cited[:8])}{'...' if len(cited) > 8 else ''}", flush=True)
@@ -986,11 +1028,39 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
                 print(f"  enriched ir_cache: {ticker} → {dom}", flush=True)
                 break
 
+    # 7b. L4 (2026-07-02): every run emits its parameter block — the engine
+    # must never have an invisible opinion. One JSON blob: the clock, the
+    # scaled clamp thresholds, the archetype routing, and which gates acted.
+    try:
+        from trade_gate import DEFAULT_HORIZON_YEARS, horizon_adjusted_table
+        _h_used = parsed.get("thesis_horizon_years") or DEFAULT_HORIZON_YEARS
+        run_parameters = {
+            "prompt_version": prompt_version,
+            "thesis_horizon_years": _h_used,
+            "clamp_table": [
+                [None if lo == float("-inf") else lo, conv, pos]
+                for lo, conv, pos in horizon_adjusted_table(float(_h_used))
+            ],
+            "archetype": _arch,
+            "spot": spot,
+            "allowlist_domains": len(domains),
+            "max_tokens": MAX_TOKENS,
+            "temperature": TEMPERATURE,
+            "trade_gate_acted": bool(_tg and _tg.get("clamped")),
+            "kill_gate_override": bool(parsed.get("kill_gate_override")),
+            "model_d_ran": "model_d_bracket" in parsed,
+        }
+        print(f"  [run_parameters] {json.dumps(run_parameters, default=str)}", flush=True)
+    except Exception as _pe:
+        run_parameters = None
+        print(f"  [run_parameters] WARN: block not emitted — {_pe}", file=sys.stderr, flush=True)
+
     # 8. Build Supabase row
     row = {
         "ticker": ticker.upper(),
         "run_at": run_at.isoformat(),
         "prompt_version": prompt_version,
+        "run_parameters": run_parameters,                              # L4: no invisible opinions (jsonb; stripped until migration)
         "thesis_target": parsed.get("thesis_target"),
         "breakout_price": parsed.get("breakout_price"),
         "risk_adj_target": parsed.get("risk_adj_target"),
