@@ -37,9 +37,9 @@ import os
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path as _Path
-from typing import Any
+from typing import Any, Optional
 
 
 class EarningsFetchError(Exception):
@@ -1760,8 +1760,59 @@ def get_provider(name: str | None = None) -> DataProvider:
     return YFinanceProvider()
 
 
+def _period_public_date(p: dict) -> Optional[datetime]:
+    """Best-available period-END date for a statement period: the provider's
+    'date' field first (true fiscal end), then '_date', then the parsed label
+    (approximate, month-boundary). Returns a tz-naive datetime or None."""
+    for key in ("date", "_date"):
+        v = p.get(key)
+        if v:
+            try:
+                d = v if isinstance(v, datetime) else datetime.fromisoformat(str(v)[:19])
+                return d.replace(tzinfo=None)
+            except (ValueError, TypeError):
+                pass
+    try:
+        d = _parse_period_to_date(str(p.get("period", "")))
+        return d.replace(tzinfo=None) if d else None
+    except Exception:
+        return None
+
+
+def _filter_financials_as_of(fin: FinancialData, as_of: datetime,
+                             filing_lag_days: int = 45) -> tuple[FinancialData, int]:
+    """Point-in-time view for backtests (2026-07-02, sprint 2.6): drop
+    statement periods that were not yet FILED at `as_of`. A period is treated
+    as public `filing_lag_days` after its end date (10-Q deadline ~40-45 days
+    for large/accelerated filers). Mutates `fin` in place; returns
+    (fin, dropped_count). Price/market_cap are NOT rewound — backtest callers
+    inject the historical spot themselves.
+    """
+    cutoff = (as_of.replace(tzinfo=None) if as_of.tzinfo else as_of) - timedelta(days=filing_lag_days)
+    dropped = 0
+    for attr in ("quarterly_income", "quarterly_cashflow", "quarterly_balance",
+                 "annual_income", "annual_cashflow", "annual_balance"):
+        periods = getattr(fin, attr, None) or []
+        kept = []
+        for p in periods:
+            d = _period_public_date(p)
+            if d is not None and d <= cutoff:
+                kept.append(p)
+            else:
+                dropped += 1
+        setattr(fin, attr, kept)
+    if dropped:
+        fin.warnings.append(
+            f"AS_OF_FILTER: dropped {dropped} period(s) not publicly filed by "
+            f"{as_of.date()} (filing lag {filing_lag_days}d)"
+        )
+    return fin, dropped
+
+
 def fetch_financials(ticker: str, min_quarters: int = 4,
-                     override_suspect_recent: bool = False) -> FinancialData:
+                     override_suspect_recent: bool = False,
+                     as_of: Optional[datetime] = None,
+                     filing_lag_days: int = 45) -> FinancialData:
     """Fetch historical financials for `ticker` using a provider chain.
 
     Per-ticker chain logic (config/data_provider_overrides.json):
@@ -1790,11 +1841,21 @@ def fetch_financials(ticker: str, min_quarters: int = 4,
     override_suspect_recent : bool
         If True, allow data even if the sanity check flags recent quarters
         as anomalous. Use only after manually verifying against the 10-Q.
+    as_of : datetime, optional
+        Point-in-time view for backtests/fixtures: drop statement periods
+        not publicly filed by this date (period end + `filing_lag_days`).
+        Restored 2026-07-02 — the kwarg was dropped in the provider-abstraction
+        refactor (~2026-05-07) while backtest_targets / capture_engine_fixtures /
+        test_engine_fixtures kept passing it, so all three died on TypeError
+        and the fixture suite silently skipped 100% of cases.
+    filing_lag_days : int
+        Days after a period's end when its filing is treated as public.
 
     Raises
     ------
     EarningsFetchError
-        If ALL providers in the chain fail. The last error is included.
+        If ALL providers in the chain fail, or too few quarters remain
+        public at `as_of`. The last error is included.
     """
     _ensure_env_loaded()
     upper = ticker.upper()
@@ -1884,6 +1945,16 @@ def fetch_financials(ticker: str, min_quarters: int = 4,
                 f"PROVIDER_OVERRIDE: forced through {prov_name} "
                 f"(reason: {cfg.get('reason', 'see config')[:120]})"
             )
+
+        # ── Point-in-time filter for backtests/fixtures (2026-07-02) ──
+        if as_of is not None:
+            result, _dropped = _filter_financials_as_of(result, as_of, filing_lag_days)
+            if len(result.quarterly_income) < min_quarters:
+                raise EarningsFetchError(
+                    f"{ticker}: only {len(result.quarterly_income)} quarter(s) "
+                    f"publicly filed by {as_of.date()} (need {min_quarters}) — "
+                    f"as_of window too early for this data set"
+                )
 
         print(f"  [finance_data] {ticker} served by {prov_name} (chain: {chain})", file=sys.stderr)
         return result
