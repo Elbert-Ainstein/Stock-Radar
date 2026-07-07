@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Stock } from "@/lib/data";
+import type { Stock, ThesisRun } from "@/lib/data";
 import { cn, scoreColor } from "./helpers";
 import Sparkline from "./Sparkline";
 
@@ -30,7 +30,12 @@ const CONV: Record<string, { fg: string; bg: string }> = {
   BROKEN: { fg: "var(--sr-conv-broken)", bg: "var(--sr-conv-broken-bg)" },
 };
 
-function ConvictionPill({ tier }: { tier?: string | null }) {
+// Abbreviations for the dual (strategic + trade) pill mode — full words in tooltip.
+const CONV_ABBR: Record<string, string> = { HIGH: "HIGH", MEDIUM: "MED", LOW: "LOW", BROKEN: "BRKN" };
+
+function ConvictionPill({ tier, prefix, abbreviate = false }: {
+  tier?: string | null; prefix?: string; abbreviate?: boolean;
+}) {
   const t = (tier || "").toUpperCase();
   const sty = CONV[t];
   if (!sty) return <span style={{ color: "var(--sr-ink-3)", fontSize: 10.5 }} className="sr-mono">—</span>;
@@ -40,12 +45,58 @@ function ConvictionPill({ tier }: { tier?: string | null }) {
       fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em",
       color: sty.fg, background: sty.bg, border: `1px solid ${sty.fg}`,
       borderRadius: 3, whiteSpace: "nowrap",
-    }}>{t}</span>
+    }}>
+      {prefix ? <span style={{ opacity: 0.55, marginRight: 2 }}>{prefix}·</span> : null}
+      {abbreviate ? (CONV_ABBR[t] || t) : t}
+    </span>
+  );
+}
+
+// Dual-system verdict cell: "strategic HIGH / trade BROKEN / buy below $X".
+// Legacy rows (no strategic_conviction persisted) render the single trade
+// pill exactly as before. The full sentence lives in the cell tooltip.
+function ConvictionCell({ thesis, currency }: { thesis?: ThesisRun | null; currency: string }) {
+  const trade = thesis?.conviction;
+  const strategic = thesis?.strategic_conviction;
+  const kg = thesis?.kill_gate_override;
+
+  const parts: string[] = [];
+  if (strategic) parts.push(`strategic ${String(strategic).toUpperCase()}`);
+  if (trade) parts.push(`trade ${String(trade).toUpperCase()}`);
+  if (thesis?.buy_below != null) parts.push(`buy below ${fmtMoney(thesis.buy_below, currency)}`);
+  if (thesis?.risk_adj_ev_ratio != null) parts.push(`EV ratio ${Number(thesis.risk_adj_ev_ratio).toFixed(2)}×`);
+  if (thesis?.thesis_horizon_years != null) parts.push(`judged on ${Number(thesis.thesis_horizon_years)}y clock`);
+  if (kg) parts.push(`kill gate routed ${kg.raw_verdict} → ${kg.routed_verdict}${kg.archetype ? ` (${kg.archetype})` : ""}`);
+  const title = parts.length ? parts.join(" / ") : undefined;
+
+  // True legacy row (no structural data at all): bare pill, byte-identical
+  // to the pre-structural-axis rendering — no wrapper, no tooltip.
+  if (!strategic && !kg) {
+    return <ConvictionPill tier={trade} />;
+  }
+  // kill_gate_override can persist without strategic_conviction (the kill
+  // gate treats a missing strategic verdict as pass) — still mark the relax.
+  if (!strategic) {
+    return (
+      <span title={title} style={{ display: "inline-flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}>
+        <ConvictionPill tier={trade} />
+        <span className="sr-mono" style={{ color: "var(--sr-conv-watch)", fontSize: 10, lineHeight: 1 }}>†</span>
+      </span>
+    );
+  }
+  return (
+    <span title={title} style={{ display: "inline-flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}>
+      <ConvictionPill tier={strategic} prefix="S" abbreviate />
+      <ConvictionPill tier={trade} prefix="T" abbreviate />
+      {kg && (
+        <span className="sr-mono" style={{ color: "var(--sr-conv-watch)", fontSize: 10, lineHeight: 1 }}>†</span>
+      )}
+    </span>
   );
 }
 
 // Grid columns (px). Match SRWatchlistHeader exactly.
-export const SR_GRID = "76px 150px 86px 70px 64px 90px 96px 86px 66px 60px 120px 110px 90px 40px";
+export const SR_GRID = "76px 150px 86px 70px 64px 90px 132px 86px 66px 60px 120px 110px 90px 40px";
 
 export function SRWatchlistHeader() {
   const labels: Array<[string, string]> = [
@@ -245,8 +296,8 @@ export default function StockRow({
           <span style={{ color: "var(--sr-ink-4)", fontSize: 10 }}>—</span>
         )}
       </div>
-      {/* CONVICTION */}
-      <div style={cellLeft}><ConvictionPill tier={t?.conviction} /></div>
+      {/* CONVICTION — strategic (Type A) + trade (Type B) dual pill */}
+      <div style={cellLeft}><ConvictionCell thesis={t} currency={stock.currency} /></div>
       {/* THESIS */}
       <div style={{ ...cellRight, ...numStyle, fontWeight: 600, color: "var(--sr-ink)" }}>
         {tgt != null ? fmtMoney(tgt, stock.currency) : <span style={{ color: "var(--sr-ink-3)" }}>—</span>}

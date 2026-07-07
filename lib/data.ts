@@ -53,6 +53,29 @@ export interface ThesisCatalyst {
   confirming_signal: string;
 }
 
+// D1 kill-gate override — shape mirrors scripts/kill_gate.py apply_kill_gate().
+export interface KillGateOverride {
+  raw_verdict: string | null;
+  routed_verdict: string | null;
+  raw_position_pct: number | null;
+  routed_position_pct: number | null;
+  risk_adj_ev_ratio: number | null;
+  archetype: string | null;
+  archetype_floor: number | null; // null when pre-revenue (ratio gate disabled)
+  uniform_threshold: number | null;
+  reason: string | null;
+}
+
+// Model D vision-vs-floor bracket — shape mirrors scripts/model_d.py bracket().
+export interface ModelDBracket {
+  engine_floor: number | null;
+  engine_floor_pv: number | null;
+  vision_ceiling: number | null;
+  vision_over_floor_x: number | null; // like-for-like (headline)
+  vision_over_floor_x_raw: number | null;
+  [key: string]: unknown;
+}
+
 export interface ThesisRun {
   ticker: string;
   run_at: string;
@@ -73,6 +96,14 @@ export interface ThesisRun {
   markdown_path: string | null;
   coverage_quality: "HIGH" | "MEDIUM" | "LOW" | string | null;
   cited_domains: string[];
+  // Structural axis (dual-system Step 1). Optional: absent on rows written
+  // before the 2026-07-02 migrations, and on all rows when the loader falls
+  // back to the legacy column set (pre-migration live DB).
+  strategic_conviction?: "HIGH" | "MEDIUM" | "LOW" | "BROKEN" | string | null;
+  risk_adj_ev_ratio?: number | null;
+  thesis_horizon_years?: number | null;
+  kill_gate_override?: KillGateOverride | null;
+  model_d_bracket?: ModelDBracket | null;
 }
 
 // ─── Discovery universe (self-evolving multi-market candidate registry) ───
@@ -163,6 +194,47 @@ function formatMarketCap(billions: number | undefined): string {
   return `$${(billions * 1000).toFixed(0)}M`;
 }
 
+// ─── Latest-theses select with structural-axis columns ───
+// Structural-axis columns are selected optimistically: PostgREST rejects the
+// WHOLE select if any column is missing, so on error we retry with narrower
+// column sets instead of losing every thesis row on a pre-migration DB.
+// The columns arrive in TWO separate migration files, so a partially migrated
+// DB (consolidated applied, horizon not) is a real state — hence the staged
+// retry rather than a single all-or-nothing fallback.
+const THESIS_FIELDS_STRUCTURAL = [
+  "strategic_conviction","risk_adj_ev_ratio",
+  "kill_gate_override","model_d_bracket",
+]; // supabase/2026-07-02_consolidated_pending.sql §2
+const THESIS_FIELD_HORIZON = "thesis_horizon_years"; // supabase/2026-07-02_theses_horizon.sql
+
+export async function selectThesesWithStructural(
+  baseFields: string[],
+  limit: number,
+): Promise<ThesisRun[]> {
+  const query = (fields: string[]) =>
+    supabase
+      .from("theses")
+      .select(fields.join(","))
+      .order("run_at", { ascending: false })
+      .limit(limit);
+
+  const attempts: Array<[string, string[]]> = [
+    ["all structural columns",
+      [...baseFields, ...THESIS_FIELDS_STRUCTURAL, THESIS_FIELD_HORIZON]],
+    ["without thesis_horizon_years (2026-07-02_theses_horizon.sql unapplied?)",
+      [...baseFields, ...THESIS_FIELDS_STRUCTURAL]],
+    ["legacy columns only (2026-07-02_consolidated_pending.sql unapplied?)",
+      baseFields],
+  ];
+  for (const [label, fields] of attempts) {
+    const { data, error } = await query(fields);
+    // Dynamic select string -> supabase-js can't infer the row shape; cast once.
+    if (!error) return (data || []) as unknown as ThesisRun[];
+    console.warn(`[data] theses select failed (${label}):`, error.message);
+  }
+  return [];
+}
+
 // ─── Main data loader (Supabase) ───
 export async function loadStocks(): Promise<Stock[]> {
   // PRIMARY SOURCE: stocks table (always has all active stocks)
@@ -190,27 +262,22 @@ export async function loadStocks(): Promise<Stock[]> {
   // The table has multiple rows per ticker (one per run); we want the most recent.
   // Explicit columns (skip raw_response_blocks ~50-100KB/row).
   // LIMIT 200 bounds payload as event-triggered runs accumulate (session 5+).
-  const THESIS_FIELDS = [
+  const THESIS_FIELDS_BASE = [
     "ticker","run_at","prompt_version",
     "thesis_target","breakout_price","risk_adj_target",
     "conviction","position_size_pct","buy_below","trim_above",
     "filters","top_risks","top_catalysts","kill_triggers",
     "spot_at_run","trigger_reason","markdown_path",
     "coverage_quality","cited_domains",
-  ].join(",");
-  const { data: thesesRows } = await supabase
-    .from("theses")
-    .select(THESIS_FIELDS)
-    .order("run_at", { ascending: false })
-    // LIMIT 1000 gives ~14 years of runway at monthly cadence on 6 tickers.
-    // BEFORE session 5 (event-triggered runs) deploys, replace this with a
-    // Postgres view `latest_thesis_per_ticker` to guarantee per-ticker
-    // coverage regardless of run distribution.
-    .limit(1000);
+  ];
+  // LIMIT 1000 gives ~14 years of runway at monthly cadence on 6 tickers.
+  // BEFORE session 5 (event-triggered runs) deploys, replace this with a
+  // Postgres view `latest_thesis_per_ticker` to guarantee per-ticker
+  // coverage regardless of run distribution.
+  const thesesRows = await selectThesesWithStructural(THESIS_FIELDS_BASE, 1000);
 
   const thesesMap: Record<string, ThesisRun> = {};
-  // Dynamic select string -> supabase-js can't infer the row shape; cast once.
-  for (const t of (thesesRows || []) as unknown as ThesisRun[]) {
+  for (const t of thesesRows) {
     if (!thesesMap[t.ticker]) {
       // First (most recent) row per ticker, since query is ordered DESC
       thesesMap[t.ticker] = t;
@@ -409,20 +476,17 @@ export async function loadStocksForModel(): Promise<any[]> {
     return [];
   }
 
-  // Enrich with latest thesis row per ticker (v2: anchor for the model page)
+  // Enrich with latest thesis row per ticker (v2: anchor for the model page).
+  // Structural-axis columns ride along (with pre-migration fallback) so the
+  // model page can render the same dual strategic/trade verdict as the dashboard.
   const THESIS_FIELDS_M = [
     "ticker","run_at","prompt_version",
     "thesis_target","breakout_price","risk_adj_target",
     "conviction","position_size_pct","buy_below","trim_above",
-  ].join(",");
-  const { data: thesesRowsM } = await supabase
-    .from("theses")
-    .select(THESIS_FIELDS_M)
-    .order("run_at", { ascending: false })
-    .limit(1000);
+  ];
+  const thesesRowsM = await selectThesesWithStructural(THESIS_FIELDS_M, 1000);
   const thesesMapM: Record<string, ThesisRun> = {};
-  // Dynamic select string -> supabase-js can't infer the row shape; cast once.
-  for (const t of (thesesRowsM || []) as unknown as ThesisRun[]) {
+  for (const t of thesesRowsM) {
     if (!thesesMapM[t.ticker]) thesesMapM[t.ticker] = t;
   }
 

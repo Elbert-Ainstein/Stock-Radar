@@ -510,7 +510,8 @@ export default function Dashboard({ stocks, meta }: { stocks: Stock[]; meta: { g
             overflowX: "auto",
             marginBottom: 16,
           }}>
-            <div style={{ minWidth: 1208 }}>
+            {/* min-width = SR_GRID column sum (1240) + header padding */}
+            <div style={{ minWidth: 1244 }}>
               <SRWatchlistHeader />
               {sorted.map((stock, idx) => (
                 <StockRow

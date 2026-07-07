@@ -1,3 +1,5 @@
+import type { KillGateOverride, ModelDBracket } from "@/lib/data";
+
 export type ForecastPeriod = {
   period: string;
   revenue: number;
@@ -136,6 +138,14 @@ export type ThesisData = {
   top_risks?: ThesisItem[];
   top_catalysts?: ThesisItem[];
   kill_triggers?: string[];
+  // Structural axis (dual-system Step 1). Absent on rows written before the
+  // 2026-07-02 migrations applied; /api/thesis/[ticker] selects * so these
+  // flow through as soon as the columns exist.
+  strategic_conviction?: string | null;
+  risk_adj_ev_ratio?: number | null;
+  thesis_horizon_years?: number | null;
+  kill_gate_override?: KillGateOverride | null;
+  model_d_bracket?: ModelDBracket | null;
 };
 
 export type Tab = "thesis" | "setup" | "risks" | "floor" | "income" | "cashflow" | "formulas" | "whatif";
