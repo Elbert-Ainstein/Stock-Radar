@@ -83,17 +83,27 @@ def fetch_quote(ticker: str) -> dict | None:
 
 
 def get_watchlist_tickers() -> list[str]:
-    """Read the active watchlist tickers from Supabase (discovery_universe rows
-    with status='watchlisted'). Falls back to local watchlist.json if Supabase
-    is unavailable."""
-    from supabase_helper import get_client
-    sb = get_client()
+    """Read the active watchlist tickers from the `stocks` table — the source
+    of truth per CLAUDE.md. Falls back to local watchlist.json if Supabase is
+    unavailable OR returns nothing.
+
+    2026-07-08 fix: this previously read `discovery_universe` rows with
+    status='watchlisted' — the DORMANT discovery table (stale since 2026-05),
+    not the actual watchlist — and the watchlist.json fallback only fired on
+    exception, never on an empty result. The scheduled 5-minute price refresh
+    was polling the wrong universe.
+    """
     try:
-        r = sb.table("discovery_universe").select("ticker").eq("status", "watchlisted").execute()
-        return [row["ticker"] for row in (r.data or [])]
+        from supabase_helper import get_client
+        sb = get_client()
+        r = sb.table("stocks").select("ticker").eq("active", True).execute()
+        tickers = [row["ticker"] for row in (r.data or []) if row.get("ticker")]
+        if tickers:
+            return tickers
     except Exception:
-        from utils import get_watchlist
-        return [s["ticker"] for s in get_watchlist()]
+        pass
+    from utils import get_watchlist
+    return [s["ticker"] for s in get_watchlist()]
 
 
 def update_price(sb, ticker: str, quote: dict, dry_run: bool = False) -> bool:

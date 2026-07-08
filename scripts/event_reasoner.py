@@ -31,6 +31,7 @@ import re
 import json
 import math
 import hashlib
+import sys
 import requests
 from datetime import datetime, timezone
 from event_templates import EVENT_TEMPLATES, EventTemplate, get_template

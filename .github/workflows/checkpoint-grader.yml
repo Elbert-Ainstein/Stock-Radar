@@ -1,0 +1,38 @@
+name: checkpoint-grader
+
+# The cron grader (scripts/run_checkpoint.py) — grades ripened Socratic seals
+# at T+30/60/90 and writes prediction_outcomes. CLAUDE.md has described this
+# as "the cron grader" since June, but no schedule actually ran it anywhere
+# (the host crontab references a different machine) — first T+30 grades were
+# ripening ungraded. Daily is plenty: ripeness is date-granular.
+#
+# The grader is source-filtered (genuine Socratic seals only, quarantine
+# respected) and append-only; a re-run on already-graded rows is a no-op.
+on:
+  schedule:
+    - cron: "30 7 * * *"   # daily 07:30 UTC, after any overnight seals settle
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (show what would grade, write nothing)"
+        type: boolean
+        default: false
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Grade ripened seals
+        run: |
+          python scripts/run_checkpoint.py ${{ inputs.dry_run == true && '--dry-run' || '' }}
