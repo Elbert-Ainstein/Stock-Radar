@@ -8,6 +8,7 @@ __pycache__/
 *.tsbuildinfo
 *.backup-*
 data/*
+!data/hypotheses/
 !data/operator_notes/
 !data/baselines/
 !data/change_cycles/

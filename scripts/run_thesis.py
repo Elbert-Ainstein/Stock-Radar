@@ -840,6 +840,22 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     memory_section = format_prior_context(memory_md) if memory_md else ""
     if memory_md:
         print(f"  memory: {len(memory_md)} chars (prior runs detected)", flush=True)
+    # L7 (2026-07-08): operator hypotheses front door. Active hypotheses that
+    # name this ticker ride into the prompt at the same prior-context slot
+    # (thesis_v3.md untouched; empty folder = byte-identical prompt). Guarded:
+    # a malformed hypothesis file must never fail a thesis run.
+    try:
+        from hypotheses import load_hypotheses, active_for_ticker, format_hypotheses_block
+        _hyps = load_hypotheses()
+        _active = active_for_ticker(ticker, _hyps)
+        _hyp_block = format_hypotheses_block(ticker, _hyps)
+        if _hyp_block:
+            memory_section = (memory_section or "") + "\n" + _hyp_block
+            print(f"  [hypotheses] injected {len(_active)} active "
+                  f"hypothesis(es) for {ticker}: "
+                  f"{', '.join(h['name'] for h in _active)}", flush=True)
+    except Exception as e:
+        print(f"  [hypotheses] WARN: skipped — {e}", file=sys.stderr, flush=True)
 
     # Build scout-verified financials block from Module 1 fetch (already passed
     # the recent-quarter sanity check). Inject at the [VERIFIED_FINANCIALS]

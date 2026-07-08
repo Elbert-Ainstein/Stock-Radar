@@ -159,17 +159,48 @@ def main():
     sb = get_client()
 
     summary = {"updated": 0, "no_quote": 0, "no_row": 0, "skipped": 0}
+    quotes: dict[str, float] = {}
     for t in tickers:
         quote = fetch_quote(t)
         if quote is None:
             print(f"  [{t}] no quote available", file=sys.stderr)
             summary["no_quote"] += 1
             continue
+        quotes[t] = quote["price"]
         ok = update_price(sb, t, quote, dry_run=args.dry_run)
         if ok:
             summary["updated"] += 1
         else:
             summary["no_row"] += 1
+
+    # L2/L5: STALK trigger alerts — compare stored triggers against the
+    # quotes just fetched (plus a quote for any STALK name not on the
+    # watchlist), surface breaches LOUDLY and stamp trigger_breached_at.
+    # Guarded: pre-migration DBs (no stance column) just skip.
+    try:
+        from discovery_screens import check_trigger_breach
+        res = (sb.table("discovery_universe")
+               .select("ticker,trigger_price,trigger_breached_at")
+               .eq("stance", "STALK").execute())
+        stalks = [r for r in (res.data or []) if r.get("trigger_price")]
+        for r in stalks:
+            t = r["ticker"]
+            if t not in quotes:
+                q = fetch_quote(t)
+                if q:
+                    quotes[t] = q["price"]
+        for b in check_trigger_breach(stalks, quotes):
+            already = next((r.get("trigger_breached_at") for r in stalks
+                            if r["ticker"] == b["ticker"]), None)
+            print(f"  *** STALK TRIGGER {'still ' if already else ''}BREACHED: "
+                  f"{b['ticker']} at ${b['price']:.2f} <= trigger ${b['trigger_price']:.2f} ***",
+                  flush=True)
+            if not args.dry_run and not already:
+                sb.table("discovery_universe").update(
+                    {"trigger_breached_at": datetime.now(timezone.utc).isoformat()}
+                ).eq("ticker", b["ticker"]).execute()
+    except Exception as e:
+        print(f"  [stalk] trigger check skipped ({e})", file=sys.stderr)
 
     print(f"\n  result: {summary}")
 
