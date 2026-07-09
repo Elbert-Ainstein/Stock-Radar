@@ -68,6 +68,13 @@ _EDGAR_UNAVAILABLE_MARKER = "EDGAR cross-check unavailable"
 # S3: "zero or negative coverage" — at or below this many covering analysts.
 S3_MAX_COVERAGE = 2
 
+# EODHD fundamentals filter that carries analyst rating counts — the sum of
+# the five buckets is the covering-analyst proxy (probed live 2026-07-09:
+# SNDK 12, LITE 16, RKLB 15). CAVEAT: this is CURRENT coverage — fine for
+# live discovery; historical (PIT) coverage has no source here.
+EODHD_FUNDAMENTALS_URL = "https://eodhd.com/api/fundamentals"
+_RATING_BUCKETS = ("StrongBuy", "Buy", "Hold", "Sell", "StrongSell")
+
 
 # ─── Screens (pure) ──────────────────────────────────────────────────
 
@@ -134,6 +141,41 @@ def screen_s3(adds: list[dict], analyst_coverage: Optional[int]) -> Optional[dic
             for a in adds[:6]
         ],
     }
+
+
+def coverage_from_ratings(ratings) -> Optional[int]:
+    """Covering-analyst proxy from an EODHD AnalystRatings payload
+    ({Rating, TargetPrice, StrongBuy, Buy, Hold, Sell, StrongSell}).
+    None when the payload is missing/empty — unknown coverage is NOT zero
+    coverage (S3's conservative no-pass)."""
+    if not isinstance(ratings, dict):
+        return None
+    counts = [_as_num(ratings.get(k)) for k in _RATING_BUCKETS]
+    if all(c is None for c in counts):
+        return None
+    return int(sum(c or 0 for c in counts))
+
+
+def fetch_analyst_coverage_eodhd(ticker: str, api_key: Optional[str] = None) -> Optional[int]:
+    """Live analyst-coverage count via EODHD fundamentals (filter=AnalystRatings).
+    Failures return None and are STATED — S3 then no-passes conservatively."""
+    key = (api_key or os.environ.get("EODHD_API_KEY", "")).strip()
+    if not key:
+        print("  [S3] EODHD_API_KEY not set — coverage unknown", file=sys.stderr)
+        return None
+    import requests
+    symbol = ticker.upper() if "." in ticker else f"{ticker.upper()}.US"
+    try:
+        r = requests.get(f"{EODHD_FUNDAMENTALS_URL}/{symbol}",
+                         params={"api_token": key, "fmt": "json",
+                                 "filter": "AnalystRatings"},
+                         timeout=20)
+        r.raise_for_status()
+        return coverage_from_ratings(r.json())
+    except Exception as e:
+        print(f"  [S3] EODHD coverage fetch failed ({e}) — coverage unknown",
+              file=sys.stderr)
+        return None
 
 
 def derive_trigger_price(*, thesis_row: Optional[dict] = None,
@@ -275,14 +317,19 @@ def run_screens(ticker: str, *, operator_trigger: Optional[float] = None,
     from supabase_helper import get_client
     sb = get_client()
 
-    # S3 coverage: NO live analyst-coverage source is wired yet — the operator
-    # supplies it (--coverage). Stated, not silent (L4): 13F adds without a
-    # coverage number cannot pass.
+    # S3 coverage: operator --coverage overrides; otherwise fetched live from
+    # EODHD analyst-rating counts (owner decision 2026-07-09: automate via
+    # EODHD). Unknown coverage still never passes.
     adds = _s3_adds_from_universe(sb, ticker)
-    s3 = screen_s3(adds, operator_coverage)
-    if adds and operator_coverage is None:
-        print(f"  [S3] {len(adds)} 13F add(s) found but no coverage source is "
-              f"wired — pass --coverage N to evaluate S3", flush=True)
+    coverage = operator_coverage
+    coverage_source = "operator"
+    if coverage is None:
+        coverage = fetch_analyst_coverage_eodhd(ticker)
+        coverage_source = "eodhd" if coverage is not None else "unavailable"
+    if adds:
+        print(f"  [S3] coverage={coverage} ({coverage_source}) for {len(adds)} 13F add(s)",
+              flush=True)
+    s3 = screen_s3(adds, coverage)
 
     screens = [s for s in (s1, s3) if s]
     for s in (("S1", s1), ("S3", s3)):

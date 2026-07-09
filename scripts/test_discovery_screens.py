@@ -82,6 +82,25 @@ def test_s3_no_adds_no_pass():
     assert ds.screen_s3([], analyst_coverage=0) is None
 
 
+def test_coverage_from_eodhd_ratings_shape():
+    # Live-probed payload shape (2026-07-09): sum of the five buckets.
+    assert ds.coverage_from_ratings(
+        {"Rating": 3.83, "TargetPrice": 1975.95,
+         "StrongBuy": 5, "Buy": 1, "Hold": 5, "Sell": 1, "StrongSell": 0}) == 12
+    assert ds.coverage_from_ratings({"StrongBuy": 0, "Buy": 0, "Hold": 0,
+                                     "Sell": 0, "StrongSell": 0}) == 0
+    # Missing/empty payloads are UNKNOWN coverage, never zero.
+    assert ds.coverage_from_ratings({}) is None
+    assert ds.coverage_from_ratings(None) is None
+    assert ds.coverage_from_ratings({"Rating": 4.0}) is None
+    assert ds.coverage_from_ratings([1, 2]) is None
+
+
+def test_coverage_fetch_without_key_is_stated_none(monkeypatch):
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    assert ds.fetch_analyst_coverage_eodhd("SNDK") is None
+
+
 # ─── trigger derivation ──────────────────────────────────────────────
 
 def test_operator_trigger_wins():

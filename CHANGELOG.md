@@ -2,6 +2,14 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-07-09] S3 coverage automated via EODHD; STALK verified live; target-formation evidence gathered
+
+Owner judgments of 2026-07-09 executed: #4 migration applied (verified), #5 "make it EODHD, automation first".
+
+- **S3 analyst coverage is now automatic** (`discovery_screens.py`). EODHD fundamentals `filter=AnalystRatings` returns `{Rating, TargetPrice, StrongBuy…StrongSell}`; the sum of the five buckets is the covering-analyst proxy (probed live: SNDK 12, LITE 16, RKLB 15). Operator `--coverage` still overrides; missing key/payload = unknown = never passes, stated. CAVEAT recorded: this is CURRENT coverage — fine for live discovery, no PIT source for backtests. Options considered: EODHD (chosen — already paid, one filtered call), FMP/Finnhub (new key, deferred).
+- **STALK leg verified live post-migration:** all 5 columns probed EXISTS; a real (non-dry-run) SNDK emission persisted `stance=STALK, trigger=$1154.74` on `discovery_universe` and sealed `stalk-sndk-20260709T160209` into `prediction_log` with evidence intact in `context_inputs`.
+- **Target-formation evidence (owner question "what would be the cure?"), from the 26 baseline backtest verdicts:** (1) the binding constraint is the THESIS TARGET itself, not the risk haircut — median thesis-target upside +3.7%; in 18/20 sub-0.95 refusals the thesis target alone could not clear even 1.25× (PLTR's sat 39–70% BELOW spot through a year it doubled — mean-reversion anchoring on a momentum compounder); (2) Step-9 risk enumeration is magnitude-heavy — median risk EV −33.1% of spot vs catalyst EV +16.5% at similar probability mass (0.77 vs 0.72), against realized median +2.3% fwd90; (3) the haircut itself carries weak-but-right rank signal (deep-haircut names +2.3% vs shallow +11.9%). **Repeat campaign (24 samples = 8 post-cutoff cells × 3 reps, ~$28, `repeat_2026` arm):** five-filter bits agree ≥4/5 in **92% of run-pairs** (mean 4.17/5 — today's outputs already MEET the L3 acceptance bar) and strategic conviction is **96%** stable, while trade conviction is only 79% modal (4/8 cells unanimous) with `risk_adj_ev_ratio` swinging median Δ0.34 / max Δ0.49 between IDENTICAL runs (RKLB@2026-02-15: 0.32–0.82). Conclusion for the cure: the stable layer (bits, strategic) is worth formalizing (L3); the noise concentrates in risk_adj_target formation — mode-of-N consensus on the thesis path (the `consensus.py` pattern, no prompt change) plus base-rate discipline on Step-9 risk magnitudes (batch with L3+L5) are the evidence-backed levers. Raw rows in `data/backtests/repeat_2026/` (gitignored).
+
 ## [2026-07-08] Lessons L7 + L2 (first slice) — hypothesis front door; S1+S3 screens → STALK
 
 Second batch of the day. L5+L3 remain owner-gated (bit definitions review), so the next unblocked build-table items were L7 (small, "anytime") and L2's designed first slice.
