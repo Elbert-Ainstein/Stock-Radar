@@ -1,0 +1,40 @@
+# Auto-apply pending Supabase migrations on merge (2026-07-02).
+# Removes the recurring "run this SQL in the editor" manual step: any change
+# to supabase/PENDING.sql on main is applied automatically (the file is
+# idempotent by contract — IF NOT EXISTS only).
+#
+# Inert until the SUPABASE_DB_URL secret exists (the Postgres connection
+# string — Supabase dashboard -> Settings -> Database -> Connection string,
+# use the SESSION POOLER host, which works over IPv4). Without the secret the
+# job prints a notice and exits green, so merges are never blocked.
+name: Apply Migrations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/PENDING.sql"
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply PENDING.sql
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::warning::SUPABASE_DB_URL secret not set — migrations NOT applied." \
+                 " Paste supabase/PENDING.sql into the SQL editor, or add the secret" \
+                 " (Settings -> Secrets -> Actions) to automate this permanently."
+            exit 0
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          psql "$DB_URL" \
+            --set ON_ERROR_STOP=1 \
+            --file supabase/PENDING.sql \
+            --echo-errors
+          echo "Migrations applied; verification query output above."
