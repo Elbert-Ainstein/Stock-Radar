@@ -37,8 +37,12 @@ def test_horizon_to_clear_low():
     assert horizon_to_clear_low(0.90) == pytest.approx(2.57, abs=0.02)
     # 0.55 (the LITE-shaped clamp) never clears within 10y — a tape call
     assert horizon_to_clear_low(0.55) is None
-    # already above the native edge -> clears at the default clock
-    assert horizon_to_clear_low(0.97) == DEFAULT_HORIZON_YEARS
+    # 0.97 truly clears on a SHORTER clock (~0.74y) — the old >=0.95
+    # short-circuit returned 1.25 and misrouted the diagnosis (review fix)
+    assert horizon_to_clear_low(0.97) == pytest.approx(0.74, abs=0.02)
+    # >=1x ratios clear on any clock
+    from trade_gate import MIN_HORIZON_YEARS
+    assert horizon_to_clear_low(1.05) == MIN_HORIZON_YEARS
     # garbage in, None out
     assert horizon_to_clear_low(None) is None
     assert horizon_to_clear_low(-1) is None
@@ -76,6 +80,40 @@ def test_gate_artifact_analysis_all_tape():
 def test_gate_artifact_analysis_handles_missing_ratio():
     report = gate_artifact_analysis([{"ticker": "X", "ratio": None, "conviction": "BROKEN"}])
     assert "data/parse problem" in report
+    # All-data-problem sweeps must NOT read "the clamps look honest" (review fix)
+    assert "no diagnosable entries" in report
+    assert "clamps look honest" not in report
+
+
+def test_gate_artifact_analysis_not_gate_caused():
+    """A ratio that clears the gate at its own clock cannot have been made
+    non-actionable by the ratio clamp — the diagnosis must say so instead of
+    blaming an 'upper band' (review fix 2026-07-02)."""
+    report = gate_artifact_analysis([
+        {"ticker": "PLTR", "ratio": 0.97, "horizon_years": 1.25, "conviction": "BROKEN"},
+    ])
+    assert "NOT the ratio clamp" in report
+    assert "inspect the thesis output" in report
+
+
+def test_event_reasoner_calibration_block_does_not_crash(monkeypatch):
+    """Review-confirmed bug: the log-only calibration block used sys.stderr
+    without importing sys — a NameError discarded ALL reasoned events whenever
+    ratios existed. Exercise the exact path (no API key -> fallback reasoner)."""
+    import event_reasoner as er
+    monkeypatch.setattr(er, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(
+        "calibration.get_event_calibration_ratios",
+        lambda: {"capacity_expansion": 1.8},
+        raising=False,
+    )
+    events = [{"type": "capacity_expansion", "summary": "New fab capacity announced",
+               "date": "2026-06-01"}]
+    reasoned = er.reason_events(events, {"ticker": "TEST", "sector": "semis", "thesis": "t"})
+    assert len(reasoned) == 1
+    # log-only: ratio recorded, contribution NOT scaled
+    assert reasoned[0].get("calibration_ratio") == 1.8
+    assert "pre_calibration_pct" not in reasoned[0]
 
 
 # ── L5: signpost linter + templates ─────────────────────────────────────────────
