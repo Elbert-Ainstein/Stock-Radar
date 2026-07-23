@@ -12,11 +12,16 @@
 --   * The whole file is always safe to re-run.
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- L1 (2026-07-02): the clock each verdict was judged on. (Also archived as
+-- 2026-07-02_theses_horizon.sql — included here because this file is the
+-- completeness contract; IF NOT EXISTS makes re-runs free.)
+ALTER TABLE theses ADD COLUMN IF NOT EXISTS thesis_horizon_years numeric;
+
 -- L4 (2026-07-02): parameter block each thesis verdict ran under.
 ALTER TABLE theses ADD COLUMN IF NOT EXISTS run_parameters jsonb;
 
 -- ── Verification (safe to run any time) ─────────────────────────────────────
 SELECT column_name FROM information_schema.columns
 WHERE table_name = 'theses'
-  AND column_name IN ('run_parameters')
+  AND column_name IN ('thesis_horizon_years', 'run_parameters')
 ORDER BY column_name;

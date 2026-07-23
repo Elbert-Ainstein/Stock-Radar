@@ -211,7 +211,7 @@ export interface StockData {
   autoTiers: any[];
   eventImpacts?: EventImpactsPayload;
   killConditionEval?: {
-    status: "safe" | "warning" | "triggered";
+    status: "safe" | "warning" | "triggered" | "unknown"; // "unknown" = evaluator failed closed (2026-07-02)
     confidence: number;
     reasoning: string;
     evidence: string[];
