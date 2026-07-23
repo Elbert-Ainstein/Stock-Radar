@@ -48,16 +48,29 @@ CLAMP_TABLE = (
 
 
 def horizon_adjusted_table(horizon_years: float) -> tuple:
-    """Scale the clamp-table ratio thresholds to a thesis horizon.
+    """Scale the clamp-table ratio thresholds to a thesis horizon —
+    CONSERVATIVE-ONLY until the thesis prompt is horizon-aware.
 
     A threshold t (a total-return ratio over the DEFAULT horizon) represents
     the annualized bar t^(1/1.25); the equivalent total-return threshold over
     h years is t^(h/1.25). At h == DEFAULT_HORIZON_YEARS this is the identity,
     so the default path is byte-identical to the original table.
+
+    2026-07-02 review finding (confirmed): thesis_v3.md Step 6 still pins
+    risk_adj_target to a 12-18-MONTH target date, so the ratio's numerator is
+    NOT yet on the configured clock. Two-sided scaling would therefore loosen
+    the BROKEN edge against a mismatched number (a 15-month EV 8% below spot
+    escaping the kill band because the gate pretends the clock is 3y). Until
+    the prompt carries the horizon (L3 prompt batch), every scaled threshold
+    is floored at its native value — a configured clock can only make the
+    gate STRICTER, never looser. Full two-sided honesty unlocks with the
+    prompt change; see docs/design/HORIZON_DISCOVERY_TYPEA_2026-07-02.md L1.
     """
     exp = horizon_years / DEFAULT_HORIZON_YEARS
     return tuple(
-        (lower if lower == float("-inf") else round(lower ** exp, 6), conv, pos)
+        (lower if lower == float("-inf")
+         else max(round(lower ** exp, 6), lower),  # conservative-only
+         conv, pos)
         for lower, conv, pos in CLAMP_TABLE
     )
 
@@ -90,10 +103,14 @@ def enforce_trade_gate(parsed: dict, spot,
     """Recompute the ratio and clamp the trade verdict downward per the table,
     judged on the thesis's OWN clock (lesson L1, 2026-07-02).
 
-    Horizon precedence: parsed["thesis_horizon_years"] > the horizon_years arg
-    > DEFAULT_HORIZON_YEARS. Out-of-bounds horizons fall back to the default
-    and are flagged in the enforcement record — the gate never has an
-    invisible opinion about time.
+    Horizon precedence (2026-07-02 review fix — the original order let the
+    MODEL choose its own clock): the horizon_years ARG (operator config) wins;
+    a parsed["thesis_horizon_years"] field is honored only when no operator
+    horizon was supplied (re-enforcement of an already-gated row). A
+    model-emitted horizon that conflicts with the config is IGNORED and
+    flagged. Out-of-bounds horizons fall back to the default, flagged. The
+    enforcement record carries horizon_source — the gate never has an
+    invisible opinion about time, including where the time came from.
 
     Returns (new_parsed, enforcement) — enforcement is None when nothing was
     recomputed or clamped, else a dict describing exactly what changed:
@@ -103,14 +120,22 @@ def enforce_trade_gate(parsed: dict, spot,
     """
     out = dict(parsed or {})
 
-    h = _as_float(out.get("thesis_horizon_years"))
-    if h is None:
-        h = _as_float(horizon_years)
+    operator_h = _as_float(horizon_years)
+    parsed_h = _as_float(out.get("thesis_horizon_years"))
+    model_horizon_ignored = None
+    if operator_h is not None:
+        h, horizon_source = operator_h, "config"
+        if parsed_h is not None and abs(parsed_h - operator_h) > 1e-9:
+            # The model emitted its own clock; the hard gate does not take
+            # timing instructions from the thing it exists to constrain.
+            model_horizon_ignored = parsed_h
+    elif parsed_h is not None:
+        h, horizon_source = parsed_h, "row"  # re-enforcing an already-gated row
+    else:
+        h, horizon_source = DEFAULT_HORIZON_YEARS, "default"
     horizon_fallback = False
-    if h is None:
-        h = DEFAULT_HORIZON_YEARS
-    elif not (MIN_HORIZON_YEARS <= h <= MAX_HORIZON_YEARS):
-        h, horizon_fallback = DEFAULT_HORIZON_YEARS, True
+    if not (MIN_HORIZON_YEARS <= h <= MAX_HORIZON_YEARS):
+        h, horizon_fallback, horizon_source = DEFAULT_HORIZON_YEARS, True, "default"
     out["thesis_horizon_years"] = h  # every verdict states its clock
 
     emitted = _as_float(out.get("risk_adj_ev_ratio"))
@@ -158,7 +183,8 @@ def enforce_trade_gate(parsed: dict, spot,
     significant_discrepancy = (
         discrepancy is not None and discrepancy > RATIO_DISCREPANCY_TOLERANCE
     )
-    if not clamped and recomputed is None and not significant_discrepancy:
+    if (not clamped and recomputed is None and not significant_discrepancy
+            and model_horizon_ignored is None):
         return out, None
 
     enforcement = {
@@ -167,6 +193,8 @@ def enforce_trade_gate(parsed: dict, spot,
         "ratio_used": ratio_used,
         "ratio_discrepancy": discrepancy if significant_discrepancy else None,
         "horizon_years": h,
+        "horizon_source": horizon_source,
+        "model_horizon_ignored": model_horizon_ignored,
         "horizon_fallback": horizon_fallback,
         "annualized_return": (round(ratio_used ** (1.0 / h) - 1.0, 4)
                               if ratio_used > 0 else None),
@@ -193,15 +221,22 @@ def is_actionable(conviction) -> bool:
 
 def horizon_to_clear_low(ratio) -> float | None:
     """Shortest thesis horizon (years) at which `ratio` escapes the BROKEN
-    band on the annualized-equivalent table, or None if no clock within
-    MAX_HORIZON_YEARS clears it. Solves 0.95^(h/1.25) <= ratio."""
+    band under TWO-SIDED annualized scaling (0.95^(h/1.25) <= ratio), or None
+    if no clock within MAX_HORIZON_YEARS clears it.
+
+    Diagnostic only: the live gate scales conservative-only until the thesis
+    prompt is horizon-aware, so this answers "is the clamp a clock artifact
+    in principle?", not "what would today's gate do?" (2026-07-02 review fix:
+    the old >=0.95 short-circuit returned the default clock for ratios that
+    truly clear on SHORTER clocks, misrouting gate_artifact_analysis.)"""
     import math
     r = _as_float(ratio)
     if r is None or r <= 0:
         return None
-    if r >= LOW_ESCAPE_THRESHOLD:
-        return DEFAULT_HORIZON_YEARS
+    if r >= 1.0:
+        return MIN_HORIZON_YEARS  # any clock clears a >=1x ratio
     h = DEFAULT_HORIZON_YEARS * math.log(r) / math.log(LOW_ESCAPE_THRESHOLD)
+    h = max(h, MIN_HORIZON_YEARS)
     return round(h, 2) if h <= MAX_HORIZON_YEARS else None
 
 
@@ -214,12 +249,13 @@ def gate_artifact_analysis(entries: list[dict]) -> str:
     a multi-line report for the run log.
     """
     lines = ["[gate-artifact] ZERO ACTIONABLE VERDICTS — diagnosing tape vs ruler:"]
-    ruler_suspects, tape_calls = 0, 0
+    ruler_suspects, tape_calls, not_gate, data_problems = 0, 0, 0, 0
     for e in sorted(entries, key=lambda x: str(x.get("ticker", ""))):
         ticker = e.get("ticker", "?")
         r = _as_float(e.get("ratio"))
         h = _as_float(e.get("horizon_years")) or DEFAULT_HORIZON_YEARS
         if r is None or r <= 0:
+            data_problems += 1
             lines.append(f"  {ticker}: no usable ratio — data/parse problem, not a market read")
             continue
         ann = r ** (1.0 / h) - 1.0
@@ -228,23 +264,35 @@ def gate_artifact_analysis(entries: list[dict]) -> str:
             tape_calls += 1
             verdict = "no clock within 10y clears this — the tape is expensive on this name"
         elif clears_at <= h:
-            verdict = ("clears the BROKEN band at its own clock — clamped by an upper "
-                       "band (conviction/position), not killed")
+            # The ratio clears the BROKEN band at its own clock, so THIS gate
+            # did not produce the non-actionable verdict (2026-07-02 review
+            # fix: the old wording blamed an 'upper band', which cannot make
+            # a verdict non-actionable — the cause is upstream).
+            not_gate += 1
+            verdict = ("ratio clears the gate at its own clock — the non-actionable "
+                       "verdict came from the model/kill path or a missing conviction "
+                       "field, NOT the ratio clamp; inspect the thesis output")
         else:
             ruler_suspects += 1
-            verdict = (f"would escape BROKEN on a >= {clears_at}y clock — RULER SUSPECT "
-                       f"(is {h}y the right horizon for this thesis?)")
+            verdict = (f"would escape BROKEN on a >= {clears_at}y clock once the thesis "
+                       f"prompt is horizon-aware — RULER SUSPECT (is {h}y right for this thesis?)")
         lines.append(f"  {ticker}: ratio {r} @ {h}y ({ann:+.1%}/yr) — {verdict}")
-    n = ruler_suspects + tape_calls
-    if ruler_suspects and ruler_suspects >= tape_calls:
+    diagnosed = ruler_suspects + tape_calls + not_gate
+    if diagnosed == 0:
         lines.append(
-            f"[gate-artifact] SUMMARY: {ruler_suspects}/{n or len(entries)} names are ruler-suspect — "
-            "review config/thesis_horizons.json before concluding the market is expensive."
+            f"[gate-artifact] SUMMARY: no diagnosable entries ({data_problems} data/parse "
+            "problem(s)) — this sweep failed upstream of the gate; fix data before reading the market."
+        )
+    elif ruler_suspects and ruler_suspects >= tape_calls:
+        lines.append(
+            f"[gate-artifact] SUMMARY: {ruler_suspects}/{diagnosed} diagnosed names are ruler-suspect — "
+            "review config/thesis_horizons.json (and the prompt-clock work) before concluding the market is expensive."
         )
     else:
         lines.append(
             f"[gate-artifact] SUMMARY: predominantly a tape call ({tape_calls} expensive vs "
-            f"{ruler_suspects} ruler-suspect) — the clamps look honest; consider discovery mode (STALK), not force-buying."
+            f"{ruler_suspects} ruler-suspect, {not_gate} not-gate-caused) — the clamps look honest; "
+            "consider discovery mode (STALK), not force-buying."
         )
     return "\n".join(lines)
 
@@ -270,9 +318,12 @@ def format_enforcement(enforcement: dict) -> str:
     h = enforcement.get("horizon_years")
     if h is not None:
         ann = enforcement.get("annualized_return")
-        clock = f"judged on {h}y clock"
+        clock = f"judged on {h}y clock ({enforcement.get('horizon_source', '?')})"
         if ann is not None:
             clock += f" ({ann:+.1%}/yr annualized)"
+        if enforcement.get("model_horizon_ignored") is not None:
+            clock += (f" [MODEL-EMITTED horizon {enforcement['model_horizon_ignored']}y "
+                      f"IGNORED — the gate does not take timing from the model]")
         if enforcement.get("horizon_fallback"):
             clock += " [configured horizon out of bounds — default used]"
         parts.append(clock)
