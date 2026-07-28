@@ -15,12 +15,16 @@ FORBIDDEN = re.compile(
 
 
 def test_no_broker_surface_in_code():
+    """Root-wide scan (review fix: engine/+passes/ only let future top-level
+    packages escape the tripwire). Everything except tests/ is covered."""
     offenders = []
-    for folder in ("engine", "passes"):
-        for py in (PKG / folder).rglob("*.py"):
-            for i, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1):
-                if FORBIDDEN.search(line):
-                    offenders.append(f"{py.name}:{i}: {line.strip()[:80]}")
+    for py in PKG.rglob("*.py"):
+        rel = py.relative_to(PKG)
+        if rel.parts[0] in ("tests", ".pytest_cache", "__pycache__"):
+            continue
+        for i, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1):
+            if FORBIDDEN.search(line):
+                offenders.append(f"{rel}:{i}: {line.strip()[:80]}")
     assert not offenders, f"law 1 violation — broker surface found: {offenders}"
 
 
