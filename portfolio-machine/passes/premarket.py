@@ -42,6 +42,7 @@ from engine.fetch import (append_rows, cross_check, fetch_settled_stooq,
                           fetch_settled_yfinance)
 from engine.market_calendar import exchange_today, is_trading_day
 from engine.paths import ROOT, config_dir
+from engine.report import render_brief, upcoming_catalysts
 from engine.rules import (adjudicate, anti_parabola, euphoria_checks,
                           load_tripwires, load_wire_state, effective_status)
 from engine.valuation import FX_TICKERS, value_book
@@ -95,11 +96,13 @@ def validate_catalysts(root: Path = ROOT) -> list[str]:
 def run(offline: bool = False, root: Path = ROOT) -> int:
     logmod.append("pass_start", root=root, pass_name="premarket", offline=offline)
     degraded = False
+    brief_warnings: list[str] = []
 
     # 1 · Catalyst config check (makes the config's claim true).
     for w in validate_catalysts(root):
         print(f"[premarket] catalysts WARNING: {w}", file=sys.stderr)
         logmod.append("catalyst_config_warning", root=root, warning=w)
+        brief_warnings.append(f"catalysts.yaml: {w}")
 
     universe = fetch_universe(root)
 
@@ -122,6 +125,8 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
                       f"(config/market_calendar.yaml gap).", file=sys.stderr)
                 logmod.append("calendar_unknown", root=root, ticker=ticker,
                               date=str(ex_today))
+                brief_warnings.append(f"{ticker}: calendar unknown for {ex_today} "
+                                      f"— verify the session by hand")
             try:
                 primary = fetch_settled_yfinance(ticker, root=root)
                 secondary, sec_status = fetch_settled_stooq(ticker, root=root)
@@ -132,6 +137,7 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
                           f"rows are SINGLE-SOURCE this run", file=sys.stderr)
                     logmod.append("secondary_source_failed", root=root,
                                   ticker=ticker, status=sec_status)
+                    brief_warnings.append(f"{ticker}: secondary source {sec_status} — single-source rows")
                 checked = cross_check(primary, secondary)
                 single_source_rows += sum(
                     1 for r in checked if r.settled and "single-source" in r.note)
@@ -146,6 +152,7 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
                 fetch_failures.add(ticker)
                 print(f"[premarket] {ticker}: fetch FAILED — {e}", file=sys.stderr)
                 logmod.append("fetch_failed", root=root, ticker=ticker, error=str(e))
+                brief_warnings.append(f"{ticker}: fetch FAILED — {e}")
         if single_source_rows:
             print(f"[premarket] NOTE: {single_source_rows} settled row(s) are "
                   f"single-source (no cross-check) this run")
@@ -168,10 +175,12 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
             degraded = True
 
     # 4 · Charter §V monitors.
-    for f in euphoria_checks(root=root):
+    euphoria_fired = euphoria_checks(root=root)
+    for f in euphoria_fired:
         print(f"[premarket] EUPHORIA: {f['ticker']} at {f['multiple']}x cost — "
               f"consult opened: {f['consult']}")
-    for f in anti_parabola(root=root):
+    parabola_flags = anti_parabola(root=root)
+    for f in parabola_flags:
         print(f"[premarket] anti-parabola: {f['ticker']} +{f['gain']:.0%} "
               f"(vs {f['from_date']}) — {f['note']}")
 
@@ -185,6 +194,29 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
     fl = book["floor"]
     print(f"[premarket] floor: ${fl['amount']:,.2f} {fl['currency']} — "
           f"sacred, outside the book (Charter §V)")
+    # 6 · Render the built-in visual brief (a RENDERING of what already
+    # happened — a render failure is loud but never loses the pass's work).
+    # (upcoming_catalysts warnings overlap validate_catalysts — step 1 is
+    # already the loud path here, so only the rows are consumed.)
+    cats, _cat_warns = upcoming_catalysts(root)
+    try:
+        brief = render_brief("premarket", {
+            "degraded": degraded,
+            "verdicts": [vars(v) for v in verdicts],
+            "euphoria": euphoria_fired,
+            "parabola": parabola_flags,
+            "book": book,
+            "catalysts": cats,
+            "warnings": brief_warnings,
+        }, root=root)
+        print(f"[premarket] brief → {brief}")
+        logmod.append("brief_rendered", root=root, pass_name="premarket",
+                      path=str(brief))
+    except Exception as e:
+        print(f"[premarket] brief render FAILED — {e}", file=sys.stderr)
+        logmod.append("brief_render_failed", root=root, pass_name="premarket",
+                      error=str(e))
+
     logmod.append("pass_done", root=root, pass_name="premarket",
                   wires_fired=len(fired), book_usd=t["usd"],
                   book_incomplete=t["incomplete"], degraded=degraded,

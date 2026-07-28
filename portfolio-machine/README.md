@@ -17,6 +17,13 @@ python -m pytest tests/ -q
 # the premarket pass (fetch settled closes, cross-check, adjudicate, value)
 python passes/premarket.py            # network
 python passes/premarket.py --offline  # adjudicate what's already on file
+
+# the after-market pass (same-day snapshots, PROVISIONAL wire read, brief)
+python passes/close.py [--offline]
+
+# the built-in reports land in out/ — open in any browser
+open out/premarket.html   # morning: settled verdicts of record
+open out/close.html       # evening: PROVISIONAL — settles tomorrow
 ```
 
 ## What exists (Phase 1)
@@ -33,7 +40,9 @@ python passes/premarket.py --offline  # adjudicate what's already on file
 | Book valuation + floor | `engine/valuation.py` | declared gaps never guesses; HK FX; the $40K floor reported, never counted (§V) |
 | Grades v1.2.1 in code | `engine/grades.py`, `config/grades.yaml` | §III: 7 factors, letters, moat-answer-required-for-A, Track-Z rubric refusal; kills the off-by-one class (keyed by name) |
 | Market calendar | `engine/market_calendar.py`, `config/market_calendar.yaml` | True/False/UNKNOWN — never assume (§VI) |
-| Premarket pass | `passes/premarket.py` | orchestration, loud degradation |
+| Premarket pass | `passes/premarket.py` | orchestration, loud degradation, renders the morning brief |
+| After-market pass | `passes/close.py` | PROVISIONAL only (law 2): snapshots + "would fire" display, never acts; renders the evening brief |
+| Visual briefs | `engine/report.py`, `out/premarket.html`, `out/close.html` | the built-in report mechanism — settled banner vs PROVISIONAL banner; a rendering of the log, never a verdict engine |
 | The book as data | `config/*.yaml` | editable without code; clauses carry the doors |
 | Regressions | `tests/` | INTC/MU settlement flips · same-day/exchange-local settlement (law 2 choke points) · conflicted-latest blocks · off-by-one grades · euphoria/floor · no-trade law · provenance · calendar honesty · config integrity · premarket smoke |
 
@@ -51,8 +60,12 @@ are not. Wire adjudication logic is real regardless of seed values.
 # (9:00 ET is 14:00 UTC in winter, 13:00 UTC in summer — a fixed UTC line is
 # wrong for half the year).
 CRON_TZ=America/New_York
-0 9 * * 1-5  cd /path/to/portfolio-machine && python passes/premarket.py >> data/cron.log 2>&1
+0 9   * * 1-5  cd /path/to/portfolio-machine && python passes/premarket.py >> data/cron.log 2>&1
+45 16 * * 1-5  cd /path/to/portfolio-machine && python passes/close.py     >> data/cron.log 2>&1
 ```
+
+Each pass ends by rendering its visual brief (`out/premarket.html` /
+`out/close.html`) — the before-market and after-market reports.
 
 The pass exits 0 on clean runs (including legitimate all-exchanges-closed
 skips) and 1 on degraded runs (every fetch failed, or an armed wire was
@@ -67,7 +80,8 @@ then push that branch to a new repo — or just copy the folder and `git init`.
 
 ## Roadmap
 
-Phase 2: close pass + brief/workbook rendering + schedule ·
+Phase 2: ~~close pass + brief rendering~~ (shipped 2026-07-28 — the
+built-in premarket/after-market visual briefs) + workbook rendering + schedule ·
 Phase 3: grade sheet renderer + migrations ·
 Phase 4: Claude headless passes (news classification, Radar, consult drafts,
 grade proposals) with CONSTITUTION.md as the spine ·

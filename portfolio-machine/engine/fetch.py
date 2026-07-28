@@ -155,6 +155,18 @@ def append_rows(ticker: str, rows: list[PriceRow], root: Path = ROOT) -> int:
     return written
 
 
+def latest_snapshot(ticker: str, root: Path = ROOT) -> PriceRow | None:
+    """Latest snapshot observation (settled=False), by (date, fetched_at).
+    Informational only — law 2: a snapshot can never adjudicate anything."""
+    best: PriceRow | None = None
+    for r in load_rows(ticker, root):
+        if r.settled:
+            continue
+        if best is None or (r.date, r.fetched_at) >= (best.date, best.fetched_at):
+            best = r
+    return best
+
+
 def latest_settled(ticker: str, root: Path = ROOT) -> PriceRow | None:
     """Latest-dated settled row, taking the LAST write per date — INCLUDING
     conflict-flagged writes (2026-07-28 review fix: a later flagged row must
@@ -221,18 +233,23 @@ def fetch_settled_stooq(ticker: str, root: Path = ROOT) -> tuple[list[PriceRow],
     return mark_settled(rows, today), ("ok" if rows else "empty")
 
 
-def fetch_snapshot_yfinance(ticker: str) -> PriceRow | None:
+def fetch_snapshot_yfinance(ticker: str, root: Path = ROOT) -> PriceRow | None:
+    """Same-day snapshot. The session date comes from the PRICE BAR, not the
+    wall clock (2026-07-28 review fix: stamping exchange_today labeled an HK
+    snapshot fetched at 16:45 ET with TOMORROW's session date, and a NaN
+    fast_info price passed the falsy guard). Non-finite prices return None."""
+    import math
     import yfinance as yf
-    t = yf.Ticker(ticker)
-    price = None
+    hist = yf.Ticker(ticker).history(period="1d")
+    if hist.empty:
+        return None
+    price = float(hist["Close"].iloc[-1])
+    if not math.isfinite(price):
+        return None
+    session = hist.index[-1]
     try:
-        price = t.fast_info.last_price
+        date = session.strftime("%Y-%m-%d")
     except Exception:
-        pass
-    if not price:
-        hist = t.history(period="1d")
-        if hist.empty:
-            return None
-        price = float(hist["Close"].iloc[-1])
-    return PriceRow(ticker=ticker, date=datetime.now(timezone.utc).date().isoformat(),
-                    close=float(price), settled=False, source="yfinance-snapshot")
+        return None
+    return PriceRow(ticker=ticker, date=date, close=price,
+                    settled=False, source="yfinance-snapshot")

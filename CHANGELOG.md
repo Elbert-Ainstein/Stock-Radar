@@ -2,6 +2,14 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-07-28] Portfolio Machine: built-in before/after-market visual briefs (operator request); 20-finding review hardening
+
+Operator: "For reports, I would like the built-in mechanism to be before market and after market" (+ standing "make a visual, I hate reading"). The machine now renders a self-contained HTML brief at the end of each pass — `out/premarket.html` (settled banner, verdicts of record) and `out/close.html` via the new after-market pass `passes/close.py` (PROVISIONAL banner, law 2: snapshots display "WOULD FIRE — settles next session", never open consults, never touch wire state, never write settled rows). `engine/report.py` renders both from pass-assembled data (stdlib only, both themes, ledger style); a render failure is loud but never loses the pass's constitutional work. Cron: premarket 9:00 + close 16:45, `CRON_TZ=America/New_York`.
+
+Pre-ship adversarial review (23 agents) confirmed 20 findings (10 distinct); ALL fixed before commit: snapshot session dates now come from the price bar, not the wall clock (an HK snapshot fetched 16:45 ET was stamped TOMORROW; NaN prices passed the falsy guard); stale snapshots are dated + marked STALE in brief and warnings instead of rendering as "today's tape"; the DEGRADED banner now STACKS with the PROVISIONAL banner instead of replacing the law-2 regime marker; monitors absent from a pass render "not evaluated in this pass", never "nothing flagged"; unreadable catalysts.yaml renders "unreadable", never "none scheduled" (upcoming_catalysts returns warnings); close's degraded exit uses ATTEMPTED fetches (holiday skips no longer mask 100% failure); store-rejected snapshot rows count as fetch failures; wires/moves/book tables carry session dates + sources (law 3 provenance); `_table` escapes headers; premarket calendar-unknown reaches the brief.
+
+**Acceptance: `python -m pytest portfolio-machine/tests -q` = 60 passed (was 49), offline, <1s; law-2 pins include "close pass writes no settled row" and "degraded close brief keeps PROVISIONAL"; Stock-Radar suite unchanged (288).**
+
 ## [2026-07-28] Portfolio Machine self-review: 14 confirmed defects fixed (2 critical); suite 25 → 49 tests; Radar×Machine synthesis proposed
 
 The promised adversarial review of the Phase-1 build ran (24 agents, findings independently re-verified); every confirmed finding is fixed in this batch. **Acceptance: `python -m pytest portfolio-machine/tests -q` = 49 passed, offline, <1s; Stock-Radar suite unchanged (230 passed + the documented network-fixture exception).**
