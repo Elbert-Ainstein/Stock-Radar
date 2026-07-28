@@ -2,6 +2,17 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-07-28] The Portfolio Machine — Phase 1 built per the operator's spec + SAMLA constitution
+
+New self-contained project at `portfolio-machine/` (no imports from Stock-Radar; extractable to its own repo via `git subtree split` — it lives here because this is the session's only writable remote). Implements Phase 1 of the operator's build spec under the full SAMLA constitution (dropped in verbatim as `CONSTITUTION.md` with a machine appendix mapping code law-citations to its sections).
+
+- **Constitutional engine:** settled-vs-snapshot price store with provenance columns and two-source cross-check (conflicts flagged, never averaged; flagged rows cannot adjudicate); wire evaluator with **two-phase verdicts** (snapshot = provisional, logged only; settled = adjudicates, opens consult tickets with doors from clauses.yaml — the machine's ONLY action, it never trades); append-only JSONL log with forward-only corrections; market calendar returning True/False/**UNKNOWN** (never assumes a session); book valuation with HK FX, declared gaps, and the **$40K floor reported-never-counted**.
+- **Charter monitors (§V):** euphoria protocol — settled close ≥2× cost fires an automatic consult (TRIM/DEFEND doors, episode-idempotent); anti-parabola +100%/6mo screen (sizing law + Momentum-RISK redline, informational).
+- **Grading v1.2.1 in code (§III):** seven factors (25/20/15/15/10/10/5), 0–100 scores keyed by NAME (the off-by-one class is structurally dead), letter bands, moat-answer-required-for-A enforced, Track-Z seats refused by the C rubric, pre-registered responses schema.
+- **Config = the book as data:** holdings/tripwires/clauses/catalysts/grades/market-calendar YAMLs, schema-final; values marked `SEED_REPLACE` await the live workbook (not provided this session). Wire logic is real regardless of seed values.
+- **Regressions (25 tests, offline, <0.3s):** the INTC $91.63→$92.52 and MU $899.85→$900.20 settlement flips (provisional may never act, even above the wire); conflict-blocked adjudication; append-only/correction-forward provenance; the off-by-one grade bug (keyed vs positional); euphoria/floor; calendar UNKNOWN honesty; a no-broker-surface scan (law 1 tripwire). Wired into CI (`tests.yml` second step).
+- Premarket pass runnable now (`passes/premarket.py [--offline]`); Phases 2–5 sequenced in `BUILD_SPEC.md`. Adversarial self-review of this build is running; confirmed findings land as follow-up commits.
+
 ## [2026-07-02] Self-review of the day's work — 11 confirmed defects found and fixed; recurring chores automated away
 
 Operator directive: "reach conclusions before any runs on my end; do your verifications; use critical thinking." Ran a 17-agent adversarial review over everything shipped today (diff vs main@f0b89ef: 26 files, +1,201) — every finding independently re-verified before fixing. Suite **227 → 230 passing**; `tsc --noEmit` clean.
