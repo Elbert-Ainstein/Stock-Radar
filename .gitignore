@@ -2,7 +2,7 @@ node_modules
 .next
 .env
 .env.local
-out
+/out
 __pycache__/
 *.pyc
 *.tsbuildinfo

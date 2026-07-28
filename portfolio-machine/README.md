@@ -26,6 +26,7 @@ python passes/premarket.py --offline  # adjudicate what's already on file
 | Append-only log | `engine/log.py`, `data/log.jsonl` | real clocks, corrections forward (§VI) |
 | Price store + fetcher | `engine/fetch.py`, `data/prices/*.csv` | settled vs snapshot, provenance, two-source flag-never-average (§VI) |
 | Wire evaluator | `engine/rules.py` | consults-never-orders (§V Rule 5), settled-only adjudication, conflict rows blocked |
+| Wire state | `data/wire_state.yaml` | machine-written status/history; `config/tripwires.yaml` stays human-only (comments survive fires) |
 | Euphoria protocol | `engine/rules.py euphoria_checks` | §V: position ≥2× cost → automatic consult (trim / signed defense) |
 | Anti-parabola screen | `engine/rules.py anti_parabola` | §V sizing law + v1.2.1 Momentum-RISK redline (informational) |
 | Consult tickets | `engine/consults.py`, `consults/OPEN_*.md` | doors, no recommendation, signature (§VII) |
@@ -34,7 +35,7 @@ python passes/premarket.py --offline  # adjudicate what's already on file
 | Market calendar | `engine/market_calendar.py`, `config/market_calendar.yaml` | True/False/UNKNOWN — never assume (§VI) |
 | Premarket pass | `passes/premarket.py` | orchestration, loud degradation |
 | The book as data | `config/*.yaml` | editable without code; clauses carry the doors |
-| Regressions | `tests/` (25) | INTC/MU settlement flips · off-by-one grades · euphoria/floor · no-trade law · provenance |
+| Regressions | `tests/` | INTC/MU settlement flips · same-day/exchange-local settlement (law 2 choke points) · conflicted-latest blocks · off-by-one grades · euphoria/floor · no-trade law · provenance · calendar honesty · config integrity · premarket smoke |
 
 ## Before trusting it: replace the seeds
 
@@ -46,9 +47,17 @@ are not. Wire adjudication logic is real regardless of seed values.
 ## Scheduling (Phase 2 formalizes; works today)
 
 ```cron
-# premarket — 9:00 ET weekdays (13:00 UTC in winter, 14:00 in summer — pick one)
-0 13 * * 1-5  cd /path/to/portfolio-machine && python passes/premarket.py >> data/cron.log 2>&1
+# premarket — 9:00 ET weekdays. Use CRON_TZ so DST can never shift the pass
+# (9:00 ET is 14:00 UTC in winter, 13:00 UTC in summer — a fixed UTC line is
+# wrong for half the year).
+CRON_TZ=America/New_York
+0 9 * * 1-5  cd /path/to/portfolio-machine && python passes/premarket.py >> data/cron.log 2>&1
 ```
+
+The pass exits 0 on clean runs (including legitimate all-exchanges-closed
+skips) and 1 on degraded runs (every fetch failed, or an armed wire was
+unadjudicable because its fetch failed) — point your cron monitor at the
+exit code.
 
 ## Extraction to a standalone repo
 

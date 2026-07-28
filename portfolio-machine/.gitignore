@@ -4,3 +4,4 @@ out/*
 !out/.gitkeep
 data/cron.log
 __pycache__/
+.pytest_cache/
