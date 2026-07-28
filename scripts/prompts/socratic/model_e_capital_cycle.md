@@ -1,5 +1,5 @@
 ---
-version: v1
+version: v2
 model: claude-opus-4-8
 max_tokens: 8000
 temperature: 0.3
@@ -42,6 +42,8 @@ which of the two this is — and if it is neither, say that.
 ## Your assignment
 
 [PANEL_ROSTER]
+
+[LINEAGE]
 
 For **[TICKER]** (current price [PRICE], sector [SECTOR]):
 

@@ -53,6 +53,8 @@ class Panelist:
     school: str        # the philosophy in one line
     watches: str       # what it treats as evidence
     failure_mode: str  # its declared bias — self-reported per run
+    lineage: tuple[tuple[str, str], ...] = ()   # (practitioner, the METHOD they contributed)
+    lineage_cost: str = ""                      # what that school demonstrably cost its own practitioners
     legacy: bool = False   # part of the original a/b/c trio
 
 
@@ -64,6 +66,11 @@ PANEL: tuple[Panelist, ...] = (
         school="Reported numbers over narrative; growth decays toward base rates until proven structural.",
         watches="Six-plus quarters of revenue, margins, comps, multiples vs history.",
         failure_mode="Mean-reversion prior — mistakes a genuine regime change for an unsustainable spike.",
+        lineage=(
+        ("Benjamin Graham", "margin of safety — a price low enough that being wrong is survivable; value the business, not the quote"),
+        ("Terry Smith", "quality at a price you do not have to defend; growth you did not pay for is the only free growth"),
+    ),
+            lineage_cost="Graham's own method systematically missed the great compounders — Buffett later called the cigar-butt approach a mistake he had to unlearn. Cheapness is not the same as value.",
         legacy=True,
     ),
     Panelist(
@@ -72,6 +79,12 @@ PANEL: tuple[Panelist, ...] = (
         school="Some inflections cannot be priced by history; find the ones where the old framework simply does not apply.",
         watches="Structural breaks, cross-domain analogies, demand-regime shifts, liquidity conditions.",
         failure_mode="Regime-everywhere — sees a structural break in what is only a cycle.",
+        lineage=(
+        ("George Soros", "reflexivity — price and fundamentals feed each other, so a boom can manufacture the reality that justifies it (and the bust the reverse)"),
+        ("Stanley Druckenmiller", "liquidity and positioning move markets before earnings do; find the change nobody has repriced yet"),
+        ("Michael Steinhardt", "variant perception — state precisely where your view differs from consensus, or you have no edge"),
+    ),
+            lineage_cost="Reflexivity is unfalsifiable in careless hands: every move confirms it. Soros's discipline was a stop and a stated thesis; without those the frame explains everything and predicts nothing.",
         legacy=True,
     ),
     Panelist(
@@ -80,6 +93,11 @@ PANEL: tuple[Panelist, ...] = (
         school="Build nothing; break everything. A thesis that survives a real attack is worth holding.",
         watches="Accounting quality, competitive kill shots, financing risk, disconfirming disclosure.",
         failure_mode="Universal skepticism — an argument against everything is an argument against nothing.",
+        lineage=(
+        ("Jim Chanos", "structural shorts — find the business model that cannot work, not the stock that looks expensive"),
+        ("Howard Schilit", "forensic accounting — cash flow versus reported earnings, revenue recognition, the gap between the two statements"),
+    ),
+            lineage_cost="Chanos was right and early on Enron and wrong and expensive on Tesla for years. Being correct about quality and wrong about survival is still a loss — date your objections.",
         legacy=True,
     ),
     Panelist(
@@ -88,6 +106,11 @@ PANEL: tuple[Panelist, ...] = (
         school="The truth is upstream. Revenue is the lagging shadow of an order placed two to four quarters ago.",
         watches="Order books, contracted capacity, customer capex guides, qualification status, lead times.",
         failure_mode="Anecdote inflation — treats one supplier data point as the industry.",
+        lineage=(
+        ("Philip Fisher", "scuttlebutt — go to customers, suppliers and competitors; the business tells you before the income statement does"),
+        ("Peter Lynch", "know what you own by looking at what it actually sells and to whom"),
+    ),
+            lineage_cost="Scuttlebutt scales badly. Fisher's own method rewards the diligent and punishes the impressionable: three conversations feel like an industry and are not.",
     ),
     Panelist(
         id="capital_cycle", key="e", prompt="model_e_capital_cycle",
@@ -95,6 +118,12 @@ PANEL: tuple[Panelist, ...] = (
         school="High returns invite capacity. Supply response kills more theses than demand disappointment ever does.",
         watches="Industry capex vs depreciation, announced capacity, competitor entry, pricing discipline.",
         failure_mode="Permanently early bear — calls every genuine regime shift 'just a cycle'.",
+        lineage=(
+        ("Marathon Asset Management / Edward Chancellor", "the capital cycle — follow capex and supply response, not demand forecasts; returns mean-revert because capital chases them"),
+        ("Howard Marks", "second-level thinking and cycle position — 'where are we' beats 'what happens next'"),
+        ("Jeremy Grantham", "profit margins are the most mean-reverting series in finance"),
+    ),
+            lineage_cost="This school is famously early. Grantham was bearish through long stretches of real returns; being right about the cycle and wrong about its length is indistinguishable from being wrong.",
     ),
     Panelist(
         id="technologist", key="f", prompt="model_f_technologist",
@@ -102,6 +131,11 @@ PANEL: tuple[Panelist, ...] = (
         school="Physics and engineering decide who wins; spreadsheets only record it afterwards.",
         watches="Roadmap credibility, yields, node/standard transitions, thermal and power limits, qualification physics.",
         failure_mode="Falls for elegant technology that has no business model or no buyer.",
+        lineage=(
+        ("Andy Grove", "strategic inflection points — the moment a 10x change in one force rewrites who wins, and management's response to it"),
+        ("Philip Fisher", "judge the research organization, not the press release: who actually converts R&D into products that sell"),
+    ),
+            lineage_cost="Clayton Christensen's disruption framework — the most influential technical lens in investing — predicted the iPhone would fail. An elegant theory of technology change will confidently misclassify the biggest case of its era.",
     ),
     Panelist(
         id="base_rates", key="g", prompt="model_g_base_rates",
@@ -109,6 +143,12 @@ PANEL: tuple[Panelist, ...] = (
         school="This situation belongs to a reference class. What usually happens to companies like this?",
         watches="Outside-view frequencies, how often comparable claims held, historical multiple-compression rates.",
         failure_mode="Reference-class tyranny — a true outlier is exactly what the base rate says is impossible.",
+        lineage=(
+        ("Michael Mauboussin", "base rates and expectations investing — start from the reference class, then ask what the price already implies"),
+        ("Philip Tetlock", "forecast accuracy is measurable; keep score and update"),
+        ("Kahneman & Tversky", "the outside view — the specifics you find compelling are exactly what makes forecasts fail"),
+    ),
+            lineage_cost="Mauboussin's own point cuts both ways: the base rate for extreme outcomes is low BECAUSE extreme outcomes are rare, not because this one is impossible. A reference class applied bluntly rejects every genuine outlier at the moment it is cheapest.",
     ),
     Panelist(
         id="steelman", key="h", prompt="model_h_steelman",
@@ -116,6 +156,12 @@ PANEL: tuple[Panelist, ...] = (
         school="Build the strongest case the FACTS permit — the disciplined bull the panel otherwise lacks.",
         watches="The chain of things that must be true for a multi-year re-rating, and whether each is evidenced.",
         failure_mode="Advocacy drift — arguing past the evidence because the story is good.",
+        lineage=(
+        ("Warren Buffett", "own the business, not the quote — would you hold it if the market shut for five years?"),
+        ("Charlie Munger", "invert, then sit still; a few excellent decisions held for a long time beat activity"),
+        ("Nick Sleep", "scale economies shared — find the model that gets structurally stronger as it grows, and give it years"),
+    ),
+            lineage_cost="Long-horizon conviction is one step from stubbornness: the same temperament that holds through drawdowns holds through broken theses. Sleep's discipline was that he CLOSED the fund rather than drift — the willingness to stop is part of the method.",
     ),
 )
 
@@ -160,6 +206,43 @@ def panel_version(active: Optional[list[Panelist]] = None) -> str:
     the hit-rate)."""
     active = load_roster() if active is None else active
     return "panel-" + "+".join(p.id for p in active)
+
+
+def format_lineage(panelist: Panelist) -> str:
+    """The [LINEAGE] block: where this seat's METHOD comes from, and what that
+    method demonstrably cost the people who invented it.
+
+    METHOD, NOT MIMICRY — this is the whole design rule. The block never says
+    "you are X" and the prompts never ask "what would X do." Asking a model to
+    impersonate a famous investor produces pastiche: remembered quotes,
+    borrowed authority, and a house style standing in for analysis. What
+    transfers is the TECHNIQUE — scuttlebutt, the capital cycle, forensic cash
+    flow, the outside view — which is checkable against evidence in a way a
+    persona never is.
+
+    Each lineage carries its own price tag for the same reason each seat
+    declares a failure mode: a method presented without its documented
+    failures becomes authority, and authority is exactly what this panel is
+    built to do without.
+    """
+    if not panelist.lineage:
+        return ""
+    lines = ["### Where your method comes from", ""]
+    for who, method in panelist.lineage:
+        lines.append(f"- **{who}** — {method}")
+    if panelist.lineage_cost:
+        lines += ["", f"**What this school has cost its own practitioners:** "
+                      f"{panelist.lineage_cost}"]
+    lines += [
+        "",
+        "Use the METHOD. Do not impersonate the practitioner, do not quote "
+        "them, and never cite a name as evidence — \"Graham would say this is "
+        "cheap\" is not an argument, it is borrowed authority. If your "
+        "reasoning would survive with every name above deleted, it is real "
+        "analysis; if it would collapse, you were doing costume work. The "
+        "cost line is there so you know where your own lens goes blind.",
+    ]
+    return "\n".join(lines)
 
 
 def format_panel_roster(active: Optional[list[Panelist]] = None) -> str:

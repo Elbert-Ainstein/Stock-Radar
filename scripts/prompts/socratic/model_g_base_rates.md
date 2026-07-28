@@ -1,5 +1,5 @@
 ---
-version: v1
+version: v2
 model: claude-opus-4-8
 max_tokens: 8000
 temperature: 0.3
@@ -33,6 +33,8 @@ looked like this, how many delivered?
 ## Your assignment
 
 [PANEL_ROSTER]
+
+[LINEAGE]
 
 For **[TICKER]** (current price [PRICE], sector [SECTOR]):
 

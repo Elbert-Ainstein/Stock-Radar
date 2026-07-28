@@ -237,3 +237,72 @@ def test_every_watchlist_name_has_a_spec():
     have = set(wf.all_tickers())
     missing = [t for t in tickers if t and t.upper() not in have]
     assert not missing, f"watchlist names with no watched-facts spec: {missing}"
+
+
+# ── lineage: method, not mimicry ──────────────────────────────────────────────
+
+def test_every_seat_has_a_lineage_and_a_price_tag():
+    """Operator: "get inspiration from great investors." Each seat is grounded
+    in the documented METHOD of practitioners who developed that lens — and in
+    what that school demonstrably cost them. A method presented without its
+    failures becomes authority, which is what this panel exists to do without."""
+    for p in sp.PANEL:
+        assert p.lineage, f"{p.id}: no lineage"
+        assert len(p.lineage) >= 2, f"{p.id}: a single source is a costume, not a school"
+        for who, method in p.lineage:
+            assert who and method, f"{p.id}: incomplete lineage entry"
+            assert len(method) > 25, f"{p.id}/{who}: method not actually described"
+        assert p.lineage_cost and len(p.lineage_cost) > 40, \
+            f"{p.id}: lineage carries no documented cost"
+
+
+def test_lineage_block_forbids_impersonation():
+    """The guardrail: asking a model to BE a famous investor produces pastiche —
+    remembered quotes and borrowed authority standing in for analysis. The
+    block must transfer technique and explicitly refuse the costume."""
+    block = sp.format_lineage(sp.BY_ID["capital_cycle"])
+    low = block.lower()
+    assert "do not impersonate" in low
+    assert "borrowed authority" in low
+    assert "survive with every name above deleted" in low
+
+
+def test_no_prompt_instructs_impersonation():
+    """No seat may be told to *be* someone, or to ask what someone would do —
+    the whole panel degrades into cosplay the moment one does."""
+    banned = ("you are warren buffett", "you are ben graham", "you are benjamin graham",
+              "you are george soros", "you are charlie munger", "you are philip fisher",
+              "what would buffett", "what would graham", "what would munger",
+              "channel buffett", "think like buffett")
+    for p in sp.PANEL:
+        body = (REPO / "scripts" / "prompts" / "socratic" /
+                f"{p.prompt}.md").read_text(encoding="utf-8").lower()
+        for phrase in banned:
+            assert phrase not in body, f"{p.id}: impersonation instruction {phrase!r}"
+
+
+def test_every_prompt_receives_the_lineage_block():
+    for p in sp.PANEL:
+        body = (REPO / "scripts" / "prompts" / "socratic" /
+                f"{p.prompt}.md").read_text(encoding="utf-8")
+        assert "[LINEAGE]" in body, f"{p.id}: lineage never injected"
+
+
+def test_lineage_is_empty_safe():
+    """A seat added without a lineage must render nothing rather than a
+    half-block — fill() is strict, so an empty string is the honest signal."""
+    bare = sp.Panelist(id="x", key="z", prompt="p", name="n", school="s",
+                       watches="w", failure_mode="f")
+    assert sp.format_lineage(bare) == ""
+
+
+def test_prompt_versions_moved_with_the_content():
+    """Bookkeeping the cohort key depends on: a prompt whose content changed
+    must not still claim its old version string."""
+    import re
+    for p in sp.PANEL:
+        body = (REPO / "scripts" / "prompts" / "socratic" /
+                f"{p.prompt}.md").read_text(encoding="utf-8")
+        m = re.search(r"^version:\s*(\S+)", body, re.MULTILINE)
+        assert m, f"{p.id}: no version in frontmatter"
+        assert m.group(1) != "v1", f"{p.id}: content changed but version is still v1"

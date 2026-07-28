@@ -796,7 +796,8 @@ def run_one_model(role: str, ctx: dict, allowed_domains: list[str]) -> dict:
     and every seat receives the same two discipline blocks — who else is in
     the room ([PANEL_ROSTER]) and which facts are admissible
     ([WATCHED_FACTS], operator directive: focus on the facts that matter)."""
-    from socratic_panel import BY_KEY, format_panel_roster, load_roster
+    from socratic_panel import (BY_KEY, format_lineage, format_panel_roster,
+                                load_roster)
     from watched_facts import format_watched_facts
 
     panelist = BY_KEY[role]
@@ -804,6 +805,7 @@ def run_one_model(role: str, ctx: dict, allowed_domains: list[str]) -> dict:
     prompt = fill(body, label=f"model_{role}",
                   panel_roster=format_panel_roster(load_roster()),
                   watched_facts=format_watched_facts(ctx["ticker"]),
+                  lineage=format_lineage(panelist),
                   **ctx)
 
     result = call_sonnet(

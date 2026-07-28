@@ -1,5 +1,5 @@
 ---
-version: v1
+version: v2
 model: claude-opus-4-8
 max_tokens: 8000
 temperature: 0.3
@@ -40,6 +40,8 @@ dated company/customer disclosure, it does not exist for you.
 ## Your assignment
 
 [PANEL_ROSTER]
+
+[LINEAGE]
 
 Work the chain for **[TICKER]** (current price [PRICE], sector [SECTOR]).
 
