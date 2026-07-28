@@ -43,6 +43,7 @@ open out/close.html       # evening: PROVISIONAL — settles tomorrow
 | Premarket pass | `passes/premarket.py` | orchestration, loud degradation, renders the morning brief |
 | After-market pass | `passes/close.py` | PROVISIONAL only (law 2): snapshots + "would fire" display, never acts; renders the evening brief |
 | Visual briefs | `engine/report.py`, `out/premarket.html`, `out/close.html` | the built-in report mechanism — settled banner vs PROVISIONAL banner; a rendering of the log, never a verdict engine |
+| Imported research | `engine/evidence.py`, `data/evidence/<TICKER>.md` | supremacy clause: outside research enters ONLY as dated evidence on a consult (STALE past 45d); never fires, sizes, or decides |
 | The book as data | `config/*.yaml` | editable without code; clauses carry the doors |
 | Regressions | `tests/` | INTC/MU settlement flips · same-day/exchange-local settlement (law 2 choke points) · conflicted-latest blocks · off-by-one grades · euphoria/floor · no-trade law · provenance · calendar honesty · config integrity · premarket smoke |
 
@@ -71,6 +72,17 @@ The pass exits 0 on clean runs (including legitimate all-exchanges-closed
 skips) and 1 on degraded runs (every fetch failed, or an armed wire was
 unadjudicable because its fetch failed) — point your cron monitor at the
 exit code.
+
+## Importing outside research (the one interface)
+
+An upstream research system may drop `data/evidence/<TICKER>.md` (YAML
+frontmatter + markdown). Consults for that ticker attach it beneath the
+settled facts, stamped with its age; the premarket brief lists every file's
+freshness. Proposed wires from upstream land in
+`data/radar_proposed_wires.yaml`, which **the engine never reads** — arm one
+by hand-copying it into `config/tripwires.yaml`. Sizing instructions are not
+accepted in any form (law 1). Stock Radar's exporter is
+`scripts/radar_bridge.py` in the host repo.
 
 ## Extraction to a standalone repo
 

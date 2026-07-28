@@ -83,6 +83,7 @@ npm run dev      # http://localhost:3000  (build: npx next build)
 4. **Facts over prediction** — the 5–10y structural state is the only allowed forward input; attention is a current-market fact, timing-only.
 5. **Seals are append-only** — never mutate `prediction_log`/`prediction_outcomes`; corrections are new rows or dated service-role migrations. The grader filters to genuine Socratic seals.
 6. **Money-path files (`run_thesis.py`, `run_socratic.py`, `finance_data.py`, `target_engine.py`, prompts) merge only with explicit owner approval.** Small logical commits; no "new"/"improvements" messages.
+7. **Supremacy clause (2026-07-28)** — Radar is the research cortex; `portfolio-machine/` is the brainstem and the only layer that touches the book. At the point of research these rules govern; at the point of action the Machine's laws (`portfolio-machine/CONSTITUTION.md`) govern. Radar output crosses exactly one interface — `scripts/radar_bridge.py`, one-way, plain text: thesis evidence into `data/evidence/<TICKER>.md` and kill signposts into `data/radar_proposed_wires.yaml` as PROPOSALS the operator ratifies by hand. Conviction and position size never cross as instructions. Rationale and open build items: `docs/decisions/RADAR_MACHINE_SYNTHESIS_2026-07-28.md`.
 
 ---
 

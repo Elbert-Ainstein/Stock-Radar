@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .evidence import evidence_markdown, load_evidence, type_a_defense_note
 from .paths import ROOT, consults_dir
 
 
@@ -36,6 +37,12 @@ def write_consult(wire: dict, verdict, clause: dict | None,
         for r in evidence_rows
     ) or "| (no rows attached) | | | | | |"
 
+    # Imported research (supremacy clause): attached as dated, non-binding
+    # evidence beneath the facts — never as a verdict, never sizing anything.
+    ev = load_evidence(wire.get("ticker") or "", root)
+    research_md = evidence_markdown(ev)
+    type_a_md = type_a_defense_note(ev)
+
     body = f"""# CONSULT — {wire['id']} fired
 
 Opened: {datetime.now(timezone.utc).isoformat()} (system clock — law 5)
@@ -54,8 +61,9 @@ Status: **OPEN — awaiting operator signature**
 |------|-------|------|--------|-----------|-------------|
 {evidence_md}
 
+""" + research_md + """
 ## Doors (sign exactly one, in conversation)
-""" + "\n".join(f"- [ ] {d}" for d in doors) + """
+""" + "\n".join(f"- [ ] {d}" for d in doors) + type_a_md + """
 
 ## Signature
 - Signed door: _(operator fills in)_

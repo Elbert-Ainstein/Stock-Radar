@@ -125,6 +125,18 @@ verbatim — amendments happen there, per its own amendment rule.)*
   +100%/6mo (§V + Momentum-RISK redline); euphoria protocol — position at
   ≥2× cost fires an automatic consult with doors [trim preset slice | signed
   defense paragraph] (§V), adjudicated on settled rows only (law 2).
+- **Supremacy clause (2026-07-28) — external research systems:** at the point
+  of research, the upstream system's rules govern; at the point of action,
+  THESE laws govern. Everything an outside system produces enters this machine
+  only as EVIDENCE inside a consult, never as a verdict. Concretely:
+  `data/evidence/<TICKER>.md` is read by `engine/evidence.py` and attached
+  beneath the settled facts on any consult for that ticker, stamped with its
+  own age (STALE past 45 days); imported sizing is not accepted in any form;
+  imported wires arrive as PROPOSALS in a file the engine never reads
+  (`data/radar_proposed_wires.yaml`) and only a hand-ratified entry in
+  `config/tripwires.yaml` can ever adjudicate. A structural (Type A) conviction
+  in imported research does not hold a position — it obliges the euphoria
+  protocol's DEFEND door to cite that thesis in the signed paragraph.
 - **Grading v1.2.1 (§III):** seven factors, weights 25/20/15/15/10/10/5,
   scores 0–100, composite Σ(w·s), letter bands at 91.5/88.5/85.5/81.5/78.5/
   75.5/71.5. Every A/A− requires the seat's written one-line moat answer.

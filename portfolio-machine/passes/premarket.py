@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import yaml
 
 from engine import log as logmod
+from engine.evidence import load_evidence
 from engine.fetch import (append_rows, cross_check, fetch_settled_stooq,
                           fetch_settled_yfinance)
 from engine.market_calendar import exchange_today, is_trading_day
@@ -199,6 +200,22 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
     # (upcoming_catalysts warnings overlap validate_catalysts — step 1 is
     # already the loud path here, so only the rows are consumed.)
     cats, _cat_warns = upcoming_catalysts(root)
+
+    # Imported research freshness (supremacy clause) — display only; evidence
+    # binds nothing, but stale research must be visible before it is cited.
+    research = []
+    for ticker in universe:
+        ev = load_evidence(ticker, root)
+        if ev is None:
+            continue
+        research.append({"ticker": ticker, "as_of": ev["as_of"],
+                         "age_days": ev["age_days"], "stale": ev["stale"],
+                         "source": (ev["meta"] or {}).get("source")})
+        for w in ev["warnings"]:
+            brief_warnings.append(f"evidence: {w}")
+        if ev["stale"]:
+            logmod.append("evidence_stale", root=root, ticker=ticker,
+                          as_of=ev["as_of"], age_days=ev["age_days"])
     try:
         brief = render_brief("premarket", {
             "degraded": degraded,
@@ -207,6 +224,7 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
             "parabola": parabola_flags,
             "book": book,
             "catalysts": cats,
+            "evidence": research,
             "warnings": brief_warnings,
         }, root=root)
         print(f"[premarket] brief → {brief}")

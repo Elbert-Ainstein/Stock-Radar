@@ -1,6 +1,9 @@
 # Stock Radar × The Portfolio Machine — fit, conflicts, and the synthesis
 
-**Status:** PROPOSED — awaiting owner decision on §4.
+**Status:** §3 supremacy clause + build items 1, 2, 5 **IMPLEMENTED** 2026-07-28
+(operator: "your choice"). Item 3 (calibration-weighted evidence) deferred until
+~30 seals ripen — it would print noise today. Item 4 (shared ledger clause) folded
+into the clause text in both constitutions. See the changelog entry of this date.
 **Date:** 2026-07-28
 **Context:** Two constitutions now live in this repo. Stock Radar (CLAUDE.md
 design rules + lessons L1–L8) is a research engine hunting 10× opportunities.
@@ -109,9 +112,21 @@ gates keep running for research prioritization but never adjudicate the book
 dependency-thin (its safety case rests on being auditable in an afternoon);
 the bridge is one file on the Radar side writing plain markdown/YAML.
 
-## 5. Decision requested
+## 5. What shipped (2026-07-28)
 
-- [ ] Approve the supremacy clause (§3) for CLAUDE.md + CONSTITUTION.md.
-- [ ] Approve/deprioritize build items 1–5 (suggested order: 2, 1, 5, 3, 4 —
-      item 2 is nearly free and retires the last hand-run chore; item 3 is
-      the highest-value new capability but wants ~30 ripened seals first).
+- **Supremacy clause** — CLAUDE.md rule 7 and the CONSTITUTION machine appendix.
+- **Item 1 (bridge) + item 2 (signposts→wires)** — `scripts/radar_bridge.py`,
+  one-way: evidence into `portfolio-machine/data/evidence/<TICKER>.md`,
+  signposts + the gate-algebra actionability level into
+  `data/radar_proposed_wires.yaml` as PROPOSALS (engine never reads it;
+  ratification is a hand edit of the human-only `config/tripwires.yaml`).
+- **Item 5 (Type A ↔ DEFEND)** — `engine/evidence.py` stamps evidence age
+  (STALE past 45d) and attaches it BENEATH the settled facts on every consult;
+  live structural conviction obliges the DEFEND door to cite the thesis.
+- **Enforced limits:** `position_size_pct` never crosses the line (pinned by
+  test); no target ⇒ no invented price wire (design rule 1); malformed or
+  undated research degrades loudly to STALE, never to silence.
+
+**Still open:** item 3, calibration-weighted evidence — print each thesis's
+archetype hit-rate on the consult so the operator signs knowing the
+instrument's error. Blocked on ripened seals, not on design.

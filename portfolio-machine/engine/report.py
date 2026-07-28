@@ -245,6 +245,23 @@ def render_brief(pass_name: str, data: dict, root: Path = ROOT) -> Path:
         f'<span>floor — outside the book, never counted</span></div></div>'
         + _table(["seat", "shares", "close", "source", "value usd"], rows, "no seats"))
 
+    # Imported research freshness (supremacy clause): visible daily, so aging
+    # evidence is noticed before a wire fires on top of it.
+    if data.get("evidence") is not None:
+        rows = []
+        for e in data["evidence"]:
+            age = e.get("age_days")
+            pill = ('<span class="pill bad">STALE</span>' if e.get("stale")
+                    else '<span class="pill ok">fresh</span>')
+            rows.append([f'<td class="mono">{_esc(e["ticker"])}</td>',
+                         f'<td class="mono">{_esc(e.get("as_of") or "undated")}</td>',
+                         f'<td class="n">{"—" if age is None else age}</td>',
+                         f'<td>{pill}</td>',
+                         f'<td>{_esc(e.get("source") or "—")}</td>'])
+        sections.append("<h2>Imported research — evidence only, never a verdict</h2>"
+                        + _table(["ticker", "as of", "age (d)", "state", "source"],
+                                 rows, "no research files on file"))
+
     # Catalysts — None means the FILE was unreadable, not an empty schedule.
     cats = data.get("catalysts")
     if cats is None:

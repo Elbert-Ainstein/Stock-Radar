@@ -2,6 +2,16 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-07-28] The supremacy clause, shipped — Radar and the Machine joined by ONE one-way interface
+
+Operator: "your choice" on the synthesis proposal. Implemented §3 plus build items 1, 2 and 5; deferred item 3 (calibration-weighted evidence) until ~30 seals ripen, since a hit-rate printed on today's thin sample would be noise dressed as instrumentation.
+
+- **Clause, in both constitutions** — CLAUDE.md design rule 7 and the CONSTITUTION machine appendix: at the point of research Radar's rules govern; at the point of action the Machine's laws govern; Radar output crosses only as EVIDENCE inside a consult, never as a verdict.
+- **Machine side, dependency-free** (`engine/evidence.py`): reads a generic drop folder `data/evidence/<TICKER>.md` (any upstream system may write it — the machine has no Radar import). Consults attach it BENEATH the settled facts, stamped with its own age and rendered **STALE past 45 days**; undated or malformed research degrades to a declared warning, never to silence. Live structural (Type A) conviction adds a note obliging the euphoria protocol's DEFEND door to cite that thesis by name. The premarket brief lists every evidence file's freshness so aging research is seen before a wire fires on top of it.
+- **Radar side** (`scripts/radar_bridge.py`, one-way, read-only): the theses row of record → evidence markdown, and kill signposts + the trade gate's own actionability algebra (`risk_adj_target / LOW-band bound`) → `data/radar_proposed_wires.yaml`. That file is **never read by the engine**: arming requires a hand edit of the human-only `config/tripwires.yaml`. `position_size_pct` does not cross the line in any form (pinned by test) — sizing is advice under Law 1. No target ⇒ no invented price wire (design rule 1).
+
+**Acceptance: `python -m pytest portfolio-machine/tests -q` = 70 passed (was 60); `python -m pytest scripts/ -q` = 297 passed (was 288) + the documented network-fixture exception. New pins include "sizing never crosses", "proposed wires are never armed", "consult attaches evidence beneath the facts", "stale/undated research is marked, not trusted", and "the close brief does not imply it read evidence".**
+
 ## [2026-07-28] Portfolio Machine: built-in before/after-market visual briefs (operator request); 20-finding review hardening
 
 Operator: "For reports, I would like the built-in mechanism to be before market and after market" (+ standing "make a visual, I hate reading"). The machine now renders a self-contained HTML brief at the end of each pass — `out/premarket.html` (settled banner, verdicts of record) and `out/close.html` via the new after-market pass `passes/close.py` (PROVISIONAL banner, law 2: snapshots display "WOULD FIRE — settles next session", never open consults, never touch wire state, never write settled rows). `engine/report.py` renders both from pass-assembled data (stdlib only, both themes, ledger style); a render failure is loud but never loses the pass's constitutional work. Cron: premarket 9:00 + close 16:45, `CRON_TZ=America/New_York`.
