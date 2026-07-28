@@ -1,0 +1,49 @@
+# tripwires.yaml — the book's wires. Editable without code.
+#
+# Law 2 (two-phase verdicts) is structural: the evaluator adjudicates these
+# ONLY against settled rows; snapshot evaluations are PROVISIONAL — logged,
+# displayed, never acted on (no consult, no status change).
+#
+# Schema per wire:
+#   id:        stable slug (consult filenames use it)
+#   ticker:    symbol whose settled close is tested
+#   condition: {op: gte|lte, level: <price>, basis: settled_close}
+#   action:    consult   (the ONLY allowed action — law 1)
+#   status:    armed | fired | retired
+#   note:      one line of intent — WHY this wire exists
+#   history:   append-only adjudication events (machine-appended)
+#
+# SEED NOTE: the INTC/MU wires below encode the two settlement-flip incidents
+# from the spec as LIVE examples (levels chosen so the recorded prints straddle
+# them). The SNDK wire implements the $1,325 consult clause. Replace/extend
+# from the workbook (SEED_REPLACE where the level is a placeholder).
+
+tripwires:
+  - id: sndk-1325-consult
+    ticker: SNDK
+    condition: { op: gte, level: 1325.00, basis: settled_close }
+    action: consult
+    status: armed
+    note: "SNDK $1,325 consult clause — see clauses.yaml sndk-1325 for doors."
+    history: []
+
+  - id: intc-92-flip-example
+    ticker: INTC
+    condition: { op: gte, level: 92.00, basis: settled_close }
+    action: consult
+    status: armed
+    note: >-
+      SEED example encoding the INTC settlement flip ($91.63 provisional ->
+      $92.52 settled): provisional says no-fire, settled says fire. Retire or
+      re-level from the workbook. SEED_REPLACE
+    history: []
+
+  - id: mu-900-flip-example
+    ticker: MU
+    condition: { op: gte, level: 900.00, basis: settled_close }
+    action: consult
+    status: armed
+    note: >-
+      SEED example encoding the MU settlement flip ($899.85 provisional ->
+      $900.20 settled). Retire or re-level from the workbook. SEED_REPLACE
+    history: []

@@ -1,0 +1,69 @@
+# clauses.yaml — standing agreements between operator and book. Editable
+# without code. Clauses are richer than wires: they carry the doors (the
+# pre-drafted decision options) that consult tickets render.
+#
+# Schema per clause:
+#   id / title / status (active|expired|executed)
+#   trigger:  human-readable condition; if machine-checkable, the wire id
+#             in tripwires.yaml that implements it
+#   doors:    the decision options a consult must present (operator signs one)
+#   expires / reset: dated bounds, if any
+
+clauses:
+  - id: sndk-1325
+    title: "SNDK $1,325 consult clause"
+    status: active
+    trigger:
+      text: "SNDK settled close at or above $1,325"
+      wire: sndk-1325-consult
+    doors:
+      - "TRIM: sell the pre-agreed tranche into strength (size per workbook)"
+      - "HOLD: reaffirm thesis; move wire up; log the reaffirmation"
+      - "AMEND: rewrite the clause with new levels; requires written rationale"
+    expires: null
+
+  - id: sep-29-reset
+    title: "Sep 29 reset"
+    status: active
+    trigger:
+      text: >-
+        On 2026-09-29 (dated event, not price): full-book review pass —
+        re-grade seats, re-level wires, renew or expire clauses. SEED: pull
+        exact scope from the workbook's reset note. SEED_REPLACE
+      wire: null
+    doors:
+      - "RENEW: carry each clause forward with dates advanced"
+      - "EXPIRE: let lapsing clauses lapse; log which and why"
+    expires: "2026-09-29"
+
+  - id: euphoria-protocol
+    title: "Euphoria protocol (Charter §V)"
+    status: active
+    trigger:
+      text: >-
+        Any position that DOUBLES (settled close >= 2x cost basis) fires an
+        automatic consult. Adjudicated on settled rows only (law 2);
+        engine/rules.py euphoria_checks() implements. The thermometer
+        (target races, leveraged-ETF launches, itchy hands, euphoric group
+        chats, +70%-in-a-day option wins) is qualitative context for the
+        signature, not a machine condition.
+      wire: euphoria-protocol   # synthetic — computed from holdings cost, not tripwires.yaml
+    doors:
+      - "TRIM: sell the preset slice (define the slice in the signature)"
+      - "DEFEND: sign a paragraph defending why not — logged forever"
+    expires: null
+
+  - id: anti-parabola-note
+    title: "Anti-parabola screen (Charter §V — informational)"
+    status: active
+    trigger:
+      text: >-
+        +100% in trailing 6 months (engine/rules.py anti_parabola computes
+        from settled rows). Consequence is a SIZING law (starter size only on
+        NEW entries) and a Momentum-RISK redline (score capped at 20 that
+        day, methodology v1.2.1) — it does NOT by itself open a consult on an
+        existing seat; the euphoria protocol (>=2x cost) covers held
+        positions.
+      wire: null
+    doors: []
+    expires: null

@@ -1,0 +1,41 @@
+# market_calendar.yaml — law 5 support: no pass may assume a trading day.
+# Weekends are excluded in code; exchange holidays are listed here per
+# calendar. Extend per year; an out-of-range date makes is_trading_day()
+# return None ("unknown"), which passes must treat as "verify by hand" —
+# silence is a constitutional violation. (The Korea holiday error.)
+
+calendars:
+  XNYS:   # NYSE/Nasdaq
+    holidays_2026:
+      - 2026-01-01   # New Year's Day
+      - 2026-01-19   # MLK Day
+      - 2026-02-16   # Washington's Birthday
+      - 2026-04-03   # Good Friday
+      - 2026-05-25   # Memorial Day
+      - 2026-06-19   # Juneteenth
+      - 2026-07-03   # Independence Day (observed)
+      - 2026-09-07   # Labor Day
+      - 2026-11-26   # Thanksgiving
+      - 2026-12-25   # Christmas
+  XHKG:   # Hong Kong
+    holidays_2026:
+      - 2026-01-01
+      - 2026-02-17   # Lunar New Year
+      - 2026-02-18
+      - 2026-02-19
+      - 2026-04-03   # Good Friday
+      - 2026-04-06   # Easter Monday + Ching Ming (observed)
+      - 2026-04-07
+      - 2026-05-01   # Labour Day
+      - 2026-05-25   # Buddha's Birthday (observed)
+      - 2026-06-19   # Tuen Ng
+      - 2026-07-01   # HKSAR Day
+      - 2026-09-26   # Day after Mid-Autumn (observed) — VERIFY
+      - 2026-10-01   # National Day
+      - 2026-10-19   # Chung Yeung (observed) — VERIFY
+      - 2026-12-25
+      - 2026-12-26   # VERIFY (observed Monday 12-28 if Sat rule applies)
+
+# ticker suffix -> calendar (no suffix = XNYS)
+suffix_map:
+  HK: XHKG
