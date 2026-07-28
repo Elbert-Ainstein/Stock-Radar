@@ -20,8 +20,20 @@ ALTER TABLE theses ADD COLUMN IF NOT EXISTS thesis_horizon_years numeric;
 -- L4 (2026-07-02): parameter block each thesis verdict ran under.
 ALTER TABLE theses ADD COLUMN IF NOT EXISTS run_parameters jsonb;
 
+-- Panel expansion (2026-07-28): the Socratic panel grew from three hardcoded
+-- seats to a registry-driven roster (8 seats: the original three plus
+-- supply-chain, capital-cycle, technologist, base-rates and a disciplined
+-- steelman). model_a/b/c cannot hold eight analysts, and the seated roster is
+-- part of the instrument's identity, so it must be recorded with the run.
+ALTER TABLE socratic_analyses ADD COLUMN IF NOT EXISTS panel jsonb;
+ALTER TABLE socratic_analyses ADD COLUMN IF NOT EXISTS panel_version text;
+
 -- ── Verification (safe to run any time) ─────────────────────────────────────
-SELECT column_name FROM information_schema.columns
+SELECT 'theses' AS tbl, column_name FROM information_schema.columns
 WHERE table_name = 'theses'
   AND column_name IN ('thesis_horizon_years', 'run_parameters')
-ORDER BY column_name;
+UNION ALL
+SELECT 'socratic_analyses', column_name FROM information_schema.columns
+WHERE table_name = 'socratic_analyses'
+  AND column_name IN ('panel', 'panel_version')
+ORDER BY 1, 2;

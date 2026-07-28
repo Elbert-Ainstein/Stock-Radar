@@ -80,6 +80,38 @@ def effective_status(wire: dict, state: dict) -> str:
     return (state.get(wire.get("id"), {}) or {}).get("status") or wire.get("status", "armed")
 
 
+def current_rung(wire: dict, state: dict) -> int:
+    return int((state.get(wire.get("id"), {}) or {}).get("rung") or 0)
+
+
+def effective_condition(wire: dict, state: dict) -> dict:
+    """The condition as it stands NOW, accounting for ladders.
+
+    LADDERS (2026-07-28 refinement): a wire used to fire once and then go
+    silent forever — cross $1,325, trim, and nothing watches $1,500 or
+    $1,800 again. The operator can now pre-declare every rung:
+
+        condition: { op: gte, level: 1325.00, basis: settled_close }
+        ladder:    [1500.00, 1800.00]
+
+    Firing rung N re-arms the wire at rung N+1 automatically. This does NOT
+    weaken the human-only rule — every rung was written by hand, in advance,
+    on a calm day. The machine climbs a ladder the operator built; it never
+    invents a rung. When the ladder is exhausted the wire retires as before.
+    """
+    cond = dict(wire.get("condition") or {})
+    ladder = wire.get("ladder") or []
+    rung = current_rung(wire, state)
+    if rung and rung <= len(ladder):
+        cond["level"] = ladder[rung - 1]
+        cond["rung"] = rung
+    return cond
+
+
+def has_next_rung(wire: dict, state: dict) -> bool:
+    return current_rung(wire, state) < len(wire.get("ladder") or [])
+
+
 def _clause_for_wire(wire_id: str, root: Path) -> dict | None:
     p = config_dir(root) / "clauses.yaml"
     if not p.exists():
@@ -92,17 +124,26 @@ def _clause_for_wire(wire_id: str, root: Path) -> dict | None:
     return None
 
 
-def evaluate(wire: dict, row: PriceRow | None, mode: str) -> Verdict:
-    """Pure evaluation of one wire against one price row."""
+def evaluate(wire: dict, row: PriceRow | None, mode: str,
+             state: dict | None = None) -> Verdict:
+    """Pure evaluation of one wire against one price row. `state` supplies the
+    current ladder rung (absent = rung 0, the config level)."""
     wire_id = wire.get("id", "?")
     ticker = wire.get("ticker") or ""
-    cond = wire.get("condition") or {}
+    cond = effective_condition(wire, state or {})
     op = _OPS.get(str(cond.get("op")))
     level = cond.get("level")
     provisional = mode != "settled"
     if not ticker:
         return Verdict(wire_id, "?", mode, provisional, None, None, None,
                        "malformed wire: no ticker")
+    if str(cond.get("type") or "").lower() == "signpost":
+        # A dated signpost is a FACT the machine cannot observe (a
+        # certification decision, a qualification, an appropriation). It is
+        # never adjudicated against price — adjudicate_signposts asks the
+        # operator on its due date instead.
+        return Verdict(wire_id, ticker, mode, provisional, None, None, None,
+                       "signpost wire — not price-adjudicable; due-date review only")
     if op is None or not isinstance(level, (int, float)):
         return Verdict(wire_id, ticker, mode, provisional,
                        None, None, None, f"malformed condition: {cond!r}")
@@ -161,7 +202,9 @@ def adjudicate(mode: str, root: Path = ROOT,
                 continue
         else:
             row = (snapshot_rows or {}).get(ticker)
-        v = evaluate(wire, row, mode)
+        v = evaluate(wire, row, mode, state)
+        if "signpost wire" in v.reason:
+            continue      # handled by adjudicate_signposts, not here
         verdicts.append(v)
 
         logmod.append(
@@ -174,21 +217,117 @@ def adjudicate(mode: str, root: Path = ROOT,
             clause = _clause_for_wire(wire["id"], root)
             evidence = [r for r in load_rows(ticker, root)
                         if r.settled and r.date == v.row_date]
+            rung_fired = current_rung(wire, state)
+            climbed = has_next_rung(wire, state)
             ticket = write_consult(wire, v, clause, evidence, root=root)
             entry = state.setdefault(wire["id"], {})
-            entry["status"] = "fired"
+            if climbed:
+                # Ladder: re-arm at the next PRE-DECLARED rung. Every rung was
+                # written by hand, in advance, on a calm day — the machine
+                # climbs the operator's ladder, it never invents a rung.
+                entry["rung"] = rung_fired + 1
+                entry["status"] = "armed"
+                next_level = (wire.get("ladder") or [])[rung_fired]
+            else:
+                entry["status"] = "fired"
+                next_level = None
             entry.setdefault("history", []).append({
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "event": "fired", "close": v.close, "row_date": v.row_date,
-                "consult": ticket.name,
+                "consult": ticket.name, "rung": rung_fired,
+                "rearmed_at": next_level,
             })
             dirty = True
             logmod.append("wire_fired", root=root, wire=wire["id"],
-                          consult=ticket.name, close=v.close, row_date=v.row_date)
+                          consult=ticket.name, close=v.close, row_date=v.row_date,
+                          rung=rung_fired, rearmed_at=next_level)
 
     if dirty:
         _save_wire_state(state, root)
     return verdicts
+
+
+def adjudicate_signposts(root: Path = ROOT, today: Date | None = None) -> list[dict]:
+    """Dated SIGNPOST wires — the other half of a kill trigger (2026-07-28).
+
+    Radar's kill triggers are mostly not prices. "Certification decision by
+    2027-Q2." "NRR below 110% two consecutive prints." "Capacity financing
+    fails to close." Before this, those lived in a thesis document and nobody
+    ever checked them: the date passed silently and the thesis kept its
+    original conviction, which is exactly how a dead thesis stays on the books.
+
+    The machine CANNOT observe these facts — it has no way to know whether an
+    agency ruled. Pretending otherwise would be the calendar-honesty violation
+    all over again. So on the due date it does the only honest thing: it opens
+    a REVIEW consult that asks the operator, quoting what the thesis claimed
+    would be settled by now.
+
+        condition: { type: signpost, due: 2027-06-30 }
+        note: "FAA type certification decision expected"
+
+    Fires once per signpost (state marks it reviewed). Doors default to
+    CONFIRMED / NOT_YET / OBSOLETE unless a clause supplies its own.
+    """
+    today = today or datetime.now(timezone.utc).date()
+    data = load_tripwires(root)
+    state = load_wire_state(root)
+    fired: list[dict] = []
+    dirty = False
+
+    for wire in data.get("tripwires") or []:
+        cond = wire.get("condition") or {}
+        if str(cond.get("type") or "").lower() != "signpost":
+            continue
+        if effective_status(wire, state) != "armed":
+            continue
+        due_raw = cond.get("due")
+        if due_raw is None:
+            logmod.append("signpost_malformed", root=root, wire=wire.get("id"),
+                          reason="no due date — a signpost without a date is a wish")
+            continue
+        try:
+            due = due_raw if isinstance(due_raw, Date) else Date.fromisoformat(str(due_raw))
+        except ValueError:
+            logmod.append("signpost_malformed", root=root, wire=wire.get("id"),
+                          reason=f"unparseable due date {due_raw!r}")
+            continue
+        if due > today:
+            continue
+
+        clause = _clause_for_wire(wire.get("id", ""), root)
+        review_wire = dict(wire)
+        review_wire["note"] = (
+            f"SIGNPOST DUE {due.isoformat()} — the thesis said this would be "
+            f"settled by now. The machine cannot observe it. "
+            f"{wire.get('note', '').strip()}")
+        v = Verdict(wire.get("id", "?"), wire.get("ticker") or "", "settled",
+                    False, True, None, due.isoformat(),
+                    f"dated signpost reached {due.isoformat()} — operator review required")
+        if clause is None:
+            clause = {"id": f"signpost:{wire.get('id')}",
+                      "title": "Dated signpost review",
+                      "doors": [
+                          "CONFIRMED: the event happened as the thesis predicted — record it and re-date the next signpost",
+                          "NOT_YET: it slipped — record the NEW date and what the slip implies (a slipping date is itself evidence)",
+                          "OBSOLETE: the signpost no longer decides anything — say what replaced it",
+                      ]}
+        ticket = write_consult(review_wire, v, clause, [], root=root)
+        entry = state.setdefault(wire["id"], {})
+        entry["status"] = "fired"
+        entry.setdefault("history", []).append({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": "signpost_due", "due": due.isoformat(), "consult": ticket.name,
+        })
+        dirty = True
+        f = {"wire": wire["id"], "ticker": wire.get("ticker") or "",
+             "due": due.isoformat(), "consult": ticket.name,
+             "note": wire.get("note", "").strip()}
+        fired.append(f)
+        logmod.append("signpost_due", root=root, **f)
+
+    if dirty:
+        _save_wire_state(state, root)
+    return fired
 
 
 def euphoria_checks(root: Path = ROOT) -> list[dict]:

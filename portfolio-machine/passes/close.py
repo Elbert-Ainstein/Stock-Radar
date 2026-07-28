@@ -36,6 +36,7 @@ from engine.fetch import (append_rows, fetch_snapshot_yfinance,
                           latest_settled, latest_snapshot)
 from engine.market_calendar import exchange_today, is_trading_day
 from engine.paths import ROOT
+from engine.consult_state import summarize as consult_summary
 from engine.report import render_brief, upcoming_catalysts
 from engine.rules import adjudicate
 from engine.valuation import value_book
@@ -144,6 +145,7 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
             "stale": stale,
             "book": book,
             "catalysts": cats,
+            "consults": consult_summary(root),
             "warnings": warnings,
         }, root=root)
         print(f"[close] brief → {brief}")

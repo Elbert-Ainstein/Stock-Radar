@@ -274,6 +274,43 @@ def render_brief(pass_name: str, data: dict, root: Path = ROOT) -> Path:
         sections.append("<h2>Catalysts — next 30 days</h2>" + _table(
             ["date", "ticker", "what"], rows, "none scheduled"))
 
+    # Open questions — the machine's own unfinished business (2026-07-28).
+    # A consult nobody answered is the one failure mode that makes this whole
+    # apparatus decorative, so it is surfaced on EVERY brief until answered.
+    consults = data.get("consults")
+    if consults is not None:
+        rows = []
+        for r in consults.get("records") or []:
+            if r["status"] != "OPEN":
+                continue
+            age = r["age_days"]
+            pill = ('<span class="pill bad">OVERDUE</span>' if r["overdue"]
+                    else '<span class="pill wait">open</span>')
+            rows.append([f'<td class="mono">{_esc(r["wire_id"])}</td>',
+                         f'<td class="mono">{_esc(r["ticker"])}</td>',
+                         f'<td class="n">{"—" if age is None else age}</td>',
+                         f'<td>{pill}</td>',
+                         f'<td class="mono">{_esc(r["name"])}</td>'])
+        oldest = consults.get("oldest_days")
+        head = (f'<div class="stats"><div class="stat"><b>{consults.get("open", 0)}</b>'
+                f'<span>questions awaiting your signature</span></div>'
+                f'<div class="stat"><b>{"—" if oldest is None else oldest}</b>'
+                f'<span>days — oldest unanswered</span></div></div>')
+        sections.append("<h2>Open questions</h2>" + head + _table(
+            ["wire", "ticker", "days open", "state", "ticket"], rows,
+            "nothing awaiting a signature"))
+
+    # Dated signposts that came due this pass (the machine cannot observe the
+    # fact — it asks).
+    sp = data.get("signposts")
+    if sp:
+        rows = [[f'<td class="mono">{_esc(s["wire"])}</td>',
+                 f'<td class="mono">{_esc(s["ticker"])}</td>',
+                 f'<td class="mono">{_esc(s["due"])}</td>',
+                 f'<td>{_esc(s["note"])}</td>'] for s in sp]
+        sections.append("<h2>Signposts due — review requested</h2>" + _table(
+            ["wire", "ticker", "due", "what the thesis claimed"], rows, ""))
+
     # Degradations / warnings
     warn_rows = [[f'<td>{_esc(w)}</td>'] for w in data.get("warnings") or []]
     if warn_rows:

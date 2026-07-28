@@ -1,0 +1,259 @@
+# watched_facts.yaml — SIGNAL DISCIPLINE (operator directive 2026-07-28:
+# "don't let random news get to you. Focus on the facts that matter.")
+#
+# For each name: the SPECIFIC causal chain the thesis actually rides on, and
+# the categories of noise that are inadmissible as evidence. Every analyst on
+# the Socratic panel receives this block and is bound by it:
+#
+#   - a claim must trace to a fact below, or to a NEW fact the analyst
+#     proposes adding (with a reason) — floating claims are decoration;
+#   - anything matching `noise` cannot be cited as evidence for a verdict,
+#     however loud the headline;
+#   - a fact whose answer the analyst could not find is DECLARED unknown,
+#     never guessed around. An unanswerable fact is itself information.
+#
+# Schema per ticker:
+#   engine:   one line — what actually drives the outcome (not what the
+#             company sells; what decides whether the thesis pays)
+#   facts:    - id / question / why / sources / cadence
+#             `question` must be answerable with a NUMBER or a DATE.
+#             `why` states which part of the thesis dies if the answer flips.
+#   noise:    categories that may not be cited as evidence
+#
+# SEED discipline: `last_known` values are deliberately absent — this file
+# declares WHAT to look at, never what the answer is. Answers come from runs.
+
+MU:
+  engine: >-
+    AI datacenter memory allocation — HBM contracted capacity and hyperscaler
+    order books, NOT commodity DRAM sentiment. The thesis pays if datacenter
+    demand outruns the industry's capacity response; it dies on the supply
+    side, not on demand headlines.
+  facts:
+    - id: hbm_sold_out_horizon
+      question: "Through which quarter is HBM capacity contracted / sold out, per the latest call?"
+      why: "The entire pricing-power claim rests on this one date. If it stops extending, the thesis is over regardless of reported revenue."
+      sources: [earnings_call_transcript, 10-Q, 10-K]
+      cadence: quarterly
+    - id: hyperscaler_capex_direction
+      question: "Are the top-4 hyperscaler capex guides rising, flat, or cut vs the prior guide — in dollars?"
+      why: "Datacenter memory demand is a derivative of this number two-to-four quarters out. It leads revenue; revenue does not lead it."
+      sources: [customer_earnings_call, customer_10-Q]
+      cadence: quarterly
+    - id: datacenter_revenue_mix
+      question: "What share of revenue is datacenter/HBM vs consumer/mobile, and is the mix shifting?"
+      why: "Mix is the difference between a cyclical commodity print and a structural allocation business. Same revenue, different multiple."
+      sources: [earnings_call_transcript, 10-Q]
+      cadence: quarterly
+    - id: industry_capacity_additions
+      question: "What wafer capacity / new fabs have Samsung, SK Hynix and Micron ANNOUNCED, and for which years?"
+      why: "The capital-cycle kill. High returns invite capacity; the supply response ends memory upcycles more reliably than demand disappointment does."
+      sources: [competitor_earnings_call, competitor_capex_release, industry_filing]
+      cadence: quarterly
+    - id: contract_price_direction
+      question: "Direction and magnitude of CONTRACT (not spot) pricing on the last two settlements?"
+      why: "Contract pricing is what the company actually realizes. Spot is a headline generator."
+      sources: [earnings_call_transcript, industry_filing]
+      cadence: quarterly
+    - id: hbm_qualification_status
+      question: "Which HBM generation is qualified with which customers, and has any qualification slipped?"
+      why: "A missed qualification hands a socket to a competitor for a full product cycle. It is the most common way a memory share thesis dies quietly."
+      sources: [earnings_call_transcript, customer_disclosure]
+      cadence: quarterly
+  noise:
+    - "analyst price-target changes and rating actions"
+    - "daily/weekly DRAM SPOT price ticks (contract pricing is the fact; spot is the noise)"
+    - "generic 'AI bubble' or 'AI is over' commentary carrying no order or capex data"
+    - "single-day share-price moves and technical-level chatter"
+    - "headlines about the STOCK rather than about the business"
+    - "unsourced supply-chain rumor blogs without a named filing or call"
+
+SNDK:
+  engine: >-
+    Post-re-IPO NAND supply/demand with an enterprise-SSD mix shift. Pays if
+    datacenter NAND demand absorbs the industry's bit supply growth; dies on
+    a capacity race or a mix that stays consumer.
+  facts:
+    - id: enterprise_ssd_mix
+      question: "Enterprise/datacenter SSD share of revenue, and its direction over the last three prints?"
+      why: "The re-rating case is a mix story. Consumer NAND is a commodity with no multiple."
+      sources: [earnings_call_transcript, 10-Q]
+      cadence: quarterly
+    - id: nand_bit_supply_growth
+      question: "Industry NAND bit supply growth guided for the next 12 months, in percent?"
+      why: "NAND upcycles end when bit growth outruns demand. This is the number that ends them."
+      sources: [earnings_call_transcript, competitor_earnings_call]
+      cadence: quarterly
+    - id: capex_discipline
+      question: "Is the company (and are competitors) guiding capex UP or holding? Any new fab announcements?"
+      why: "Capital discipline is the whole cyclical thesis. The moment discipline breaks, the cycle is dated."
+      sources: [earnings_call_transcript, competitor_capex_release]
+      cadence: quarterly
+    - id: post_reipo_comparability
+      question: "Which reported periods are the NEW SanDisk vs the old entity?"
+      why: "Pre-2025 data is a different company. Any comparison across the line is a fabricated trend (TICKER_DATA_CUTOFFS enforces this in code)."
+      sources: [10-K, S-1, 8-K]
+      cadence: once
+  noise:
+    - "analyst price-target changes and rating actions"
+    - "consumer SSD retail price surveys"
+    - "single-day share-price moves"
+    - "generic memory-cycle punditry without bit-supply or capex numbers"
+
+LITE:
+  engine: >-
+    Optical interconnect as the datacenter bottleneck — content per switch/rack
+    rising with AI cluster scale-out. Pays on design wins and capacity, dies on
+    customer concentration or a competing interconnect standard.
+  facts:
+    - id: datacenter_optics_revenue
+      question: "Datacenter/telecom revenue split and growth rate over the last four quarters?"
+      why: "The AI story lives entirely in the datacenter line; telecom is the drag that hides it."
+      sources: [earnings_call_transcript, 10-Q]
+      cadence: quarterly
+    - id: speed_transition_status
+      question: "Which optical speed generation is shipping in volume, and which is qualifying?"
+      why: "Content per port steps up at each transition. Missing one is a lost cycle."
+      sources: [earnings_call_transcript, customer_disclosure]
+      cadence: quarterly
+    - id: customer_concentration
+      question: "Revenue share of the top customer and top three, per the latest 10-K/10-Q?"
+      why: "A single hyperscaler re-sourcing is the fastest path to a broken thesis."
+      sources: [10-K, 10-Q]
+      cadence: quarterly
+    - id: capacity_constraint
+      question: "Is the company capacity-constrained, and what capacity expansion is funded?"
+      why: "In a bottleneck thesis, capacity IS the revenue ceiling. Demand claims without capacity are decoration."
+      sources: [earnings_call_transcript]
+      cadence: quarterly
+  noise:
+    - "analyst price-target changes"
+    - "generic 'AI infrastructure' sector notes with no design-win or capacity data"
+    - "single-day share-price moves"
+
+PLTR:
+  engine: >-
+    Enterprise/government AI deployment converting pilots into multi-year
+    committed contracts. Pays on net-dollar retention and contract duration,
+    dies on seat/consumption stalls or a government budget shift.
+  facts:
+    - id: net_dollar_retention
+      question: "Net dollar retention, latest reported, and its trend over four quarters?"
+      why: "It is the single number that says whether deployments expand or stall — the whole compounding case."
+      sources: [earnings_call_transcript, 10-Q]
+      cadence: quarterly
+    - id: commercial_customer_count
+      question: "US commercial customer count and its growth rate?"
+      why: "Separates a real land-and-expand motion from a handful of large renewals."
+      sources: [earnings_call_transcript, 10-Q]
+      cadence: quarterly
+    - id: remaining_deal_value
+      question: "Total remaining deal value / backlog and average contract duration?"
+      why: "Duration is the difference between a project vendor and an installed base."
+      sources: [10-Q, earnings_call_transcript]
+      cadence: quarterly
+    - id: gov_budget_exposure
+      question: "Which government programs fund the largest contracts, and what is their appropriation status?"
+      why: "A dated, external, falsifiable kill signpost — budgets are public and scheduled."
+      sources: [government_budget_document, 10-K]
+      cadence: annual
+  noise:
+    - "founder/CEO media appearances and quotable soundbites"
+    - "retail sentiment, options flow, and social-volume metrics"
+    - "analyst price-target changes"
+    - "single-day share-price moves"
+
+RKLB:
+  engine: >-
+    Launch cadence plus the space-systems attach. Pays on demonstrated cadence
+    and Neutron milestones; dies on schedule slip or a failure that resets the
+    manifest.
+  facts:
+    - id: launch_cadence
+      question: "Launches completed in the trailing twelve months vs the guided rate?"
+      why: "Cadence is the revenue engine and the credibility proof. Guidance without cadence is a plan."
+      sources: [earnings_call_transcript, launch_record]
+      cadence: quarterly
+    - id: neutron_milestone_dates
+      question: "What is the CURRENTLY GUIDED date for the next Neutron milestone, and how has that date moved over the last three guides?"
+      why: "The dated signpost. Movement of the date — not the date itself — is the falsifiable signal."
+      sources: [earnings_call_transcript, company_release]
+      cadence: quarterly
+    - id: space_systems_backlog
+      question: "Space systems backlog and its share of total backlog?"
+      why: "The non-launch business is what makes the model survive a launch pause."
+      sources: [10-Q, earnings_call_transcript]
+      cadence: quarterly
+    - id: cash_runway
+      question: "Cash, burn rate, and quarters of runway at the current rate?"
+      why: "Pre-profit hardware companies die of financing, not of demand."
+      sources: [10-Q]
+      cadence: quarterly
+  noise:
+    - "launch livestream sentiment and rocket-photo engagement"
+    - "analyst price-target changes"
+    - "competitor launch news with no manifest or customer impact"
+    - "single-day share-price moves"
+
+ACHR:
+  engine: >-
+    Certification-gated aviation. Nothing else matters until type certification
+    is in hand — this is a regulatory clock, not a market clock.
+  facts:
+    - id: certification_stage
+      question: "Which FAA certification stage is complete, and what percentage of stage 4/5 test points are closed?"
+      why: "The only fact that decides the outcome. Everything else is preamble."
+      sources: [faa_filing, company_release, earnings_call_transcript]
+      cadence: quarterly
+    - id: certification_date_guidance
+      question: "The currently guided certification date, and how it has moved across the last four guides?"
+      why: "Date movement is the falsifiable kill signal — the dated, external signpost L5 requires."
+      sources: [earnings_call_transcript, company_release]
+      cadence: quarterly
+    - id: cash_runway
+      question: "Cash, quarterly burn, and runway in quarters?"
+      why: "Certification timelines slip; the company must outlive the slip. Financing is the actual risk."
+      sources: [10-Q]
+      cadence: quarterly
+    - id: order_book_quality
+      question: "Which orders are FIRM (deposit-backed) vs conditional LOIs?"
+      why: "Headline order books in this sector are mostly conditional. The firm subset is the real number."
+      sources: [10-K, 10-Q, company_release]
+      cadence: annual
+  noise:
+    - "demo flights, air-show appearances, and concept renderings"
+    - "conditional order announcements presented as backlog"
+    - "analyst price-target changes"
+    - "single-day share-price moves"
+
+CELH:
+  engine: >-
+    Shelf space and velocity inside a distribution partnership. Pays on
+    sustained per-store velocity and international expansion; dies on velocity
+    decay or distributor-relationship change.
+  facts:
+    - id: retail_velocity
+      question: "Per-store sales velocity trend (scanner data) over the last two quarters?"
+      why: "Distribution gains inflate shipments once; velocity is what recurs. The classic beverage trap is confusing the two."
+      sources: [earnings_call_transcript, scanner_data_disclosure]
+      cadence: quarterly
+    - id: distributor_inventory
+      question: "Is distributor inventory building or drawing down relative to sell-through?"
+      why: "Shipment growth on building inventory is borrowed revenue that reverses."
+      sources: [earnings_call_transcript, 10-Q]
+      cadence: quarterly
+    - id: category_share
+      question: "Share of the energy-drink category and its direction?"
+      why: "Separates category growth from company execution."
+      sources: [earnings_call_transcript, industry_filing]
+      cadence: quarterly
+    - id: international_mix
+      question: "International revenue share and growth rate?"
+      why: "The second act. Without it the domestic S-curve caps the thesis."
+      sources: [10-Q, earnings_call_transcript]
+      cadence: quarterly
+  noise:
+    - "influencer/social-media buzz and sponsorship announcements"
+    - "new-flavor launches without velocity data"
+    - "analyst price-target changes"
+    - "single-day share-price moves"

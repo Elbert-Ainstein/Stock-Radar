@@ -44,8 +44,10 @@ from engine.fetch import (append_rows, cross_check, fetch_settled_stooq,
 from engine.market_calendar import exchange_today, is_trading_day
 from engine.paths import ROOT, config_dir
 from engine.report import render_brief, upcoming_catalysts
-from engine.rules import (adjudicate, anti_parabola, euphoria_checks,
-                          load_tripwires, load_wire_state, effective_status)
+from engine.consult_state import summarize as consult_summary
+from engine.rules import (adjudicate, adjudicate_signposts, anti_parabola,
+                          euphoria_checks, load_tripwires, load_wire_state,
+                          effective_status)
 from engine.valuation import FX_TICKERS, value_book
 
 
@@ -175,6 +177,13 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
                                           and v.ticker not in universe):
             degraded = True
 
+    # 3b · Dated signposts (2026-07-28): a kill trigger that is a DATE, not a
+    # price. The machine cannot observe the fact, so on the due date it asks.
+    signposts = adjudicate_signposts(root=root)
+    for s in signposts:
+        print(f"[premarket] SIGNPOST DUE {s['due']}: {s['wire']} "
+              f"({s['ticker']}) — review consult opened: {s['consult']}")
+
     # 4 · Charter §V monitors.
     euphoria_fired = euphoria_checks(root=root)
     for f in euphoria_fired:
@@ -225,6 +234,8 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
             "book": book,
             "catalysts": cats,
             "evidence": research,
+            "signposts": signposts,
+            "consults": consult_summary(root),
             "warnings": brief_warnings,
         }, root=root)
         print(f"[premarket] brief → {brief}")
@@ -234,6 +245,14 @@ def run(offline: bool = False, root: Path = ROOT) -> int:
         print(f"[premarket] brief render FAILED — {e}", file=sys.stderr)
         logmod.append("brief_render_failed", root=root, pass_name="premarket",
                       error=str(e))
+
+    _cs = consult_summary(root)
+    if _cs["open"]:
+        print(f"[premarket] {_cs['open']} consult(s) awaiting your signature"
+              + (f" — oldest {_cs['oldest_days']}d" if _cs["oldest_days"] is not None else "")
+              + (f" · OVERDUE: {', '.join(_cs['overdue'])}" if _cs["overdue"] else ""))
+        logmod.append("consults_open", root=root, count=_cs["open"],
+                      oldest_days=_cs["oldest_days"], overdue=_cs["overdue"])
 
     logmod.append("pass_done", root=root, pass_name="premarket",
                   wires_fired=len(fired), book_usd=t["usd"],

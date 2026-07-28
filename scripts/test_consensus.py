@@ -120,10 +120,21 @@ def test_model_c_no_verdict_uses_confidence_consistency():
 
 # ── wiring into run_socratic.run_round_1_parallel (no network; run_one_model mocked) ──
 
+def _pin_legacy_trio(monkeypatch):
+    """These tests measure the self-consistency mechanic, not the roster size
+    (the panel became operator-configurable data on 2026-07-28). Seat the
+    original trio so the arithmetic below stays about aggregation."""
+    import socratic_panel as sp
+    trio = [sp.BY_ID[i] for i in ("fundamentals", "regime", "adversarial")]
+    monkeypatch.setattr(sp, "load_roster", lambda *a, **k: trio)
+    return trio
+
+
 def test_run_round_1_noop_when_n_is_1(monkeypatch):
     monkeypatch.delenv("SELF_CONSISTENCY_N", raising=False)
     import threading
     import run_socratic as rs
+    _pin_legacy_trio(monkeypatch)
 
     calls, lock = [], threading.Lock()
 
@@ -149,6 +160,7 @@ def test_run_round_1_aggregates_when_n_gt_1(monkeypatch):
     import itertools
     import threading
     import run_socratic as rs
+    _pin_legacy_trio(monkeypatch)
 
     idx = {r: itertools.count() for r in ("a", "b", "c")}
     n_calls, lock = {"n": 0}, threading.Lock()
@@ -181,3 +193,31 @@ def test_run_round_1_aggregates_when_n_gt_1(monkeypatch):
     assert out["b"]["input_tokens"] == 30                  # tokens summed across all 3 samples
     # A unanimous -> consistency 1.0
     assert out["a"]["parsed"]["consistency"] == 1.0
+
+
+def test_round_1_fans_out_over_the_seated_roster(monkeypatch):
+    """Panel expansion regression (2026-07-28): round 1 fires one call per
+    SEATED panelist. The old hardcoded ("a","b","c") would have silently
+    dropped the five new seats — and their token counts with them."""
+    monkeypatch.delenv("SELF_CONSISTENCY_N", raising=False)
+    import threading
+    import run_socratic as rs
+    import socratic_panel as sp
+
+    seats = [sp.BY_ID[i] for i in ("fundamentals", "supply_chain", "steelman")]
+    monkeypatch.setattr(sp, "load_roster", lambda *a, **k: seats)
+
+    calls, lock = [], threading.Lock()
+
+    def fake(role, ctx, allowed):
+        with lock:
+            calls.append(role)
+        return {"role": role, "parsed": {"verdict": "V", "confidence": "HIGH"},
+                "text": "t", "input_tokens": 1, "output_tokens": 2,
+                "web_search_count": 0, "prompt_version": "v1", "model_used": "m"}
+
+    monkeypatch.setattr(rs, "run_one_model", fake)
+    out = rs.run_round_1_parallel({"ticker": "TEST"}, [])
+
+    assert sorted(calls) == sorted(p.key for p in seats)
+    assert set(out) == {p.key for p in seats}
