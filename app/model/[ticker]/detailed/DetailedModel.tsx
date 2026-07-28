@@ -85,6 +85,8 @@ export default function DetailedModel({ ticker }: { ticker: string }) {
   const cur = payload.target.current_price;
   const upside = thesisTarget != null && cur > 0 ? (thesisTarget - cur) / cur : null;
   const conviction = (thesis?.conviction || "").toUpperCase();
+  // Structural axis (dual-system Step 1) — empty string on legacy rows.
+  const strategic = (thesis?.strategic_conviction || "").toUpperCase();
   const convStyle: Record<string, { fg: string; bg: string }> = {
     HIGH:   { fg: "var(--sr-conv-strong)", bg: "var(--sr-conv-strong-bg)" },
     MEDIUM: { fg: "var(--sr-conv-good)",   bg: "var(--sr-conv-good-bg)"   },
@@ -124,8 +126,13 @@ export default function DetailedModel({ ticker }: { ticker: string }) {
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
               <span className="sr-eyebrow" style={{ color: conv.fg }}>Conviction</span>
-              <span className="sr-mono" style={{ fontSize: 13, fontWeight: 700, color: conv.fg, padding: "2px 7px", border: `1px solid ${conv.fg}`, borderRadius: 3, marginTop: 2, alignSelf: "flex-start" }}>
-                {conviction}{thesis?.position_size_pct != null ? ` · ${thesis.position_size_pct}%` : ""}
+              <span
+                className="sr-mono"
+                title={strategic ? `strategic ${strategic} (price-independent) / trade ${conviction} (gate-clamped)` : undefined}
+                style={{ fontSize: 13, fontWeight: 700, color: conv.fg, padding: "2px 7px", border: `1px solid ${conv.fg}`, borderRadius: 3, marginTop: 2, alignSelf: "flex-start" }}
+              >
+                {strategic ? `S·${strategic} / T·${conviction}` : conviction}
+                {thesis?.position_size_pct != null ? ` · ${thesis.position_size_pct}%` : ""}
               </span>
             </div>
             {thesis?.breakout_price != null && (

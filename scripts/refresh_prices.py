@@ -83,17 +83,27 @@ def fetch_quote(ticker: str) -> dict | None:
 
 
 def get_watchlist_tickers() -> list[str]:
-    """Read the active watchlist tickers from Supabase (discovery_universe rows
-    with status='watchlisted'). Falls back to local watchlist.json if Supabase
-    is unavailable."""
-    from supabase_helper import get_client
-    sb = get_client()
+    """Read the active watchlist tickers from the `stocks` table — the source
+    of truth per CLAUDE.md. Falls back to local watchlist.json if Supabase is
+    unavailable OR returns nothing.
+
+    2026-07-08 fix: this previously read `discovery_universe` rows with
+    status='watchlisted' — the DORMANT discovery table (stale since 2026-05),
+    not the actual watchlist — and the watchlist.json fallback only fired on
+    exception, never on an empty result. The scheduled 5-minute price refresh
+    was polling the wrong universe.
+    """
     try:
-        r = sb.table("discovery_universe").select("ticker").eq("status", "watchlisted").execute()
-        return [row["ticker"] for row in (r.data or [])]
+        from supabase_helper import get_client
+        sb = get_client()
+        r = sb.table("stocks").select("ticker").eq("active", True).execute()
+        tickers = [row["ticker"] for row in (r.data or []) if row.get("ticker")]
+        if tickers:
+            return tickers
     except Exception:
-        from utils import get_watchlist
-        return [s["ticker"] for s in get_watchlist()]
+        pass
+    from utils import get_watchlist
+    return [s["ticker"] for s in get_watchlist()]
 
 
 def update_price(sb, ticker: str, quote: dict, dry_run: bool = False) -> bool:
@@ -149,17 +159,48 @@ def main():
     sb = get_client()
 
     summary = {"updated": 0, "no_quote": 0, "no_row": 0, "skipped": 0}
+    quotes: dict[str, float] = {}
     for t in tickers:
         quote = fetch_quote(t)
         if quote is None:
             print(f"  [{t}] no quote available", file=sys.stderr)
             summary["no_quote"] += 1
             continue
+        quotes[t] = quote["price"]
         ok = update_price(sb, t, quote, dry_run=args.dry_run)
         if ok:
             summary["updated"] += 1
         else:
             summary["no_row"] += 1
+
+    # L2/L5: STALK trigger alerts — compare stored triggers against the
+    # quotes just fetched (plus a quote for any STALK name not on the
+    # watchlist), surface breaches LOUDLY and stamp trigger_breached_at.
+    # Guarded: pre-migration DBs (no stance column) just skip.
+    try:
+        from discovery_screens import check_trigger_breach
+        res = (sb.table("discovery_universe")
+               .select("ticker,trigger_price,trigger_breached_at")
+               .eq("stance", "STALK").execute())
+        stalks = [r for r in (res.data or []) if r.get("trigger_price")]
+        for r in stalks:
+            t = r["ticker"]
+            if t not in quotes:
+                q = fetch_quote(t)
+                if q:
+                    quotes[t] = q["price"]
+        for b in check_trigger_breach(stalks, quotes):
+            already = next((r.get("trigger_breached_at") for r in stalks
+                            if r["ticker"] == b["ticker"]), None)
+            print(f"  *** STALK TRIGGER {'still ' if already else ''}BREACHED: "
+                  f"{b['ticker']} at ${b['price']:.2f} <= trigger ${b['trigger_price']:.2f} ***",
+                  flush=True)
+            if not args.dry_run and not already:
+                sb.table("discovery_universe").update(
+                    {"trigger_breached_at": datetime.now(timezone.utc).isoformat()}
+                ).eq("ticker", b["ticker"]).execute()
+    except Exception as e:
+        print(f"  [stalk] trigger check skipped ({e})", file=sys.stderr)
 
     print(f"\n  result: {summary}")
 

@@ -22,13 +22,34 @@ function fmtPct(n: number | null): string {
   return `${n.toFixed(0)}%`;
 }
 
-export function ConvictionBadge({ conviction }: { conviction: string | null }) {
+export function ConvictionBadge({ conviction, label }: { conviction: string | null; label?: string }) {
   if (!conviction) return null;
-  const cls = CONVICTION_STYLE[conviction] || "bg-[var(--border)] text-[var(--muted)] border-[var(--border)]";
+  // run_thesis persists the model's casing raw — normalize before the style
+  // lookup like every other surface (kill_gate.py does the same server-side).
+  const tier = conviction.toUpperCase();
+  const cls = CONVICTION_STYLE[tier] || "bg-[var(--border)] text-[var(--muted)] border-[var(--border)]";
   return (
     <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-mono uppercase tracking-wider", cls)}>
-      {conviction}
+      {label ? <span className="opacity-60 mr-1">{label}</span> : null}
+      {tier}
     </span>
+  );
+}
+
+/**
+ * Dual-system badge pair: strategic (Type A, price-independent) + trade
+ * (Type B, gate-clamped). Legacy rows without strategic_conviction render
+ * the single unlabeled trade badge, exactly as before.
+ */
+export function DualConvictionBadges({ thesis }: { thesis: ThesisRun }) {
+  if (!thesis.strategic_conviction) {
+    return <ConvictionBadge conviction={thesis.conviction} />;
+  }
+  return (
+    <>
+      <ConvictionBadge conviction={thesis.strategic_conviction} label="strategic" />
+      <ConvictionBadge conviction={thesis.conviction} label="trade" />
+    </>
   );
 }
 
@@ -48,7 +69,7 @@ export function ThesisInline({
     <div className="flex flex-col items-end gap-0.5">
       <div className="flex items-center gap-1.5">
         <span className="text-[9px] text-[var(--muted)] uppercase tracking-wider">Destination</span>
-        <ConvictionBadge conviction={thesis.conviction} />
+        <DualConvictionBadges thesis={thesis} />
       </div>
       <div className="font-mono font-bold text-base text-emerald-400">
         {fmtPrice(thesis.thesis_target, currency)}
@@ -102,11 +123,12 @@ export function ThesisHeaderPanel({
   return (
     <div className="mb-6 p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]">
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
+        {/* flex-wrap only when the dual badges add width — legacy rows keep the pre-structural layout */}
+        <div className={cn("flex items-center gap-2", !!thesis.strategic_conviction && "flex-wrap")}>
           <h3 className="text-xs uppercase tracking-wider text-[var(--accent-muted)] font-semibold">
             Thesis · {thesis.prompt_version}
           </h3>
-          <ConvictionBadge conviction={thesis.conviction} />
+          <DualConvictionBadges thesis={thesis} />
         </div>
         <ThesisRerunButton
           ticker={ticker}
@@ -163,10 +185,24 @@ export function ThesisHeaderPanel({
           </div>
         </div>
       </div>
-      <div className="mt-3 flex items-center gap-3 text-[10px] text-[var(--muted)]">
+      <div className={cn(
+        "mt-3 flex items-center gap-3 text-[10px] text-[var(--muted)]",
+        // flex-wrap only when the structural chips add width — legacy rows keep the pre-structural layout
+        (thesis.risk_adj_ev_ratio != null || thesis.thesis_horizon_years != null) && "flex-wrap",
+      )}>
         <span>
           Setup <span className="font-mono text-[var(--text)]">{filterPasses}/{filterTotal}</span> filters
         </span>
+        {thesis.risk_adj_ev_ratio != null && (
+          <span title="risk_adj_target / spot, recomputed by the trade gate">
+            EV ratio <span className="font-mono text-[var(--text)]">{Number(thesis.risk_adj_ev_ratio).toFixed(2)}×</span>
+          </span>
+        )}
+        {thesis.thesis_horizon_years != null && (
+          <span title="The clock this verdict was judged on — gate thresholds are annualized-equivalent (L1)">
+            Clock <span className="font-mono text-[var(--text)]">{Number(thesis.thesis_horizon_years)}y</span>
+          </span>
+        )}
         {thesis.coverage_quality && (
           <span>
             Coverage <span className="font-mono text-[var(--text)]">{thesis.coverage_quality}</span>
@@ -181,6 +217,25 @@ export function ThesisHeaderPanel({
           <span className="opacity-60">via {thesis.trigger_reason}</span>
         )}
       </div>
+      {thesis.kill_gate_override && (
+        <div className="mt-2 text-[10px] text-orange-300/90">
+          Kill gate routed{" "}
+          <span className="font-mono">{thesis.kill_gate_override.raw_verdict} → {thesis.kill_gate_override.routed_verdict}</span>
+          {thesis.kill_gate_override.reason && <> — {thesis.kill_gate_override.reason}</>}
+        </div>
+      )}
+      {thesis.model_d_bracket?.vision_ceiling != null && (
+        <div className="mt-1 text-[10px] text-[var(--muted)]">
+          Model D vision <span className="font-mono">{fmtPrice(thesis.model_d_bracket.vision_ceiling, currency)}</span>
+          {" "}vs engine floor <span className="font-mono">
+            {fmtPrice(thesis.model_d_bracket.engine_floor_pv ?? thesis.model_d_bracket.engine_floor, currency)}
+          </span> PV
+          {thesis.model_d_bracket.vision_over_floor_x != null && (
+            <> — <span className="font-mono">{thesis.model_d_bracket.vision_over_floor_x}×</span> like-for-like</>
+          )}
+          <span className="opacity-60"> (additive, not a verdict)</span>
+        </div>
+      )}
     </div>
   );
 }

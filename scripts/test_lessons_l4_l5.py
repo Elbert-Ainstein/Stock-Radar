@@ -155,17 +155,9 @@ def test_empty_triggers_no_warnings():
     assert lint_kill_triggers([]) == []
 
 
-# ── L7: hypothesis intake loader ────────────────────────────────────────────────
-
-def test_hypothesis_loader_roundtrip(tmp_path, monkeypatch):
-    import run_thesis
-    monkeypatch.setattr(run_thesis, "REPO_ROOT", tmp_path)
-    hyp_dir = tmp_path / "data" / "hypotheses"
-    hyp_dir.mkdir(parents=True)
-    (hyp_dir / "LITE.md").write_text("# Hypothesis: optics is the next bottleneck")
-    assert "next bottleneck" in run_thesis._load_hypothesis("lite")
-    assert run_thesis._load_hypothesis("PLTR") is None
-
+# ── L7: hypothesis intake ──────────────────────────────────────────────────────
+# (Loader mechanics live in hypotheses.py — covered in test_discovery_screens;
+# the inline _load_hypothesis this file once pinned was superseded by it.)
 
 def test_hypothesis_template_exists_and_demands_falsifiability():
     template = (Path(__file__).resolve().parent.parent / "data" / "hypotheses" / "TEMPLATE.md").read_text()

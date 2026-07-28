@@ -32,6 +32,9 @@ export default function ThesisTab({
   const fmt = (n: number | null | undefined) =>
     n == null ? "—" : "$" + n.toLocaleString(undefined, { maximumFractionDigits: n >= 100 ? 0 : 2 });
 
+  // Structural axis (dual-system Step 1) — empty string on legacy rows.
+  const strategic = (thesis.strategic_conviction || "").toUpperCase();
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -54,13 +57,23 @@ export default function ThesisTab({
           className="rounded-lg border p-4"
           style={{ borderColor: "var(--sr-rule-soft)", background: "var(--sr-paper-1)" }}
         >
-          <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--sr-ink-3)" }}>Conviction</div>
+          <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--sr-ink-3)" }}>
+            {strategic ? "Conviction (trade)" : "Conviction"}
+          </div>
           <div className={`text-xl font-mono font-bold ${CONVICTION_COLOR[thesis.conviction || ""] || ""}`} style={!CONVICTION_COLOR[thesis.conviction || ""] ? { color: "var(--sr-ink)" } : undefined}>
             {thesis.conviction || "—"}
           </div>
           <div className="text-[10px] mt-1" style={{ color: "var(--sr-ink-3)" }}>
             {thesis.position_size_pct != null ? `${thesis.position_size_pct}% position` : ""}
           </div>
+          {strategic && (
+            <div
+              className={`text-[10px] mt-1 font-mono font-semibold ${CONVICTION_COLOR[strategic] || ""}`}
+              title="Type A — structural, price-independent; never clamped by the trade gate"
+            >
+              strategic {strategic}
+            </div>
+          )}
         </div>
       </div>
 

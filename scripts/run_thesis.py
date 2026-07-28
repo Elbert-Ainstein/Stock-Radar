@@ -331,18 +331,6 @@ def _load_thesis_horizon(ticker: str) -> Optional[float]:
         return None
 
 
-def _load_hypothesis(ticker: str) -> Optional[str]:
-    """L7 human-hypothesis intake: data/hypotheses/<TICKER>.md (see the
-    TEMPLATE.md there: claim / mechanism / signatures S1-S6 / kill conditions
-    with dates / horizon / status). Returns None when absent."""
-    try:
-        path = REPO_ROOT / "data" / "hypotheses" / f"{ticker.upper()}.md"
-        text = path.read_text().strip()
-        return text or None
-    except Exception:
-        return None
-
-
 def thesis_output_usable(parsed: Optional[dict]) -> bool:
     """Truncation-guard predicate (2026-07-02, sprint 2.4): a thesis output is
     persistable only if the closing JSON carries at least one verdict field.
@@ -424,10 +412,12 @@ def write_to_supabase(row: dict) -> int | None:
         sb = get_client()
     import re as _re
     result = None
-    # Budget: one attempt per strippable column + 1 (2026-07-02 — the old
-    # fixed range(5) sat at exact capacity vs the pending-migration columns;
-    # one more pre-migration field would have failed the ENTIRE insert.
-    # Same fix as prediction_logger's strip loop.)
+    # Strip budget is DYNAMIC: one attempt per column + 1. The old fixed
+    # range(5) tolerated at most 4 missing columns — the L4 run_parameters
+    # column made it 6 potentially missing pre-migration, which would have
+    # exhausted the budget and lost the ENTIRE verdict row (the exact
+    # prediction_logger off-by-one from sprint 1.3, re-caught in review
+    # 2026-07-08). The loop still exits on success or any non-column error.
     for _attempt in range(len(row) + 1):
         try:
             result = sb.table("theses").insert(row).execute()
@@ -845,11 +835,13 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     # Use a LIVE quote for spot — fin.price is the EOD provider close (~1 day stale),
     # which distorts the trade-asymmetry ratio on volatile days.
     _live = fetch_live_price(ticker)
+    spot_source = "eod_provider"  # L4: which price the verdict was judged at
     if _live:
         if spot and abs(_live - spot) / spot > 0.01:
             print(f"  [price] live ${_live:.2f} vs EOD provider ${spot:.2f} "
                   f"({(_live/spot - 1) * 100:+.1f}%) — using live", flush=True)
         spot = _live
+        spot_source = "live"
     print(f"  spot={spot:.2f} sector={sector}", flush=True)
 
     # 2. IR metadata (auto-discover)
@@ -864,19 +856,22 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     memory_section = format_prior_context(memory_md) if memory_md else ""
     if memory_md:
         print(f"  memory: {len(memory_md)} chars (prior runs detected)", flush=True)
-
-    # 3b. L7 (2026-07-02): human-hypothesis intake. The human is the hypothesis
-    # generator; the engine is the falsifier. Rides the memory block so no
-    # prompt-file change (and no cohort churn) is needed.
-    hypothesis_md = _load_hypothesis(ticker)
-    if hypothesis_md:
-        memory_section += (
-            "\n\n### OPERATOR HYPOTHESIS (human-originated — your job is to FALSIFY, "
-            "not flatter)\nGround every claimed signature in evidence; challenge the "
-            "mechanism; if it survives, say precisely which parts carried the weight.\n\n"
-            + hypothesis_md
-        )
-        print(f"  hypothesis: {len(hypothesis_md)} chars loaded from data/hypotheses/", flush=True)
+    # L7 (2026-07-08): operator hypotheses front door. Active hypotheses that
+    # name this ticker ride into the prompt at the same prior-context slot
+    # (thesis_v3.md untouched; empty folder = byte-identical prompt). Guarded:
+    # a malformed hypothesis file must never fail a thesis run.
+    try:
+        from hypotheses import load_hypotheses, active_for_ticker, format_hypotheses_block
+        _hyps = load_hypotheses()
+        _active = active_for_ticker(ticker, _hyps)
+        _hyp_block = format_hypotheses_block(ticker, _hyps)
+        if _hyp_block:
+            memory_section = (memory_section or "") + "\n" + _hyp_block
+            print(f"  [hypotheses] injected {len(_active)} active "
+                  f"hypothesis(es) for {ticker}: "
+                  f"{', '.join(h['name'] for h in _active)}", flush=True)
+    except Exception as e:
+        print(f"  [hypotheses] WARN: skipped — {e}", file=sys.stderr, flush=True)
 
     # Build scout-verified financials block from Module 1 fetch (already passed
     # the recent-quarter sanity check). Inject at the [VERIFIED_FINANCIALS]
@@ -1036,6 +1031,38 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     except Exception as _le:
         print(f"  [kill_lint] skipped — {_le}", file=sys.stderr, flush=True)
 
+    # L4 (2026-07-08): every run emits its parameter block — horizon clock,
+    # post-scaling clamp table, archetype/dcf_role, allowlist size — logged
+    # AND persisted (theses.run_parameters, strip-and-retry safe until the
+    # 2026-07-08 migration is applied). No invisible opinions.
+    try:
+        from run_parameters import (build_thesis_run_parameters,
+                                    load_archetype_and_dcf_role, diagnose_verdict)
+        _, _dcf_role = load_archetype_and_dcf_role(ticker)
+        run_params = build_thesis_run_parameters(
+            ticker=ticker, prompt_version=prompt_version,
+            model=ANTHROPIC_MODEL, temperature=TEMPERATURE, max_tokens=MAX_TOKENS,
+            spot=spot, spot_source=spot_source,
+            horizon_config=_load_thesis_horizon(ticker),
+            horizon_used=parsed.get("thesis_horizon_years"),
+            horizon_fallback=(_tg or {}).get("horizon_fallback"),
+            archetype=_arch, dcf_role=_dcf_role,
+            allowlist_size=len(domains), ir_domain_present=bool(meta["ir_domain"]),
+            memory_chars=len(memory_md or ""),
+            web_search_max_uses=MAX_TOOL_ITER,
+        )
+        print(f"  [params] {json.dumps(run_params, default=str)}", flush=True)
+        # Per-run zero-actionable visibility: state which gate killed it and
+        # what would have to change, instead of a bare BROKEN.
+        if not (parsed.get("position_size_pct") or 0):
+            _diag = diagnose_verdict({**parsed, "ticker": ticker, "spot_at_run": spot})
+            print(f"  [gate_diagnosis] killed by {_diag.get('killed_by')}", flush=True)
+            for _c in _diag.get("what_would_change", []):
+                print(f"    → {_c}", flush=True)
+    except Exception as e:
+        run_params = None
+        print(f"  [params] WARN: parameter block failed — {e}", file=sys.stderr, flush=True)
+
     cited = extract_cited_domains(result["raw_blocks"])
     coverage = coverage_quality(len(cited))
     print(f"  cited domains ({len(cited)}, {coverage}): {', '.join(cited[:8])}{'...' if len(cited) > 8 else ''}", flush=True)
@@ -1050,44 +1077,21 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     if not meta["ir_domain"]:
         company_lower = meta["company_name"].lower().split()[0] if meta["company_name"] else ""
         for dom in cited:
-            if company_lower and company_lower in dom and "investor" in dom or company_lower in dom.replace("-", ""):
+            # Precedence fix (2026-07-08): the old `a and b and c or d` bound as
+            # `(a and b and c) or d`, so with an EMPTY company name the second
+            # clause ("" in anything → True) cached the first cited domain as
+            # the IR site. Both branches require a company name.
+            if company_lower and ((company_lower in dom and "investor" in dom)
+                                  or company_lower in dom.replace("-", "")):
                 update_ir_domain(ticker, dom)
                 print(f"  enriched ir_cache: {ticker} → {dom}", flush=True)
                 break
-
-    # 7b. L4 (2026-07-02): every run emits its parameter block — the engine
-    # must never have an invisible opinion. One JSON blob: the clock, the
-    # scaled clamp thresholds, the archetype routing, and which gates acted.
-    try:
-        from trade_gate import DEFAULT_HORIZON_YEARS, horizon_adjusted_table
-        _h_used = parsed.get("thesis_horizon_years") or DEFAULT_HORIZON_YEARS
-        run_parameters = {
-            "prompt_version": prompt_version,
-            "thesis_horizon_years": _h_used,
-            "clamp_table": [
-                [None if lo == float("-inf") else lo, conv, pos]
-                for lo, conv, pos in horizon_adjusted_table(float(_h_used))
-            ],
-            "archetype": _arch,
-            "spot": spot,
-            "allowlist_domains": len(domains),
-            "max_tokens": MAX_TOKENS,
-            "temperature": TEMPERATURE,
-            "trade_gate_acted": bool(_tg and _tg.get("clamped")),
-            "kill_gate_override": bool(parsed.get("kill_gate_override")),
-            "model_d_ran": "model_d_bracket" in parsed,
-        }
-        print(f"  [run_parameters] {json.dumps(run_parameters, default=str)}", flush=True)
-    except Exception as _pe:
-        run_parameters = None
-        print(f"  [run_parameters] WARN: block not emitted — {_pe}", file=sys.stderr, flush=True)
 
     # 8. Build Supabase row
     row = {
         "ticker": ticker.upper(),
         "run_at": run_at.isoformat(),
         "prompt_version": prompt_version,
-        "run_parameters": run_parameters,                              # L4: no invisible opinions (jsonb; stripped until migration)
         "thesis_target": parsed.get("thesis_target"),
         "breakout_price": parsed.get("breakout_price"),
         "risk_adj_target": parsed.get("risk_adj_target"),
@@ -1104,6 +1108,7 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
         "kill_triggers": parsed.get("kill_triggers", []),
         "kill_gate_override": parsed.get("kill_gate_override"),  # D1: structured override (or None)
         "model_d_bracket": parsed.get("model_d_bracket"),        # Model D: vision-vs-floor bracket (or None)
+        "run_parameters": run_params,                            # L4: the parameters this verdict was judged under (or None)
         "spot_at_run": spot,
         "trigger_reason": trigger_reason,
         "markdown_path": str(md_path.relative_to(REPO_ROOT)),

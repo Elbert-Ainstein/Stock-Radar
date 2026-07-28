@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { selectThesesWithStructural } from "@/lib/data";
 import Anthropic from "@anthropic-ai/sdk";
 import { execFile } from "child_process";
 import path from "path";
@@ -472,7 +473,7 @@ interface PortfolioContext {
 }
 
 async function buildContext(): Promise<PortfolioContext> {
-  const [stocksRes, signalsRes, pipelineRes, thesesRes] = await Promise.all([
+  const [stocksRes, signalsRes, pipelineRes, thesesRows] = await Promise.all([
     supabase.from("stocks").select("*").eq("active", true),
     supabase.from("latest_signals").select("*"),
     supabase
@@ -484,15 +485,16 @@ async function buildContext(): Promise<PortfolioContext> {
     // 2026-07-02 (Option A): the theses row is the verdict of record — Ask AI
     // previously reasoned only from generate_model-era stocks.* data and gave
     // buy verdicts that ignored the trade gate entirely (audit §4.6).
-    supabase
-      .from("theses")
-      .select(
-        "ticker,run_at,conviction,strategic_conviction,thesis_target," +
-        "risk_adj_target,risk_adj_ev_ratio,position_size_pct,buy_below," +
-        "trim_above,spot_at_run,kill_gate_override,model_d_bracket",
-      )
-      .order("run_at", { ascending: false })
-      .limit(500),
+    // The structural-axis columns ride along with a pre-migration fallback —
+    // a bare select on them errors wholesale until the 2026-07-02 migrations
+    // apply, which read as "no thesis run recorded" for every stock here.
+    selectThesesWithStructural(
+      [
+        "ticker","run_at","conviction","thesis_target","risk_adj_target",
+        "position_size_pct","buy_below","trim_above","spot_at_run",
+      ],
+      500,
+    ),
   ]);
 
   // Review fix 2026-07-02: supabase-js resolves errors into {data:null,error}
@@ -503,7 +505,7 @@ async function buildContext(): Promise<PortfolioContext> {
   }
 
   const theses: Record<string, any> = {};
-  for (const t of (thesesRes.data || []) as any[]) {
+  for (const t of thesesRows as any[]) {
     if (t.ticker && !theses[t.ticker]) theses[t.ticker] = t; // latest per ticker
   }
 
@@ -533,6 +535,8 @@ function thesisVerdictLine(t: any | undefined, queryError?: string | null): stri
     `trim_above=${num(t.trim_above)}`,
     `as-of=${(t.run_at || "").slice(0, 10)} (spot ${num(t.spot_at_run)})`,
   ];
+  // L1: every verdict states which clock it was judged on.
+  if (t.thesis_horizon_years != null) parts.push(`clock=${t.thesis_horizon_years}y`);
   if (t.kill_gate_override) parts.push("kill-gate=relaxed(archetype-routed)");
   return parts.join(" | ");
 }
