@@ -32,13 +32,29 @@ def value_book(root: Path = ROOT) -> dict:
             fx_cache[currency] = row.close if row else None
         return fx_cache[currency]
 
+    import math
     for seat in holdings.get("holdings") or []:
         ticker, currency = seat.get("ticker"), seat.get("currency", "USD")
+        # 2026-07-28 review fixes: missing shares, a conflicted latest print,
+        # and non-finite closes are all DECLARED gaps — the old code valued
+        # a None-shares seat at $0 and a NaN close as NaN while reporting
+        # the book complete.
+        if seat.get("shares") is None:
+            gaps.append({"ticker": ticker, "reason": "shares not set (SEED_REPLACE?)"})
+            continue
         shares = float(seat.get("shares") or 0)
         row = latest_settled(ticker, root)
         rate = fx_to_usd(currency)
         if row is None:
             gaps.append({"ticker": ticker, "reason": "no settled price row"})
+            continue
+        if row.conflict:
+            gaps.append({"ticker": ticker,
+                         "reason": f"latest settled print {row.date} is "
+                                   f"CONFLICT-flagged — disputed number cannot value the book (law 3)"})
+            continue
+        if not math.isfinite(row.close):
+            gaps.append({"ticker": ticker, "reason": f"non-finite close on {row.date}"})
             continue
         if rate is None:
             gaps.append({"ticker": ticker, "reason": f"no settled FX for {currency}"})
@@ -53,6 +69,10 @@ def value_book(root: Path = ROOT) -> dict:
 
     for c in holdings.get("cash") or []:
         rate = fx_to_usd(c.get("currency", "USD"))
+        if c.get("amount") is None:
+            gaps.append({"ticker": f"CASH:{c.get('currency')}",
+                         "reason": "amount not set (SEED_REPLACE?)"})
+            continue
         amt = float(c.get("amount") or 0)
         if rate is None:
             gaps.append({"ticker": f"CASH:{c.get('currency')}", "reason": "no settled FX"})

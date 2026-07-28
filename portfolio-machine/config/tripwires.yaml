@@ -1,4 +1,10 @@
-# tripwires.yaml — the book's wires. Editable without code.
+# tripwires.yaml — the book's wires. Editable without code. HUMAN-ONLY file:
+# the machine NEVER writes here (2026-07-28 review fix — a yaml round-trip was
+# destroying these comments). Machine-written state (fired status, history)
+# lives in data/wire_state.yaml keyed by wire id, and OVERRIDES the status
+# below: a wire the machine marked fired stays fired even though this file
+# still says armed. Re-arm by deleting the wire's entry in wire_state.yaml
+# (or retiring the wire here and adding a new one).
 #
 # Law 2 (two-phase verdicts) is structural: the evaluator adjudicates these
 # ONLY against settled rows; snapshot evaluations are PROVISIONAL — logged,
@@ -9,14 +15,15 @@
 #   ticker:    symbol whose settled close is tested
 #   condition: {op: gte|lte, level: <price>, basis: settled_close}
 #   action:    consult   (the ONLY allowed action — law 1)
-#   status:    armed | fired | retired
+#   status:    INITIAL status: armed | retired (machine state overrides)
 #   note:      one line of intent — WHY this wire exists
-#   history:   append-only adjudication events (machine-appended)
 #
 # SEED NOTE: the INTC/MU wires below encode the two settlement-flip incidents
-# from the spec as LIVE examples (levels chosen so the recorded prints straddle
-# them). The SNDK wire implements the $1,325 consult clause. Replace/extend
-# from the workbook (SEED_REPLACE where the level is a placeholder).
+# from the spec. They ship RETIRED (2026-07-28 review fix: armed, they were
+# already in-the-money against the spec's own prints — the machine's first
+# real run would have opened two placeholder consults in the money channel).
+# The regression tests arm their own copies; these stay as documentation.
+# The SNDK wire implements the $1,325 consult clause and is live.
 
 tripwires:
   - id: sndk-1325-consult
@@ -25,25 +32,22 @@ tripwires:
     action: consult
     status: armed
     note: "SNDK $1,325 consult clause — see clauses.yaml sndk-1325 for doors."
-    history: []
 
   - id: intc-92-flip-example
     ticker: INTC
     condition: { op: gte, level: 92.00, basis: settled_close }
     action: consult
-    status: armed
+    status: retired
     note: >-
       SEED example encoding the INTC settlement flip ($91.63 provisional ->
-      $92.52 settled): provisional says no-fire, settled says fire. Retire or
-      re-level from the workbook. SEED_REPLACE
-    history: []
+      $92.52 settled). Retired: tests/test_settlement_flip.py arms its own
+      copy; re-level from the workbook if you want it live. SEED_REPLACE
 
   - id: mu-900-flip-example
     ticker: MU
     condition: { op: gte, level: 900.00, basis: settled_close }
     action: consult
-    status: armed
+    status: retired
     note: >-
       SEED example encoding the MU settlement flip ($899.85 provisional ->
-      $900.20 settled). Retire or re-level from the workbook. SEED_REPLACE
-    history: []
+      $900.20 settled). Retired: tests arm their own copy. SEED_REPLACE

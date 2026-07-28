@@ -65,6 +65,13 @@ def cross_check(primary: list[PriceRow], secondary: list[PriceRow],
         if s is None:
             out.append(PriceRow(**{**asdict(r), "note": (r.note + " single-source").strip()}))
             continue
+        import math as _math
+        if not (_math.isfinite(r.close) and _math.isfinite(s.close)):
+            out.append(PriceRow(**{
+                **asdict(r), "conflict": True,
+                "note": (r.note + f" CONFLICT non-finite {r.source}={r.close} vs {s.source}={s.close}").strip(),
+            }))
+            continue
         rel = abs(r.close - s.close) / r.close if r.close else 1.0
         if rel > tolerance:
             out.append(PriceRow(**{
@@ -104,7 +111,17 @@ def append_rows(ticker: str, rows: list[PriceRow], root: Path = ROOT) -> int:
       with note 'correction' (the old row is never touched);
     - an identical settled row is skipped (idempotent backfills);
     - snapshot rows always append (they are a time series of observations).
+
+    Choke-point guards (2026-07-28 review fixes):
+    - law 2: a settled row dated on/after the ticker's EXCHANGE-LOCAL today is
+      force-demoted to snapshot here, whatever the fetcher claimed;
+    - non-finite closes (NaN/inf) are rejected outright — a NaN passed every
+      comparison in the cross-check and poisoned valuation while reporting
+      'verified'.
     Returns the number of rows written."""
+    import math
+    from .market_calendar import exchange_today
+    ex_today = exchange_today(ticker, root)
     existing = load_rows(ticker, root)
     settled_latest: dict[str, PriceRow] = {}
     for r in existing:
@@ -119,6 +136,11 @@ def append_rows(ticker: str, rows: list[PriceRow], root: Path = ROOT) -> int:
         if is_new_file:
             w.writeheader()
         for r in rows:
+            if not math.isfinite(r.close):
+                continue  # rejected — never stored, never "verified"
+            if r.settled and Date.fromisoformat(r.date) >= ex_today:
+                r = PriceRow(**{**asdict(r), "settled": False,
+                                "note": (r.note + " demoted:same-day (law 2)").strip()})
             if r.settled and r.date in settled_latest:
                 prev = settled_latest[r.date]
                 if abs(prev.close - r.close) < 1e-9 and prev.conflict == r.conflict:
@@ -134,13 +156,18 @@ def append_rows(ticker: str, rows: list[PriceRow], root: Path = ROOT) -> int:
 
 
 def latest_settled(ticker: str, root: Path = ROOT) -> PriceRow | None:
-    """Latest-dated settled row, taking the LAST unflagged write per date
-    (corrections go forward). Flagged-conflict rows are excluded — a
-    conflicted print cannot be the book's truth."""
+    """Latest-dated settled row, taking the LAST write per date — INCLUDING
+    conflict-flagged writes (2026-07-28 review fix: a later flagged row must
+    supersede an earlier clean one; the old exclude-flags filter silently
+    slid adjudication back to a stale date around a disputed print).
+
+    The returned row may therefore carry conflict=True: callers (rules,
+    valuation, euphoria) must treat that as BLOCKED, never as truth —
+    rules.evaluate's blocked_on_conflict branch is now the live path."""
     per_date: dict[str, PriceRow] = {}
     for r in load_rows(ticker, root):
-        if r.settled and not r.conflict:
-            per_date[r.date] = r
+        if r.settled:
+            per_date[r.date] = r  # last write per date wins, flag and all
     if not per_date:
         return None
     return per_date[max(per_date)]
@@ -148,9 +175,11 @@ def latest_settled(ticker: str, root: Path = ROOT) -> PriceRow | None:
 
 # ── Network fetchers (thin; passes call these, tests never do) ────────────────
 
-def fetch_settled_yfinance(ticker: str, lookback_days: int = 30) -> list[PriceRow]:
+def fetch_settled_yfinance(ticker: str, lookback_days: int = 30,
+                           root: Path = ROOT) -> list[PriceRow]:
     import yfinance as yf  # lazy: keeps the engine importable offline
-    today = datetime.now(timezone.utc).date()
+    from .market_calendar import exchange_today
+    today = exchange_today(ticker, root)  # law 2: EXCHANGE-local boundary
     hist = yf.Ticker(ticker).history(period=f"{lookback_days}d", auto_adjust=False)
     rows = [
         PriceRow(ticker=ticker, date=d.strftime("%Y-%m-%d"), close=float(c),
@@ -160,32 +189,36 @@ def fetch_settled_yfinance(ticker: str, lookback_days: int = 30) -> list[PriceRo
     return mark_settled(rows, today)  # today's bar, if present, demotes to snapshot
 
 
-def fetch_settled_stooq(ticker: str) -> list[PriceRow]:
-    """Second source (law 3). Stooq covers US tickers keylessly; unsupported
-    symbols return [] — the cross-check then marks rows single-source."""
+def fetch_settled_stooq(ticker: str, root: Path = ROOT) -> tuple[list[PriceRow], str]:
+    """Second source (law 3). Returns (rows, status) — status is one of
+    'ok' | 'unsupported' | 'empty' | 'failed:<why>'. 2026-07-28 review fix:
+    every failure used to return a bare [] with no signal, so the two-source
+    cross-check could be dead for months while runs printed healthy lines —
+    the caller must now log any non-'ok' status (silence is a violation)."""
     import requests
-    if "." in ticker:
-        return []  # non-US suffixes unsupported here; single-source noted
+    if "." in ticker or "=" in ticker:
+        return [], "unsupported"  # non-US suffixes / FX — structurally single-source
     sym = f"{ticker.lower()}.us"
     url = f"https://stooq.com/q/d/l/?s={sym}&i=d"
     try:
         resp = requests.get(url, timeout=15)
         resp.raise_for_status()
-    except Exception:
-        return []
-    today = datetime.now(timezone.utc).date()
+    except Exception as e:
+        return [], f"failed:{type(e).__name__}"
+    from .market_calendar import exchange_today
+    today = exchange_today(ticker, root)
     rows = []
     lines = resp.text.strip().splitlines()
     if len(lines) < 2 or not lines[0].lower().startswith("date"):
-        return []
+        return [], "empty"
     for rec in csv.DictReader(lines):
         try:
-            rows.append(PriceRow(ticker=ticker, date=rec["Date"],
-                                 close=float(rec["Close"]), settled=True,
-                                 source="stooq"))
+            close = float(rec["Close"])
         except (KeyError, ValueError):
             continue
-    return mark_settled(rows, today)
+        rows.append(PriceRow(ticker=ticker, date=rec["Date"], close=close,
+                             settled=True, source="stooq"))
+    return mark_settled(rows, today), ("ok" if rows else "empty")
 
 
 def fetch_snapshot_yfinance(ticker: str) -> PriceRow | None:
