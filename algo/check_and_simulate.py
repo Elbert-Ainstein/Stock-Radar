@@ -579,6 +579,10 @@ def main() -> int:
           any("Lower trend_period" in m for d, m in BOOK["log"]))
     check("first-trigger date is the first CALL, not the first data",
           any("first evaluated on 2020-01-01" in m for d, m in BOOK["log"]))
+    # 201 sessions from 2020-01-01 is ~2020-10, and the line must SAY it.
+    check("first trigger predicts the earliest possible entry date",
+          any("Earliest possible entry" in m and "2020-10" in m
+              for d, m in BOOK["log"]))
     _out("       " + str(warm) + " warm-up line(s) across 60 triggers "
          "(v2.7 logged one ERROR per trigger — 22,118 in a real run)")
 

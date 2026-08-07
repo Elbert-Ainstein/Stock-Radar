@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  THE SETTLED-BASIS LADDER  ·  v3.0  ·  no-data vs warm-up
+#  THE SETTLED-BASIS LADDER  ·  v3.1  ·  says when it can first act
 #
 #  The Portfolio Machine's risk discipline, made mechanical and backtestable.
 #  One file to paste: every rule, every parameter and the whole rationale are
@@ -243,6 +243,15 @@ class Strategy(StrategyBase):
             factor = factor * 10.0
         return round(value * factor) / factor
 
+    def _est_ready(self, sessions):
+        """Approximate calendar date `sessions` trading days from now. Answers
+        the first question every zero-trade run raises — when CAN it act —
+        without needing a market calendar: 5 sessions per 7 days, plus a
+        holiday allowance. type(d).fromordinal avoids an import, which the
+        editor forbids at module level."""
+        d = device_time().date()
+        return type(d).fromordinal(d.toordinal() + floor(sessions * 7.0 / 5.0) + 6)
+
     def _sel(self, offset=0):
         """Bar selector. LAW 2: settled mode starts at select=2 — at the
         recommended ~15:50 trigger, select=1 is today's STILL-FORMING bar and
@@ -366,9 +375,10 @@ class Strategy(StrategyBase):
                   "date you SET, something clamped the run: an intraday "
                   "trigger (short history), or a symbol with no data (see any "
                   "[NO DATA] line — the window is the intersection of every "
-                  "symbol's history). From this date, add ~" +
-                  str(self.trend_period + 1) + " sessions of warm-up before "
-                  "the first entry is possible.")
+                  "symbol's history). Earliest possible entry, after ~" +
+                  str(self.trend_period + 1) + " sessions of warm-up: " +
+                  str(self._est_ready(self.trend_period + 1)) + ". Anything "
+                  "before that date is arithmetic, not strategy.")
             try:
                 kind = get_symbol_type(symbol=symbol)
                 if kind == SymbolType.INDEX or kind == SymbolType.PLATE:

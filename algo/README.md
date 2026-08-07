@@ -50,9 +50,11 @@ same untouched cash.
 2. **Is it still warming up?** With `trend_period=200` the first entry is
    impossible until ~201 sessions — about **ten months** — after the first
    trigger, because no history is served from before the backtest window. On a
-   Jan-2025 start that is November 2025 before anything can happen. The log
-   now counts it: `[warming up] US.MSFT: session 47 of ~201`. Lower
-   `trend_period` (100 → ~5 months, 50 → ~2.5) or start earlier.
+   Jan-2025 start that is November 2025 before anything can happen. You do not
+   have to work that out: the `[first trigger]` line now **names the earliest
+   date an entry is possible**, and the log counts down to it — `[warming up]
+   US.MSFT: session 47 of ~201`. Lower `trend_period` (100 → ~5 months, 50 →
+   ~2.5) or start earlier.
 3. **Is the trigger intraday?** See above — a 1h trigger bounds the run to
    whatever intraday history exists, no matter what period you set. The Log's
    `[first trigger]` line names the first date the strategy was ever asked to
