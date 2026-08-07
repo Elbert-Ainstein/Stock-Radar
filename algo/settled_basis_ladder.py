@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  THE SETTLED-BASIS LADDER  ·  v2.9  ·  warm-up reports its progress
+#  THE SETTLED-BASIS LADDER  ·  v3.0  ·  no-data vs warm-up
 #
 #  The Portfolio Machine's risk discipline, made mechanical and backtestable.
 #  One file to paste: every rule, every parameter and the whole rationale are
@@ -362,12 +362,13 @@ class Strategy(StrategyBase):
         if not st["type_checked"]:
             st["type_checked"] = True
             print("[first trigger] " + code + " first evaluated on " +
-                  str(device_time().date()) + ". Two things bound when trades "
-                  "can start: (1) if this date is far from your backtest "
-                  "start, the TRIGGER is clamping the run — intraday history "
-                  "is short, use a daily candle; (2) from this date, add ~" +
+                  str(device_time().date()) + ". If that is far from the start "
+                  "date you SET, something clamped the run: an intraday "
+                  "trigger (short history), or a symbol with no data (see any "
+                  "[NO DATA] line — the window is the intersection of every "
+                  "symbol's history). From this date, add ~" +
                   str(self.trend_period + 1) + " sessions of warm-up before "
-                  "the first possible entry.")
+                  "the first entry is possible.")
             try:
                 kind = get_symbol_type(symbol=symbol)
                 if kind == SymbolType.INDEX or kind == SymbolType.PLATE:
@@ -381,12 +382,19 @@ class Strategy(StrategyBase):
         if not st["tradable"]:
             return
 
-        # WARM-UP is not an error. The platform serves no history from BEFORE
-        # the backtest window, so a 200-bar trend is unavailable until 201
-        # sessions have passed INSIDE it — and the indicator call raises
-        # rather than returning None. Treated as a loud-once gap: v2.7 let it
-        # escape as an exception, which produced 22,118 identical [error]
-        # lines across nine months of a single run.
+        # TWO DIFFERENT FAILURES, and conflating them cost a whole session
+        # of debugging. The platform raises for both:
+        #
+        #   "Bar Close: No data"  -> the symbol has NO prices in this window.
+        #                           It is not listed yet, or not available.
+        #                           The backtest window is the INTERSECTION of
+        #                           every symbol's history, so ONE such symbol
+        #                           can clamp the entire run to a few weeks.
+        #   "MA: No data"         -> prices exist, but fewer than the trend
+        #                           needs. That is warm-up, and it passes.
+        #
+        # A real run: 19 symbols warming up, 1 (US.SPCX) with no prices at
+        # all, and the whole backtest clamped from 380 sessions to 42.
         close = None
         prev = None
         trend = None
@@ -396,6 +404,16 @@ class Strategy(StrategyBase):
                               select=self._sel(0), session_type=THType.RTH)
             prev = bar_close(symbol=symbol, bar_type=BarType.K_DAY,
                              select=self._sel(1), session_type=THType.RTH)
+        except Exception as e:
+            if st["last_note"] != "nodata":
+                print("[NO DATA] " + code + " has NO price history in this "
+                      "window (" + str(e)[:50] + "). It is probably not listed "
+                      "for the period you set. A symbol like this can CLAMP "
+                      "THE WHOLE BACKTEST to its own short history — remove it "
+                      "from the basket and re-run before trusting any result.")
+                st["last_note"] = "nodata"
+            return
+        try:
             trend = ma(symbol=symbol, period=self.trend_period,
                        bar_type=BarType.K_DAY, data_type=DataType.CLOSE,
                        select=self._sel(0), session_type=THType.RTH)
@@ -403,20 +421,16 @@ class Strategy(StrategyBase):
                       bar_type=BarType.K_DAY, data_type=DataType.CLOSE,
                       select=self._sel(0), session_type=THType.RTH)
         except Exception as e:
-            # COUNT the warm-up sessions and report progress. One silent line
-            # tells you nothing; a countdown tells you exactly when this
-            # symbol becomes tradable and therefore whether the run is broken
-            # or merely young.
             st["warmup_ticks"] = st["warmup_ticks"] + 1
             need = self.trend_period + 1
             if st["warmup_ticks"] == 1 or st["warmup_ticks"] % 25 == 0:
                 print("[warming up] " + code + ": session " +
                       str(st["warmup_ticks"]) + " of ~" + str(need) +
-                      " — indicators not ready (" + str(e)[:50] + "). No "
+                      " — prices exist but the " + str(self.trend_period) +
+                      "-bar trend does not yet (" + str(e)[:40] + "). No "
                       "history is served from before the backtest window, so "
-                      "the " + str(self.trend_period) + "-bar trend must "
-                      "accumulate INSIDE the run. Lower trend_period to "
-                      "shorten this, or start the backtest earlier.")
+                      "it must accumulate INSIDE the run. Lower trend_period "
+                      "to shorten this, or start the backtest earlier.")
             return
 
         if close is None or trend is None or close <= 0 or trend <= 0:

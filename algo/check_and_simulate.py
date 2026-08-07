@@ -582,6 +582,34 @@ def main() -> int:
     _out("       " + str(warm) + " warm-up line(s) across 60 triggers "
          "(v2.7 logged one ERROR per trigger — 22,118 in a real run)")
 
+    # A symbol with NO prices must be called out separately from one that is
+    # merely warming up: the first can clamp the entire backtest window, the
+    # second passes on its own. Conflating them hid a 380-session run being
+    # cut to 42.
+    nodata = _stub_namespace()
+
+    def _no_bars(*a, **k):
+        raise Exception("APIException: err_code=6; msg=Bar Close: No data for US.SPCX")
+    nodata["bar_close"] = _no_bars
+    ns3 = dict(nodata)
+    exec(compile(STRATEGY.read_text(encoding="utf-8"), "strategy", "exec"), ns3)
+    BOOK.update(prices=p, day=0, qty=0.0, cost=0.0, cash=100000.0,
+                log=[], trades=[])
+    s = ns3["Strategy"]()
+    s.initialize()
+    s.sym1 = "US.SPCX"
+    _out("\n" + "=" * 70 + "\nSCENARIO 6 · symbol with no price data\n" + "=" * 70)
+    for d in range(40):
+        BOOK["day"] = d
+        s.handle_data()
+    check("no-price-data is reported as NO DATA, not warm-up",
+          any("[NO DATA]" in m for d, m in BOOK["log"])
+          and not any("warming up" in m for d, m in BOOK["log"]))
+    check("...and it warns that one such symbol clamps the whole run",
+          any("CLAMP THE WHOLE BACKTEST" in m for d, m in BOOK["log"]))
+    check("...said once, not once per trigger",
+          sum(1 for d, m in BOOK["log"] if "[NO DATA]" in m) == 1)
+
     _out("\nRESULT: " + ("all green" if allok[0] else "FAILURES ABOVE"))
     return 0 if allok[0] else 1
 
