@@ -265,6 +265,10 @@ def _stub_namespace():
         "lot_size": lambda symbol=None: 1,
         "place_limit": place_limit,
         "print": logged_print,
+        "get_symbol_type": lambda symbol=None:
+            "INDEX" if str(symbol).startswith(".") else "STOCK",
+        "SymbolType": _Enum("STOCK", "INDEX", "ETF", "PLATE", "FUTURES",
+                            "OPTION", "WARRANT", "FOREX"),
     }
 
 
@@ -523,6 +527,25 @@ def main() -> int:
     check("the day's cash budget is shared across the whole basket",
           ordered <= 20000.0 + 1.0)
     _out("       basket ordered $" + str(round(ordered, 2)) + " of $20000")
+
+    # A non-tradable trigger symbol is the quietest possible zero-trade run:
+    # an index has prices, so every rule evaluates and nothing is ever bought.
+    t_idx, l_idx = None, None
+    BOOK.update(prices=p, day=0, qty=0.0, cost=0.0, cash=100000.0,
+                log=[], trades=[])
+    s = Strategy()
+    s.initialize()
+    s.sym1 = ".IXIC"
+    _out("\n" + "=" * 70 + "\nSCENARIO 4 · index as trigger symbol\n" + "=" * 70)
+    for d in range(len(p)):
+        BOOK["day"] = d
+        s.handle_data()
+    t_idx, l_idx = BOOK["trades"], list(BOOK["log"])
+    check("an index trigger says NOT TRADABLE, once",
+          sum(1 for d, m in l_idx if "NOT TRADABLE" in m) == 1)
+    check("an index trigger never orders", not t_idx)
+    check("a normal ticker is unaffected",
+          any(tr[1] == "BUY" for tr in run(p, "SCENARIO 4b · control: same path, real ticker")[0]))
 
     _out("\nRESULT: " + ("all green" if allok[0] else "FAILURES ABOVE"))
     return 0 if allok[0] else 1

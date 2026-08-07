@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  THE SETTLED-BASIS LADDER  ·  v2.5  ·  one multi-select trigger
+#  THE SETTLED-BASIS LADDER  ·  v2.6  ·  refuses to run on an index
 #
 #  The Portfolio Machine's risk discipline, made mechanical and backtestable.
 #  One file to paste: every rule, every parameter and the whole rationale are
@@ -252,6 +252,8 @@ class Strategy(StrategyBase):
                 "last_note": "",
                 "last_day": "",
                 "reconciled": False,
+                "tradable": True,
+                "type_checked": False,
             }
         return self.state[code]
 
@@ -349,6 +351,25 @@ class Strategy(StrategyBase):
         fast = ma(symbol=symbol, period=self.fast_period, bar_type=BarType.K_DAY,
                   data_type=DataType.CLOSE, select=self._sel(0),
                   session_type=THType.RTH)
+
+        # A NON-TRADABLE symbol is the quietest way to get a zero-trade run:
+        # an index has prices, so every measurement works and every condition
+        # can be evaluated — there is simply nothing to buy. Say so once,
+        # loudly, instead of computing all day and reporting nothing.
+        if not st["type_checked"]:
+            st["type_checked"] = True
+            try:
+                kind = get_symbol_type(symbol=symbol)
+                if kind == SymbolType.INDEX or kind == SymbolType.PLATE:
+                    st["tradable"] = False
+                    print("[NOT TRADABLE] " + code + " is an " + str(kind) +
+                          ". Prices exist, so every rule here will evaluate "
+                          "normally and NOTHING will ever be bought. Set the "
+                          "trigger symbol to actual tickers.")
+            except Exception:
+                pass                      # unknown type: proceed, do not block
+        if not st["tradable"]:
+            return
 
         if close is None or trend is None or close <= 0 or trend <= 0:
             if st["last_note"] != "gap":

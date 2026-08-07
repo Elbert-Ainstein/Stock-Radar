@@ -29,6 +29,17 @@ consume the day and skip the rest, stops included), and the day's cash budget
 is shared across the basket so several securities cannot each size against the
 same untouched cash.
 
+## Zero trades? Check these first
+
+1. **Is the Trigger Symbol an index?** `.IXIC`, `.SPX` and the like have
+   prices, so every rule evaluates perfectly and nothing is ever buyable. The
+   strategy now says `[NOT TRADABLE]` once and stops. Set the trigger to real
+   tickers.
+2. **Read the Log tab.** Every refusal is printed with its reason — `[gap]`,
+   `[no-trade] sources disagree`, `[error]`. A run with no trades and no log
+   lines means the strategy never got a trigger at all.
+3. **Warm-up** (below): a 200-day trend needs 201 closed bars.
+
 ## Two things about the backtest dialog
 
 **Currency.** The strategy values the book in USD throughout, so
