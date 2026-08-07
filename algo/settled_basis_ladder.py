@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  THE SETTLED-BASIS LADDER  ·  v2.4  ·  7 symbols
+#  THE SETTLED-BASIS LADDER  ·  v2.5  ·  one multi-select trigger
 #
 #  The Portfolio Machine's risk discipline, made mechanical and backtestable.
 #  One file to paste: every rule, every parameter and the whole rationale are
@@ -10,8 +10,11 @@
 #  │                                                                     │
 #  │ The editor allows NO top-level code — only the strategy class and   │
 #  │ comments. So this file is exactly that: documentation, then the     │
-#  │ class. The offline test harness lives in algo/dryrun_sim.py, which  │
+#  │ class. The test harness lives in algo/check_and_simulate.py, which  │
 #  │ never gets pasted anywhere.                                         │
+#  │                                                                     │
+#  │ SYMBOLS: one trigger symbol, multi-select. In the backtest dialog   │
+#  │ click + on Trigger_Symbol1 and tick every ticker you want.          │
 #  └─────────────────────────────────────────────────────────────────────┘
 #
 #  ── HOW TO SCHEDULE IT (this matters, and v1 got it wrong) ───────────────
@@ -141,27 +144,25 @@ class Strategy(StrategyBase):
         # a live position would otherwise re-arm the ladder from rung one and
         # let the position stack past its cap. `_reconcile()` handles that.
         self.state = {}
-        self.last_run_day = ""
-        # Dollars committed during the CURRENT pass. total_cash() does not
-        # drop until an order fills, so with several symbols evaluated in one
-        # pass each would size against the same untouched cash and the book
-        # could commit far more than it holds. Reset every pass.
+        # Cash committed TODAY. handle_data fires once per attached security,
+        # and total_cash() does not drop until an order fills, so without this
+        # every security would size against the same untouched cash and the
+        # book could commit several times what it holds.
         self.committed = 0.0
+        self.committed_day = ""
 
     def trigger_symbols(self):
-        # ONE SLOT PER SYMBOL YOU INTEND TO TEST — no more.
+        # ONE trigger symbol. In the backtest dialog this becomes a single
+        # multi-select box: click +, tick every ticker you want, done. That is
+        # why there is one line here and not one per name — declaring N slots
+        # gives you N single-symbol boxes, and the dialog refuses to advance
+        # while any of them is empty.
         #
-        # The backtest dialog will NOT enable "Next" while any declared slot
-        # is empty, so a spare slot is not free: it blocks the run. To change
-        # the count, edit BOTH this list and the one in _symbols() below, or
-        # a slot is declared and never evaluated. The platform allows 50.
+        # handle_data() then fires once per attached security, with this
+        # variable bound to whichever one triggered. Everything below is
+        # written per-symbol for exactly that reason: state is keyed by symbol
+        # code, and the once-a-day gate is per symbol, not global.
         self.sym1 = declare_trig_symbol()
-        self.sym2 = declare_trig_symbol()
-        self.sym3 = declare_trig_symbol()
-        self.sym4 = declare_trig_symbol()
-        self.sym5 = declare_trig_symbol()
-        self.sym6 = declare_trig_symbol()
-        self.sym7 = declare_trig_symbol()
 
     def custom_indicator(self):
         pass
@@ -249,14 +250,16 @@ class Strategy(StrategyBase):
                 "ref_qty": 0.0,      # shares behind that basis
                 "close_now": 0.0,
                 "last_note": "",
+                "last_day": "",
                 "reconciled": False,
             }
         return self.state[code]
 
     def _symbols(self):
+        """Normally the single firing symbol. Kept as a list so the logic is
+        identical if the trigger ever hands over more than one."""
         out = []
-        for s in (self.sym1, self.sym2, self.sym3, self.sym4,
-                  self.sym5, self.sym6, self.sym7):
+        for s in (self.sym1,):
             try:
                 if s is not None and self._code(s) not in ("", "None"):
                     out.append(s)
@@ -305,26 +308,30 @@ class Strategy(StrategyBase):
     # ── the daily gate ─────────────────────────────────────────────────────
 
     def handle_data(self):
-        """One decision per calendar day, on closed bars only.
+        """Fires once per attached security. Decides at most once per calendar
+        day PER SYMBOL, on closed bars only.
 
-        The day is stamped only AFTER at least one symbol evaluated cleanly.
-        v1 stamped it first, so a single early failure — a data gap, a
-        pre-market start — burned the whole day INCLUDING the exit checks."""
+        The gate is per symbol because a single trigger symbol carries the
+        whole basket: a global gate would let the first security of the day
+        consume the day and silently skip the other six — including their
+        stops.
+        """
         today = str(device_time().date())
-        if today == self.last_run_day:
-            return
+        if today != self.committed_day:          # new day, fresh cash budget
+            self.committed = 0.0
+            self.committed_day = today
 
-        any_ok = False
-        self.committed = 0.0
         for symbol in self._symbols():
+            code = self._code(symbol)
+            st = self._st(code)
+            if st["last_day"] == today:
+                continue
             try:
                 self.evaluate_one(symbol)
-                any_ok = True
+                st["last_day"] = today
             except Exception as e:
-                print("[error] " + self._code(symbol) + " skipped: " + str(e) +
-                      " — the day is NOT consumed; exits retry on the next trigger")
-        if any_ok:
-            self.last_run_day = today
+                print("[error] " + code + " skipped: " + str(e) +
+                      " — the day is NOT consumed; it retries on the next trigger")
 
     # ── one name, one day ──────────────────────────────────────────────────
 

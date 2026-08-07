@@ -313,8 +313,7 @@ def main() -> int:
                     log=[], trades=[])
         s = Strategy()
         s.initialize()
-        for _i in range(1, 8):
-            setattr(s, "sym" + str(_i), "US.TEST" if _i == 1 else None)
+        s.sym1 = "US.TEST"
         _out("\n" + "=" * 70 + "\n" + label + "\n" + "=" * 70)
         for d in range(len(prices)):
             BOOK["day"] = d
@@ -327,8 +326,7 @@ def main() -> int:
                     log=[], trades=[])
         s = Strategy()
         s.initialize()
-        for _i in range(1, 8):
-            setattr(s, "sym" + str(_i), "US.TEST" if _i == 1 else None)
+        s.sym1 = "US.TEST"
         return s
 
     p = [100.0]
@@ -481,6 +479,50 @@ def main() -> int:
     MULTI["on"] = False
     _out("       ordered $" + str(round(total, 2)) + " of $20000 deployable "
          "across " + str(sum(1 for c in per_symbol if c > 0)) + " symbols")
+
+    # THE BASKET MODEL. One trigger symbol carries every attached security and
+    # handle_data fires once per security. A GLOBAL once-a-day gate would let
+    # the first security consume the day and silently skip the rest —
+    # including their stops. The gate must be per symbol.
+    BOOK.update(prices=p, day=300, qty=0.0, cost=0.0, cash=100000.0,
+                log=[], trades=[])
+    s = Strategy()
+    s.initialize()
+    basket = ["US.AAA", "US.BBB", "US.CCC", "US.DDD", "US.EEE"]
+    seen_days = {}
+    for day in (300, 301):
+        BOOK["day"] = day
+        for code in basket:                      # the platform fires per security
+            s.sym1 = code
+            s.handle_data()
+        seen_days[day] = sorted(
+            c for c in basket if s._st(c)["last_day"] ==
+            str(datetime.datetime(2020, 1, 1) + datetime.timedelta(days=day)).split()[0])
+    check("every security in the basket is evaluated, not just the first",
+          seen_days[300] == sorted(basket))
+    check("...and again the next day",
+          seen_days[301] == sorted(basket))
+    check("a security is not evaluated twice in one day",
+          all(s._st(c)["last_day"] != "" for c in basket))
+
+    # And the day's cash budget is shared ACROSS the basket, not reset per fire.
+    BOOK.update(prices=p, day=300, qty=0.0, cost=0.0, cash=60000.0,
+                log=[], trades=[])
+    s = Strategy()
+    s.initialize()
+    ordered = 0.0
+    for code in ["US.S" + str(i) for i in range(12)]:
+        s.sym1 = code
+        stx = s._st(code)
+        stx["close_now"] = p[298]
+        before = len(BOOK["trades"])
+        s.committed_day = "2020-10-27"           # same day for every fire
+        s.buy_one_stage(code, code, stx, p[298], 10.0, 3)
+        ordered += sum(tr[2] * tr[3] for tr in BOOK["trades"][before:]
+                       if tr[1] == "BUY")
+    check("the day's cash budget is shared across the whole basket",
+          ordered <= 20000.0 + 1.0)
+    _out("       basket ordered $" + str(round(ordered, 2)) + " of $20000")
 
     _out("\nRESULT: " + ("all green" if allok[0] else "FAILURES ABOVE"))
     return 0 if allok[0] else 1

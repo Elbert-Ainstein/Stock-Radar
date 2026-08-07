@@ -13,17 +13,21 @@ Everything else — the translation from the constitution's laws, every
 parameter, the three acceptance tests, the known limitations — lives in the
 file's header, so there is one place to keep current.
 
-## Symbols — declare exactly as many as you will fill
+## Symbols — one trigger, multi-select
 
-Seven slots (`sym1`…`sym7`). **The backtest dialog will not enable "Next"
-while any declared slot is empty**, so a spare slot is not free — it blocks
-the run. To change the count, edit BOTH `trigger_symbols()` and the tuple in
-`_symbols()`; one without the other declares a slot that is never evaluated.
-The platform allows up to 50.
+The strategy declares **one** trigger symbol. In the backtest dialog, click the
+`+` on `Trigger_Symbol1` and tick every ticker you want — the whole basket
+rides one trigger.
 
-Note `max_position_pct` is a per-name cap, not a target: with 25% of deployable
-capital per name, at most four positions can be full size, and the rest are
-rationed by cash in the order they are evaluated.
+Declaring one slot per name is the trap: you get N single-symbol boxes and the
+dialog will not enable **Next** while any of them is empty.
+
+`handle_data` then fires once per attached security. Everything in the strategy
+is written per-symbol for that reason — state is keyed by symbol code, the
+once-a-day gate is per symbol (a global one would let the first security
+consume the day and skip the rest, stops included), and the day's cash budget
+is shared across the basket so several securities cannot each size against the
+same untouched cash.
 
 ## Two things about the backtest dialog
 
