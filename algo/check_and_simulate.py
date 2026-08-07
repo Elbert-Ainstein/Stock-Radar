@@ -547,6 +547,36 @@ def main() -> int:
     check("a normal ticker is unaffected",
           any(tr[1] == "BUY" for tr in run(p, "SCENARIO 4b · control: same path, real ticker")[0]))
 
+    # WARM-UP: the platform RAISES rather than returning None when an
+    # indicator has too little history. v2.7 let that escape as an exception
+    # and logged 22,118 identical [error] lines over nine months of one run.
+    raising = _stub_namespace()
+
+    def _raises(*a, **k):
+        raise Exception("APIException: err_code=6; msg=MA: No data for US.TEST")
+    raising["ma"] = _raises
+    ns2 = dict(raising)
+    exec(compile(STRATEGY.read_text(encoding="utf-8"), "strategy", "exec"), ns2)
+    BOOK.update(prices=p, day=0, qty=0.0, cost=0.0, cash=100000.0,
+                log=[], trades=[])
+    s = ns2["Strategy"]()
+    s.initialize()
+    s.sym1 = "US.TEST"
+    _out("\n" + "=" * 70 + "\nSCENARIO 5 · indicators raise (warm-up)\n" + "=" * 70)
+    for d in range(60):
+        BOOK["day"] = d
+        s.handle_data()
+    warm = sum(1 for d, m in BOOK["log"] if "warming up" in m)
+    errs = sum(1 for d, m in BOOK["log"] if m.startswith("[error]"))
+    check("warm-up is reported ONCE, not once per trigger", warm == 1)
+    check("warm-up is not logged as an error", errs == 0)
+    check("warm-up explains the session requirement",
+          any("sessions INSIDE the backtest window" in m for d, m in BOOK["log"]))
+    check("first-trigger date is the first CALL, not the first data",
+          any("first evaluated on 2020-01-01" in m for d, m in BOOK["log"]))
+    _out("       " + str(warm) + " warm-up line(s) across 60 triggers "
+         "(v2.7 would have logged 60 errors)")
+
     _out("\nRESULT: " + ("all green" if allok[0] else "FAILURES ABOVE"))
     return 0 if allok[0] else 1
 

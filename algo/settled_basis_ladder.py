@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  THE SETTLED-BASIS LADDER  ·  v2.7  ·  reports its own first trigger
+#  THE SETTLED-BASIS LADDER  ·  v2.8  ·  warm-up is not an error
 #
 #  The Portfolio Machine's risk discipline, made mechanical and backtestable.
 #  One file to paste: every rule, every parameter and the whole rationale are
@@ -23,9 +23,14 @@
 #
 #  Do NOT backtest on an intraday (1m/5m/1h) trigger. handle_data only runs
 #  when a trigger fires, and intraday candle history is kept for a far
-#  shorter window than daily history — perhaps a year. A 1h trigger silently
-#  clamps a 2019-start backtest to the last year or so, and the giveaway is
+#  shorter window than daily history — perhaps 18 months. A 1h trigger
+#  silently clamps a 2019-start backtest to that window, and the giveaway is
 #  that changing the start date does not change the result at all.
+#
+#  AND BUDGET THE WARM-UP. No history is served from before the backtest
+#  window, so the 200-bar trend is unavailable for the first 201 SESSIONS of
+#  the run — about ten months. Start the backtest ten months earlier than the
+#  first trades you want to see, or shorten trend_period.
 #
 #  Why ~15:50 for LIVE: the manual restricts US market orders to regular
 #  trading hours, and a daily-candle trigger fires AFTER the close. This
@@ -347,29 +352,14 @@ class Strategy(StrategyBase):
         code = self._code(symbol)
         st = self._st(code)
 
-        close = bar_close(symbol=symbol, bar_type=BarType.K_DAY,
-                          select=self._sel(0), session_type=THType.RTH)
-        prev = bar_close(symbol=symbol, bar_type=BarType.K_DAY,
-                         select=self._sel(1), session_type=THType.RTH)
-        trend = ma(symbol=symbol, period=self.trend_period, bar_type=BarType.K_DAY,
-                   data_type=DataType.CLOSE, select=self._sel(0),
-                   session_type=THType.RTH)
-        fast = ma(symbol=symbol, period=self.fast_period, bar_type=BarType.K_DAY,
-                  data_type=DataType.CLOSE, select=self._sel(0),
-                  session_type=THType.RTH)
-
-        # A NON-TRADABLE symbol is the quietest way to get a zero-trade run:
-        # an index has prices, so every measurement works and every condition
-        # can be evaluated — there is simply nothing to buy. Say so once,
-        # loudly, instead of computing all day and reporting nothing.
+        # Identity checks FIRST, before any data read. v2.7 printed these
+        # after the indicator reads, so on a warming-up symbol the reads threw
+        # and the "first trigger" line reported the first date data EXISTED
+        # rather than the first date the strategy was actually called — which
+        # is the number that tells you whether the trigger or the period is
+        # bounding your run.
         if not st["type_checked"]:
             st["type_checked"] = True
-            # The FIRST date this symbol was ever evaluated. If that is years
-            # after the backtest's configured start, the trigger — not this
-            # strategy — is what bounded the run: handle_data only executes
-            # when a trigger fires, and intraday candle history is kept for a
-            # much shorter window than daily history. A 1h trigger silently
-            # clamps a 2019 backtest to the last year or so.
             print("[first trigger] " + code + " first evaluated on " +
                   str(device_time().date()) + " — if that is far from your "
                   "backtest start date, the TRIGGER is limiting the run, not "
@@ -385,6 +375,38 @@ class Strategy(StrategyBase):
             except Exception:
                 pass                      # unknown type: proceed, do not block
         if not st["tradable"]:
+            return
+
+        # WARM-UP is not an error. The platform serves no history from BEFORE
+        # the backtest window, so a 200-bar trend is unavailable until 201
+        # sessions have passed INSIDE it — and the indicator call raises
+        # rather than returning None. Treated as a loud-once gap: v2.7 let it
+        # escape as an exception, which produced 22,118 identical [error]
+        # lines across nine months of a single run.
+        close = None
+        prev = None
+        trend = None
+        fast = None
+        try:
+            close = bar_close(symbol=symbol, bar_type=BarType.K_DAY,
+                              select=self._sel(0), session_type=THType.RTH)
+            prev = bar_close(symbol=symbol, bar_type=BarType.K_DAY,
+                             select=self._sel(1), session_type=THType.RTH)
+            trend = ma(symbol=symbol, period=self.trend_period,
+                       bar_type=BarType.K_DAY, data_type=DataType.CLOSE,
+                       select=self._sel(0), session_type=THType.RTH)
+            fast = ma(symbol=symbol, period=self.fast_period,
+                      bar_type=BarType.K_DAY, data_type=DataType.CLOSE,
+                      select=self._sel(0), session_type=THType.RTH)
+        except Exception as e:
+            if st["last_note"] != "warmup":
+                print("[warming up] " + code + ": indicators not ready (" +
+                      str(e)[:70] + "). The " + str(self.trend_period) +
+                      "-bar trend needs " + str(self.trend_period + 1) +
+                      " sessions INSIDE the backtest window — no pre-period "
+                      "history is served. Start the backtest that many "
+                      "sessions earlier than the trades you want to see.")
+                st["last_note"] = "warmup"
             return
 
         if close is None or trend is None or close <= 0 or trend <= 0:

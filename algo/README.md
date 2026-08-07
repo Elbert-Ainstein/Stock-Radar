@@ -62,10 +62,17 @@ same untouched cash.
 the book. Either set Initial Capital in USD, or set `floor_amount` to the
 reserve you actually intend.
 
-**Warm-up.** The 200-day trend line needs 201 closed bars, so a run starting
-2019-05-01 cannot trade until roughly Feb–Mar 2020. That is expected, not a
-broken run. (The 6-month parabola lookback needs only 128 bars, so the MA
-binds first and there is no starter-size-only artifact during warm-up.)
+**Warm-up comes out of your backtest window.** The platform serves NO history
+from before the period you set, so the 200-bar trend is unavailable for the
+first **201 sessions of the run** — about ten months — and the indicator call
+*raises* rather than returning None during that time. Budget for it: start the
+backtest ten months earlier than the first trades you want to see, or shorten
+`trend_period`. The log says `[warming up]` once while this is happening.
+
+A real example: a run starting 2025-02-12 on a 1h trigger produced its first
+trade on 2025-11-28 — exactly 201 sessions later — inside a window the
+intraday trigger had already clamped to 18 months. Two constraints stacked:
+~8 months of actual trading out of a 7-year request.
 
 ## Before pasting
 
