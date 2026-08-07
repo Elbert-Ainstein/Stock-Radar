@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  THE SETTLED-BASIS LADDER  ·  v2.6  ·  refuses to run on an index
+#  THE SETTLED-BASIS LADDER  ·  v2.7  ·  reports its own first trigger
 #
 #  The Portfolio Machine's risk discipline, made mechanical and backtestable.
 #  One file to paste: every rule, every parameter and the whole rationale are
@@ -17,17 +17,23 @@
 #  │ click + on Trigger_Symbol1 and tick every ticker you want.          │
 #  └─────────────────────────────────────────────────────────────────────┘
 #
-#  ── HOW TO SCHEDULE IT (this matters, and v1 got it wrong) ───────────────
-#  Trigger: RUN AT A SPECIFIED TIME, ~15:50 ET, on trading days.
-#  NOT on the daily bar.
+#  ── HOW TO SCHEDULE IT ───────────────────────────────────────────────────
+#  FOR A LONG BACKTEST (years): trigger on the DAILY candle.
+#  FOR LIVE TRADING:            run at a specified time, ~15:50 ET.
 #
-#  Why: the manual restricts US market orders to regular trading hours, and a
-#  daily-bar trigger fires AFTER the close — every order would be rejected
-#  live while filling happily in the backtest. Running just before the close
-#  puts execution inside RTH. It costs nothing in discipline: the DECISION
-#  still reads `select=2`, the last CLOSED daily bar (yesterday's), never
-#  today's forming one. Orders are limit orders, so they also work in
-#  extended sessions and bound slippage.
+#  Do NOT backtest on an intraday (1m/5m/1h) trigger. handle_data only runs
+#  when a trigger fires, and intraday candle history is kept for a far
+#  shorter window than daily history — perhaps a year. A 1h trigger silently
+#  clamps a 2019-start backtest to the last year or so, and the giveaway is
+#  that changing the start date does not change the result at all.
+#
+#  Why ~15:50 for LIVE: the manual restricts US market orders to regular
+#  trading hours, and a daily-candle trigger fires AFTER the close. This
+#  strategy places LIMIT orders, which are accepted outside RTH, so a daily
+#  trigger is safe either way — but an intraday run gets same-session fills.
+#
+#  Either way the DISCIPLINE is unchanged: decisions read `select=2`, the
+#  last CLOSED daily bar, never today's forming one.
 #
 #  ── WHAT THIS IS ─────────────────────────────────────────────────────────
 #  The RISK DISCIPLINE of the Portfolio Machine, not its research. The
@@ -358,6 +364,16 @@ class Strategy(StrategyBase):
         # loudly, instead of computing all day and reporting nothing.
         if not st["type_checked"]:
             st["type_checked"] = True
+            # The FIRST date this symbol was ever evaluated. If that is years
+            # after the backtest's configured start, the trigger — not this
+            # strategy — is what bounded the run: handle_data only executes
+            # when a trigger fires, and intraday candle history is kept for a
+            # much shorter window than daily history. A 1h trigger silently
+            # clamps a 2019 backtest to the last year or so.
+            print("[first trigger] " + code + " first evaluated on " +
+                  str(device_time().date()) + " — if that is far from your "
+                  "backtest start date, the TRIGGER is limiting the run, not "
+                  "the period. Use a daily candle trigger for long histories.")
             try:
                 kind = get_symbol_type(symbol=symbol)
                 if kind == SymbolType.INDEX or kind == SymbolType.PLATE:

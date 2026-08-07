@@ -4,10 +4,20 @@
 documentation comments plus the strategy class, and nothing else — the editor
 allows no top-level code at all.
 
-**Trigger: run at a specified time, ~15:50 ET — not on the daily bar.** US
-market orders are RTH-only, so a daily-bar trigger fires after the close: live
-rejects every order while the backtest fills happily. Decisions still read the
-last closed bar; only execution moves inside market hours.
+**Trigger — backtest and live want different settings:**
+
+* **Long backtest (years): the DAILY candle.** Never an intraday trigger.
+  `handle_data` only runs when a trigger fires, and intraday candle history is
+  kept for a far shorter window than daily history. A 1h trigger silently
+  clamps a 2019-start run to roughly the last year — and the giveaway is that
+  changing the start date does not change the result at all.
+* **Live: run at a specified time, ~15:50 ET.** US *market* orders are
+  RTH-only; this strategy places *limit* orders, which are accepted outside
+  RTH, so a daily trigger is safe either way — an intraday run just gets
+  same-session fills.
+
+Either way the discipline is identical: decisions read `select=2`, the last
+closed daily bar.
 
 Everything else — the translation from the constitution's laws, every
 parameter, the three acceptance tests, the known limitations — lives in the
@@ -31,14 +41,18 @@ same untouched cash.
 
 ## Zero trades? Check these first
 
-1. **Is the Trigger Symbol an index?** `.IXIC`, `.SPX` and the like have
+1. **Is the trigger intraday?** See above — a 1h trigger bounds the run to
+   whatever intraday history exists, no matter what period you set. The Log's
+   `[first trigger]` line names the first date the strategy was ever asked to
+   think.
+2. **Is the Trigger Symbol an index?** `.IXIC`, `.SPX` and the like have
    prices, so every rule evaluates perfectly and nothing is ever buyable. The
    strategy now says `[NOT TRADABLE]` once and stops. Set the trigger to real
    tickers.
-2. **Read the Log tab.** Every refusal is printed with its reason — `[gap]`,
+3. **Read the Log tab.** Every refusal is printed with its reason — `[gap]`,
    `[no-trade] sources disagree`, `[error]`. A run with no trades and no log
    lines means the strategy never got a trigger at all.
-3. **Warm-up** (below): a 200-day trend needs 201 closed bars.
+4. **Warm-up** (below): a 200-day trend needs 201 closed bars.
 
 ## Two things about the backtest dialog
 
