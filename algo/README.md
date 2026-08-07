@@ -13,16 +13,30 @@ Everything else — the translation from the constitution's laws, every
 parameter, the three acceptance tests, the known limitations — lives in the
 file's header, so there is one place to keep current.
 
-## Symbols
+## Symbols — declare exactly as many as you will fill
 
-Twelve trigger slots (`sym1`…`sym12`); fill as many as you want, empty ones are
-skipped. To go further — the platform allows 50 — add a `declare_trig_symbol()`
-line in `trigger_symbols()` **and** its entry in `_symbols()`; both places, or
-the slot is declared but never evaluated.
+Seven slots (`sym1`…`sym7`). **The backtest dialog will not enable "Next"
+while any declared slot is empty**, so a spare slot is not free — it blocks
+the run. To change the count, edit BOTH `trigger_symbols()` and the tuple in
+`_symbols()`; one without the other declares a slot that is never evaluated.
+The platform allows up to 50.
 
 Note `max_position_pct` is a per-name cap, not a target: with 25% of deployable
 capital per name, at most four positions can be full size, and the rest are
 rationed by cash in the order they are evaluated.
+
+## Two things about the backtest dialog
+
+**Currency.** The strategy values the book in USD throughout, so
+`floor_amount` is in USD regardless of what the dialog's Initial Capital says.
+1,000,000 HKD is roughly 128,000 USD — against which a 40,000 floor is ~31% of
+the book. Either set Initial Capital in USD, or set `floor_amount` to the
+reserve you actually intend.
+
+**Warm-up.** The 200-day trend line needs 201 closed bars, so a run starting
+2019-05-01 cannot trade until roughly Feb–Mar 2020. That is expected, not a
+broken run. (The 6-month parabola lookback needs only 128 bars, so the MA
+binds first and there is no starter-size-only artifact during warm-up.)
 
 ## Before pasting
 

@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  THE SETTLED-BASIS LADDER  ·  v2.3  ·  12 symbols
+#  THE SETTLED-BASIS LADDER  ·  v2.4  ·  7 symbols
 #
 #  The Portfolio Machine's risk discipline, made mechanical and backtestable.
 #  One file to paste: every rule, every parameter and the whole rationale are
@@ -79,7 +79,13 @@
 #  stored reference — reset the strategy after a corporate action.
 #
 #  ── PARAMETERS WORTH TOUCHING FIRST ──────────────────────────────────────
-#   floor_amount      40000  fixed dollars never deployed (Charter §V)
+#   floor_amount      40000  fixed reserve never deployed (Charter §V).
+#                            DENOMINATED IN USD — the strategy values the
+#                            book with Currency.USD throughout. If the
+#                            backtest's Initial Capital is set in HKD, this
+#                            number is still USD: 1,000,000 HKD is roughly
+#                            128,000 USD, so a 40,000 floor is ~31% of it.
+#                            Set it to the reserve you actually intend.
 #   max_position_pct     25  max % of deployable capital in one name
 #   stages                3  staged thirds — entries are built, not taken
 #   trend_period        200  the structural regime line
@@ -143,14 +149,12 @@ class Strategy(StrategyBase):
         self.committed = 0.0
 
     def trigger_symbols(self):
-        # Twelve slots. Fill as many as you want to test; empty ones are
-        # skipped by _symbols(). The platform allows up to 50 — to add more,
-        # append a `self.symN = declare_trig_symbol()` line here AND its entry
-        # in _symbols() below. Both places, or the slot is declared but never
-        # evaluated.
+        # ONE SLOT PER SYMBOL YOU INTEND TO TEST — no more.
         #
-        # If the editor insists every declared slot be filled, delete the
-        # trailing lines here and the matching entries in _symbols().
+        # The backtest dialog will NOT enable "Next" while any declared slot
+        # is empty, so a spare slot is not free: it blocks the run. To change
+        # the count, edit BOTH this list and the one in _symbols() below, or
+        # a slot is declared and never evaluated. The platform allows 50.
         self.sym1 = declare_trig_symbol()
         self.sym2 = declare_trig_symbol()
         self.sym3 = declare_trig_symbol()
@@ -158,11 +162,6 @@ class Strategy(StrategyBase):
         self.sym5 = declare_trig_symbol()
         self.sym6 = declare_trig_symbol()
         self.sym7 = declare_trig_symbol()
-        self.sym8 = declare_trig_symbol()
-        self.sym9 = declare_trig_symbol()
-        self.sym10 = declare_trig_symbol()
-        self.sym11 = declare_trig_symbol()
-        self.sym12 = declare_trig_symbol()
 
     def custom_indicator(self):
         pass
@@ -257,8 +256,7 @@ class Strategy(StrategyBase):
     def _symbols(self):
         out = []
         for s in (self.sym1, self.sym2, self.sym3, self.sym4,
-                  self.sym5, self.sym6, self.sym7, self.sym8,
-                  self.sym9, self.sym10, self.sym11, self.sym12):
+                  self.sym5, self.sym6, self.sym7):
             try:
                 if s is not None and self._code(s) not in ("", "None"):
                     out.append(s)
