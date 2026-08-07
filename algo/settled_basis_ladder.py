@@ -1,30 +1,53 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  THE SETTLED-BASIS LADDER
+#  THE SETTLED-BASIS LADDER  ·  v2
 #  The Portfolio Machine's risk discipline, made mechanical and backtestable.
 #
-#  It encodes, in order of importance:
-#    1. LAW 2 — decisions are made ONLY on closed bars. On this platform
-#       `select=1` is the bar still forming; `select=2` is the last CLOSED
-#       bar. Reading select=1 is exactly the INTC $91.63 -> $92.52 flip that
-#       the whole constitution was written around, in platform form.
-#    2. TWO-SOURCE CONFIRMATION — an entry needs the structural regime AND a
-#       turn in the valley to agree. Disagreement means do nothing, and say so.
-#    3. THE FLOOR — a fixed share of net assets is never deployable. Ever.
-#    4. ANTI-PARABOLA — a name that doubled in six months gets starter size
-#       only. Not a veto on owning it; a veto on owning much of it.
-#    5. VALLEY ENTRY — buys weakness inside strength, never a breakout into
-#       euphoria. ("Drawdowns are the queue, not the hazard.")
-#    6. STAGED THIRDS — positions are built, never taken in one clip.
-#    7. PRE-DECLARED LADDERS — exit rungs written in advance, on a calm day.
-#       Each fires once; the next arms behind it.
-#    8. DATED SIGNPOST — a time stop. A thesis gets a window; if it made no
-#       progress in that window, it is over regardless of the story.
-#    9. STRUCTURAL STOP — a settled close below the trend line is a thesis
-#       break, not noise.
+#  ── HOW TO SCHEDULE IT (this matters, and v1 got it wrong) ───────────────
+#  Set the trigger to RUN AT A SPECIFIED TIME, ~15:50 ET, on trading days.
 #
-#  What it CANNOT do: research. It cannot read an order book, a capex guide,
-#  or a qualification slip. It is the guard, not the analyst. Judge it on
-#  drawdown and worst-trade, not on CAGR alone. See algo/README.md.
+#  Why: the manual restricts US market orders to regular trading hours, and a
+#  strategy triggered by the daily bar fires AFTER the close — every order
+#  would be rejected live while filling happily in the backtest. Running just
+#  before the close puts execution inside RTH. It costs nothing in
+#  discipline: the DECISION still reads `select=2`, the last CLOSED daily bar
+#  (yesterday's), never today's forming one. Orders are limit orders, so they
+#  also work in extended sessions and bound slippage.
+#
+#  ── WHAT IT ENCODES ──────────────────────────────────────────────────────
+#    1. LAW 2 — every decision reads `select=2`. At the recommended trigger
+#       time `select=1` is TODAY'S STILL-FORMING bar; `select=2` is the last
+#       closed one. Reading select=1 is the INTC $91.63 -> $92.52 flip, in
+#       platform form. A once-per-day gate means an intraday trigger cannot
+#       produce an intraday decision.
+#    2. TWO-SOURCE CONFIRMATION — the structural regime AND a turning valley
+#       must agree. Disagreement is logged and nothing happens.
+#    3. THE FLOOR — a FIXED dollar reserve (Charter §V: "$40,000, sacred")
+#       that is never deployable. Fixed, not a percentage: a percentage floor
+#       shrinks exactly when the book is losing. Enforced against actual cash,
+#       not merely used to shrink a target (v1 bug).
+#    4. ANTI-PARABOLA — up >=100% in six months means starter size only. It
+#       FAILS CLOSED: if history is too short to judge, you get starter size,
+#       because "I could not check" is never permission.
+#    5. VALLEY ENTRY — buys a pullback inside strength, never a breakout.
+#    6. STAGED THIRDS — built, never taken in one clip; adds require proof.
+#    7. PRE-DECLARED LADDERS — rungs written in advance; once ANY rung has
+#       fired the strategy stops adding, so the exit and entry engines cannot
+#       fight each other (v1 bug: a trim was bought straight back).
+#    8. DATED SIGNPOST — a time stop. A thesis gets a window.
+#    9. STRUCTURAL STOP — a settled close below trend is a thesis break.
+#
+#  ── ONE KNOWING COMPROMISE ───────────────────────────────────────────────
+#  All exit decisions use a reference cost the strategy stores ITSELF, in the
+#  same backward-adjusted price space the bars live in. The broker's
+#  `position_pl_ratio` is marked to the CURRENT (unsettled) price and its cost
+#  is unadjusted, so using it would both break law 2 and mix two price scales.
+#  In a backtest, bars are adjusted consistently and this is exactly right.
+#  In LIVE trading a split or large dividend re-scales the bars but not the
+#  stored reference — reset the strategy after a corporate action.
+#
+#  What it CANNOT do: research. It cannot read an order book or a capex
+#  guide. It is the guard, not the analyst. Judge it on drawdown and
+#  worst-trade, not CAGR. See algo/README.md.
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -37,14 +60,14 @@ class Strategy(StrategyBase):
         self.custom_indicator()
         self.global_variables()
 
-        # Machine-owned state. Keyed by symbol code so several names can run
-        # under one strategy without their ladders colliding.
+        # Machine-owned state, keyed by symbol code. NOTE: this is in-memory.
+        # `initialize()` re-runs on every strategy restart, so a restart with
+        # a live position would otherwise re-arm the ladder from rung one and
+        # let the position stack past its cap. `_reconcile()` handles that.
         self.state = {}
         self.last_run_day = ""
 
     def trigger_symbols(self):
-        # Slot 1 is required; 2-4 are optional. Unconfigured slots are skipped
-        # loudly rather than crashing the run.
         self.sym1 = declare_trig_symbol()
         self.sym2 = declare_trig_symbol()
         self.sym3 = declare_trig_symbol()
@@ -55,37 +78,47 @@ class Strategy(StrategyBase):
 
     def global_variables(self):
         # ── the floor and the size caps (Charter §V) ──
-        self.floor_pct = show_variable(20, GlobalType.INT)          # % never deployed
-        self.max_position_pct = show_variable(25, GlobalType.INT)   # % of deployable, per name
-        self.stages = show_variable(3, GlobalType.INT)              # staged thirds
+        # The floor is FIXED DOLLARS, not a percentage. Charter §V says
+        # "$40,000, sacred, never invested" — and a percentage floor shrinks
+        # precisely when the book is losing, which is when the floor is the
+        # whole point. Set it to your real reserve before backtesting.
+        self.floor_amount = show_variable(40000, GlobalType.INT)
+        self.max_position_pct = show_variable(25, GlobalType.INT)
+        self.stages = show_variable(3, GlobalType.INT)
 
-        # ── the structural regime (is the thesis intact?) ──
+        # ── the structural regime ──
         self.trend_period = show_variable(200, GlobalType.INT)
         self.fast_period = show_variable(50, GlobalType.INT)
 
-        # ── the valley (entry only into weakness within strength) ──
-        self.pullback_pct = show_variable(8, GlobalType.INT)        # min drop from recent high
-        self.high_lookback = show_variable(60, GlobalType.INT)      # bars defining "recent high"
+        # ── the valley ──
+        self.pullback_pct = show_variable(8, GlobalType.INT)
+        self.high_lookback = show_variable(60, GlobalType.INT)
 
         # ── anti-parabola (Charter §V sizing law) ──
-        self.parabola_pct = show_variable(100, GlobalType.INT)      # 6-month gain -> starter only
-        self.parabola_lookback = show_variable(126, GlobalType.INT) # ~6 months of sessions
+        self.parabola_pct = show_variable(100, GlobalType.INT)
+        self.parabola_lookback = show_variable(126, GlobalType.INT)
 
         # ── the pre-declared exit ladder ──
         self.rung1_pct = show_variable(50, GlobalType.INT)
         self.rung1_trim = show_variable(20, GlobalType.INT)
-        self.rung2_pct = show_variable(100, GlobalType.INT)         # the euphoria protocol: 2x cost
+        self.rung2_pct = show_variable(100, GlobalType.INT)   # euphoria: 2x cost
         self.rung2_trim = show_variable(25, GlobalType.INT)
         self.rung3_pct = show_variable(200, GlobalType.INT)
         self.rung3_trim = show_variable(25, GlobalType.INT)
 
-        # ── the dated signpost (time stop) and the backstop ──
+        # ── the dated signpost and the backstop ──
         self.horizon_days = show_variable(252, GlobalType.INT)
         self.min_progress_pct = show_variable(10, GlobalType.INT)
         self.hard_stop_pct = show_variable(30, GlobalType.INT)
 
-        # ── law 2 switch: leave TRUE. False exists only so a backtest can
-        #    MEASURE what peeking at unsettled prices is worth (README test 2).
+        # ── execution ──
+        # Limit orders only: US market orders are RTH-only per the manual,
+        # and a limit also caps slippage. This band is how far through the
+        # reference price we are willing to pay to get filled.
+        self.limit_band_pct = show_variable(2, GlobalType.INT)
+
+        # Leave TRUE. False exists only to MEASURE what reading the forming
+        # bar is worth (README test 2).
         self.use_settled = show_variable(True, GlobalType.BOOL)
 
     # ── helpers ────────────────────────────────────────────────────────────
@@ -96,25 +129,11 @@ class Strategy(StrategyBase):
         except Exception:
             return str(symbol)
 
-    def _sel(self, offset=0):
-        """Bar selector. offset=0 is the reference bar.
-
-        LAW 2 IN ONE LINE: settled mode starts at select=2, the last CLOSED
-        bar. select=1 is the bar still forming — a price that can still move
-        before it becomes a fact. Every flip incident this system remembers
-        came from treating a select=1 number as a select=2 number.
-        """
-        base = 2 if self.use_settled else 1
-        return base + offset
-
     def _dp(self, value, places=1):
         """Round to N decimals using the platform's SINGLE-ARGUMENT round().
 
         The platform's round(value) takes no precision argument — Python's
-        two-argument form is rejected by the editor. Scale, round, unscale.
-        Kept as one helper so every log line formats the same way and a future
-        edit cannot reintroduce round(x, 2) by habit.
-        """
+        two-argument form is rejected by the editor. Scale, round, unscale."""
         if value is None:
             return 0.0
         factor = 1.0
@@ -122,14 +141,25 @@ class Strategy(StrategyBase):
             factor = factor * 10.0
         return round(value * factor) / factor
 
+    def _sel(self, offset=0):
+        """Bar selector. LAW 2: settled mode starts at select=2 — at the
+        recommended ~15:50 trigger, select=1 is today's STILL-FORMING bar and
+        select=2 is the last closed one."""
+        base = 2 if self.use_settled else 1
+        return base + offset
+
     def _st(self, code):
         if code not in self.state:
             self.state[code] = {
-                "rungs_fired": [],   # which pre-declared rungs already trimmed
-                "stages_taken": 0,   # how many thirds are in
-                "bars_held": 0,      # the dated-signpost clock
+                "rungs_fired": [],
+                "stages_taken": 0,
+                "bars_held": 0,
                 "starter_only": False,
-                "last_note": "",     # de-dupe the daily no-trade reason
+                "ref": 0.0,          # our own cost basis, in adjusted space
+                "ref_qty": 0.0,      # shares behind that basis
+                "close_now": 0.0,
+                "last_note": "",
+                "reconciled": False,
             }
         return self.state[code]
 
@@ -143,26 +173,66 @@ class Strategy(StrategyBase):
                 pass
         return out
 
+    def _reconcile(self, symbol, code, st):
+        """A restart wipes in-memory state while the BROKER still holds the
+        position. Adopting empty state there would re-arm the whole ladder and
+        let the position stack to twice its cap. So when we find shares we did
+        not record, adopt the most CONSERVATIVE consistent state: fully staged
+        (no more buying) and every rung the current gain has already passed
+        marked fired."""
+        if st["reconciled"]:
+            return
+        st["reconciled"] = True
+        qty = position_holding_qty(symbol=symbol)
+        if not qty or qty <= 0 or st["stages_taken"] > 0:
+            return
+
+        cost = position_cost(symbol=symbol, cost_price_model=CostPriceModel.AVG)
+        st["ref"] = cost if cost and cost > 0 else 0.0
+        st["ref_qty"] = qty
+        st["stages_taken"] = self.stages
+        gain = self._gain_pct(st)
+        for rung_id, level in ((1, self.rung1_pct), (2, self.rung2_pct),
+                               (3, self.rung3_pct)):
+            if gain >= level:
+                st["rungs_fired"].append(rung_id)
+        print("[reconcile] " + code + ": found " + str(qty) + " sh with no state "
+              "(restart?) — adopting fully-staged, rungs " +
+              str(st["rungs_fired"]) + " assumed fired. Reference is the "
+              "broker's UNADJUSTED average; reset after a corporate action.")
+
+    def _gain_pct(self, st):
+        """Gain versus OUR settled reference — both sides in adjusted space,
+        both from closed bars."""
+        if not st["ref"] or st["ref"] <= 0:
+            return 0.0
+        last = st["close_now"]
+        if not last or last <= 0:
+            return 0.0
+        return (last / st["ref"] - 1.0) * 100.0
+
     # ── the daily gate ─────────────────────────────────────────────────────
 
     def handle_data(self):
         """One decision per calendar day, on closed bars only.
 
-        The guard below means the strategy behaves identically whether it is
-        triggered on daily bars, hourly bars, or every N seconds: it decides
-        once a day, on settled data. An intraday trigger cannot make it act
-        on an intraday number — which is the entire law-2 discipline.
-        """
+        The day is stamped only AFTER at least one symbol evaluated cleanly.
+        v1 stamped it first, so a single early failure — a data gap, a
+        pre-market start — burned the whole day INCLUDING the exit checks."""
         today = str(device_time().date())
         if today == self.last_run_day:
             return
-        self.last_run_day = today
 
+        any_ok = False
         for symbol in self._symbols():
             try:
                 self.evaluate_one(symbol)
+                any_ok = True
             except Exception as e:
-                print("[error] " + self._code(symbol) + " skipped: " + str(e))
+                print("[error] " + self._code(symbol) + " skipped: " + str(e) +
+                      " — the day is NOT consumed; exits retry on the next trigger")
+        if any_ok:
+            self.last_run_day = today
 
     # ── one name, one day ──────────────────────────────────────────────────
 
@@ -175,9 +245,11 @@ class Strategy(StrategyBase):
         prev = bar_close(symbol=symbol, bar_type=BarType.K_DAY,
                          select=self._sel(1), session_type=THType.RTH)
         trend = ma(symbol=symbol, period=self.trend_period, bar_type=BarType.K_DAY,
-                   data_type=DataType.CLOSE, select=self._sel(0), session_type=THType.RTH)
+                   data_type=DataType.CLOSE, select=self._sel(0),
+                   session_type=THType.RTH)
         fast = ma(symbol=symbol, period=self.fast_period, bar_type=BarType.K_DAY,
-                  data_type=DataType.CLOSE, select=self._sel(0), session_type=THType.RTH)
+                  data_type=DataType.CLOSE, select=self._sel(0),
+                  session_type=THType.RTH)
 
         if close is None or trend is None or close <= 0 or trend <= 0:
             if st["last_note"] != "gap":
@@ -185,125 +257,130 @@ class Strategy(StrategyBase):
                       "action until there is (a declared gap, never a guess)")
                 st["last_note"] = "gap"
             return
+        st["close_now"] = close
+
+        self._reconcile(symbol, code, st)
 
         qty = position_holding_qty(symbol=symbol)
         if qty and qty > 0:
             st["bars_held"] = st["bars_held"] + 1
             self.manage_position(symbol, code, st, close, trend)
         else:
-            if st["stages_taken"] > 0:      # flat again: the episode is closed
+            if st["stages_taken"] > 0:
                 self.reset_episode(code, st)
             self.consider_entry(symbol, code, st, close, prev, trend, fast)
 
-    # ── exits come first: protecting capital outranks deploying it ─────────
+    # ── exits first: protecting capital outranks deploying it ──────────────
 
     def manage_position(self, symbol, code, st, close, trend):
-        qty = position_holding_qty(symbol=symbol)
-        pl = position_pl_ratio(symbol=symbol, cost_price_model=CostPriceModel.AVG)
-        pl_pct = (pl or 0.0) * 100.0
+        gain = self._gain_pct(st)
 
-        # 1 · STRUCTURAL STOP — a settled close below the trend is a thesis
-        #     break. Not a wobble, not noise: the structure that justified
-        #     owning it is gone.
+        # 1 · STRUCTURAL STOP — the structure that justified owning it is gone.
         if close < trend:
             print("[EXIT structural] " + code + ": settled close " + str(close) +
-                  " < trend(" + str(self.trend_period) + ") " + str(self._dp(trend, 2)) +
-                  " — thesis structure broken, full exit")
-            place_market(symbol=symbol, qty=qty, side=OrderSide.SELL,
-                         time_in_force=TimeInForce.DAY)
-            self.reset_episode(code, st)
+                  " < trend(" + str(self.trend_period) + ") " +
+                  str(self._dp(trend, 2)) + " — thesis structure broken, full exit")
+            self.sell_all(symbol, code, st, close)
             return
 
-        # 2 · HARD STOP — the backstop against permanent loss. The floor is
-        #     sacred; a single name may not be the reason it is touched.
-        if pl_pct <= -self.hard_stop_pct:
-            print("[EXIT hard-stop] " + code + ": " + str(self._dp(pl_pct, 1)) +
+        # 2 · HARD STOP — the floor is sacred; one name may not be why it is
+        #     touched.
+        if gain <= -self.hard_stop_pct:
+            print("[EXIT hard-stop] " + code + ": " + str(self._dp(gain, 1)) +
                   "% — permanent-loss backstop, full exit")
-            place_market(symbol=symbol, qty=qty, side=OrderSide.SELL,
-                         time_in_force=TimeInForce.DAY)
-            self.reset_episode(code, st)
+            self.sell_all(symbol, code, st, close)
             return
 
-        # 3 · DATED SIGNPOST — the thesis got a window and did nothing with
-        #     it. A position that has not worked in a year is not "early";
-        #     it is an opinion being funded by hope. (rules.adjudicate_signposts)
-        if st["bars_held"] >= self.horizon_days and pl_pct < self.min_progress_pct:
+        # 3 · DATED SIGNPOST — the window closed without progress.
+        if st["bars_held"] >= self.horizon_days and gain < self.min_progress_pct:
             print("[EXIT signpost] " + code + ": " + str(st["bars_held"]) +
-                  " sessions held, only " + str(self._dp(pl_pct, 1)) +
+                  " sessions held, only " + str(self._dp(gain, 1)) +
                   "% — the window closed without progress, exit")
-            place_market(symbol=symbol, qty=qty, side=OrderSide.SELL,
-                         time_in_force=TimeInForce.DAY)
-            self.reset_episode(code, st)
+            self.sell_all(symbol, code, st, close)
             return
 
-        # 4 · THE PRE-DECLARED LADDER — every rung was written on a calm day,
-        #     in advance. Rung 2 IS the euphoria protocol (2x cost). The
-        #     strategy climbs the ladder; it never invents a rung.
-        rungs = [(1, self.rung1_pct, self.rung1_trim),
-                 (2, self.rung2_pct, self.rung2_trim),
-                 (3, self.rung3_pct, self.rung3_trim)]
-        for rung_id, level, trim in rungs:
+        # 4 · THE PRE-DECLARED LADDER. Rung 2 IS the euphoria protocol (2x
+        #     cost). A gap through several rungs fires all of them the same
+        #     day — v1 returned after one, leaving the rest of the move
+        #     unprotected.
+        fired_any = False
+        for rung_id, level, trim in ((1, self.rung1_pct, self.rung1_trim),
+                                     (2, self.rung2_pct, self.rung2_trim),
+                                     (3, self.rung3_pct, self.rung3_trim)):
             if rung_id in st["rungs_fired"]:
                 continue
-            if pl_pct >= level:
-                slice_qty = floor(qty * trim / 100.0)
-                if slice_qty >= 1:
-                    tag = " (euphoria protocol: 2x cost)" if level >= 100 else ""
-                    print("[TRIM rung " + str(rung_id) + "] " + code + ": +" +
-                          str(self._dp(pl_pct, 1)) + "% >= " + str(level) + "% — selling " +
-                          str(trim) + "% (" + str(slice_qty) + " sh)" + tag)
-                    place_market(symbol=symbol, qty=slice_qty, side=OrderSide.SELL,
-                                 time_in_force=TimeInForce.DAY)
-                    st["rungs_fired"].append(rung_id)
-                    return          # one action per name per day
-                else:
-                    st["rungs_fired"].append(rung_id)   # position too small to slice
+            if gain < level:
+                continue
+            sellable = self.sellable_qty(symbol)
+            slice_qty = floor(sellable * trim / 100.0)
+            lot = lot_size(symbol=symbol) or 1.0
+            if lot > 1:
+                slice_qty = floor(slice_qty / lot) * lot
+            if slice_qty < 1:
+                # Do NOT burn the rung: the position may grow enough to slice
+                # later, and a silently-consumed rung is a broken promise.
+                print("[rung " + str(rung_id) + " deferred] " + code +
+                      ": slice rounds below one tradable unit — rung stays armed")
+                continue
+            tag = " (euphoria protocol: 2x cost)" if level >= 100 else ""
+            print("[TRIM rung " + str(rung_id) + "] " + code + ": +" +
+                  str(self._dp(gain, 1)) + "% >= " + str(level) + "% — selling " +
+                  str(trim) + "% (" + str(slice_qty) + " sh)" + tag)
+            self.submit(symbol, slice_qty, OrderSide.SELL, close)
+            st["rungs_fired"].append(rung_id)
+            st["ref_qty"] = max(st["ref_qty"] - slice_qty, 0.0)
+            fired_any = True
 
-        # 5 · STAGED THIRDS — add only while the structure holds and the name
-        #     has proven something since the last stage.
+        if fired_any:
+            return
+
+        # 5 · STAGED THIRDS — but never after a rung has fired. v1 would trim
+        #     at +50% and buy the same shares back the next day, so the exit
+        #     ladder and the entry engine fought each other.
+        if st["rungs_fired"]:
+            return
         self.consider_add(symbol, code, st, close, trend)
 
     # ── entries: two sources must agree, or nothing happens ────────────────
 
     def consider_entry(self, symbol, code, st, close, prev, trend, fast):
-        # SOURCE 1 — structural regime. Is there a trend worth joining?
         regime_ok = (close > trend) and (fast is not None and fast > trend)
 
-        # SOURCE 2 — the valley and its turn. We buy weakness INSIDE strength,
-        #     never a breakout into euphoria (CONSTITUTION §IV: drawdowns are
-        #     the queue, not the hazard).
         high = self.recent_high(symbol)
         if high is None or high <= 0:
-            print("[gap] " + code + ": no lookback high — no action")
+            if st["last_note"] != "nohigh":
+                print("[gap] " + code + ": no lookback high — no action")
+                st["last_note"] = "nohigh"
             return
         drawdown_pct = (1.0 - close / high) * 100.0
-        deep_enough = drawdown_pct >= self.pullback_pct
-        turning = prev is not None and close > prev
-        valley_ok = deep_enough and turning
+        valley_ok = (drawdown_pct >= self.pullback_pct) and \
+                    (prev is not None and close > prev)
 
         if not (regime_ok or valley_ok):
-            return                                  # quiet: nothing to say
+            return
 
-        # LAW 3 IN SPIRIT — the two sources disagree. Flag it, never average
-        # it, never act on the half that agrees with what you'd like to do.
         if regime_ok != valley_ok:
             reason = ("trend intact but no valley (would be chasing)"
                       if regime_ok else
                       "valley present but structure broken (falling knife)")
-            # Say it once per state change, not once per day: an unchanged
-            # standing reason repeated 200 times buries the decisions that
-            # matter. Silence is a violation; repetition is camouflage.
             if st["last_note"] != reason:
                 print("[no-trade] " + code + ": sources disagree — " + reason)
                 st["last_note"] = reason
             return
         st["last_note"] = ""
 
-        # ANTI-PARABOLA (Charter §V) — this does not forbid owning a name that
-        # doubled. It forbids owning MUCH of it. Starter size, permanently,
-        # for this episode.
+        # ANTI-PARABOLA — and it FAILS CLOSED. v1 skipped the check when
+        # history was too short, handing full size to exactly the recent-IPO
+        # names the rule exists to police. Not being able to check is not
+        # permission.
         gain6m = self.six_month_gain(symbol, close)
-        if gain6m is not None and gain6m >= self.parabola_pct:
+        if gain6m is None:
+            if not st["starter_only"]:
+                print("[anti-parabola] " + code + ": cannot measure a 6-month "
+                      "gain (short history) — STARTER SIZE ONLY. An unmeasured "
+                      "check fails closed.")
+            st["starter_only"] = True
+        elif gain6m >= self.parabola_pct:
             if not st["starter_only"]:
                 print("[anti-parabola] " + code + ": +" + str(self._dp(gain6m, 0)) +
                       "% in ~6m — STARTER SIZE ONLY for this episode "
@@ -313,21 +390,17 @@ class Strategy(StrategyBase):
         max_stages = 1 if st["starter_only"] else self.stages
         if st["stages_taken"] >= max_stages:
             return
-
         self.buy_one_stage(symbol, code, st, close, drawdown_pct, max_stages)
 
     def consider_add(self, symbol, code, st, close, trend):
-        """Adding to a winner is still an entry decision: the structure must
-        hold, and the name must have moved up since the last stage. Averaging
-        DOWN is not in this strategy — that is how a small mistake becomes
-        the reason the floor gets touched."""
+        """Adding is still an entry: structure must hold and the name must
+        have proven something since the last stage. Never averages down."""
         max_stages = 1 if st["starter_only"] else self.stages
         if st["stages_taken"] >= max_stages:
             return
         if close <= trend:
             return
-        cost = position_cost(symbol=symbol, cost_price_model=CostPriceModel.AVG)
-        if cost is None or cost <= 0 or close <= cost * 1.05:
+        if self._gain_pct(st) < 5.0:
             return                                  # no proof yet; wait
         self.buy_one_stage(symbol, code, st, close, None, max_stages)
 
@@ -339,20 +412,37 @@ class Strategy(StrategyBase):
             print("[gap] " + code + ": no net asset value — no sizing possible")
             return
 
-        # THE FLOOR (Charter §V): sacred, never deployed, not a buffer to be
-        # borrowed from on a good idea.
-        deployable = equity * (1.0 - self.floor_pct / 100.0)
-        full_target = deployable * (self.max_position_pct / 100.0)
-        stage_value = full_target / max_stages
-
-        cash_available = total_cash(currency=Currency.USD) or 0.0
-        spendable = min(stage_value, cash_available * 1.0)   # both args float (platform type-checks)
-        if spendable <= 0:
-            print("[no-trade] " + code + ": floor and cash leave nothing "
-                  "deployable — the floor is not a buffer")
+        floor_dollars = self.floor_amount * 1.0
+        deployable = equity - floor_dollars
+        if deployable <= 0:
+            if st["last_note"] != "floor":
+                print("[no-trade] " + code + ": net assets are at or below the "
+                      + str(self._dp(floor_dollars, 0)) + " floor — nothing is "
+                      "deployable")
+                st["last_note"] = "floor"
             return
+        stage_value = deployable * (self.max_position_pct / 100.0) / max_stages
 
-        qty = floor(spendable / close)
+        # THE FLOOR, ACTUALLY ENFORCED. v1 clamped the stage against TOTAL
+        # cash — which includes the floor's dollars — so a drawdown could
+        # spend the sacred reserve. Only cash ABOVE the floor is deployable.
+        cash_now = total_cash(currency=Currency.USD) or 0.0
+        cash_above_floor = cash_now - floor_dollars
+        if cash_above_floor <= 0:
+            if st["last_note"] != "floor":
+                print("[no-trade] " + code + ": cash is at or below the " +
+                      str(self._dp(floor_dollars, 0)) + " floor — the floor is "
+                      "not a buffer to borrow from")
+                st["last_note"] = "floor"
+            return
+        spendable = min(stage_value * 1.0, cash_above_floor * 1.0)
+
+        # Share count uses a TRADABLE price, not an adjusted bar close: this
+        # is arithmetic ("how many shares does $X buy"), not a decision.
+        px = current_price(symbol=symbol, price_type=THType.RTH)
+        if px is None or px <= 0:
+            px = close
+        qty = floor(spendable / px)
         lot = lot_size(symbol=symbol) or 1.0
         if lot > 1:
             qty = floor(qty / lot) * lot
@@ -361,24 +451,68 @@ class Strategy(StrategyBase):
             return
 
         why = ("valley -" + str(self._dp(drawdown_pct, 1)) + "% from high, turning"
-               if drawdown_pct is not None else "adding on proof above cost")
+               if drawdown_pct is not None else "adding on proof above reference")
         print("[BUY stage " + str(st["stages_taken"] + 1) + "/" + str(max_stages) +
-              "] " + code + ": " + str(qty) + " sh @ ~" + str(close) +
+              "] " + code + ": " + str(qty) + " sh @ ~" + str(self._dp(px, 2)) +
               " — " + why + (" [STARTER ONLY]" if st["starter_only"] else ""))
-        place_market(symbol=symbol, qty=qty, side=OrderSide.BUY,
-                     time_in_force=TimeInForce.DAY)
+        self.submit(symbol, qty, OrderSide.BUY, close)
+
+        # Our own reference cost, in the same adjusted space as the bars.
+        total_ref = st["ref"] * st["ref_qty"] + close * qty
+        st["ref_qty"] = st["ref_qty"] + qty
+        st["ref"] = total_ref / st["ref_qty"]
         st["stages_taken"] = st["stages_taken"] + 1
+
+    # ── execution ──────────────────────────────────────────────────────────
+
+    def submit(self, symbol, qty, side, ref_close):
+        """Limit orders only. US market orders are RTH-only per the manual, so
+        a market order from a strategy that thinks in daily closes is a live
+        rejection waiting to happen; the limit also bounds slippage."""
+        band = self.limit_band_pct / 100.0
+        px = current_price(symbol=symbol, price_type=THType.RTH)
+        if px is None or px <= 0:
+            px = ref_close
+        if side == OrderSide.BUY:
+            limit = px * (1.0 + band)
+        else:
+            limit = px * (1.0 - band)
+        place_limit(symbol=symbol, price=self._dp(limit, 2), qty=qty, side=side,
+                    time_in_force=TimeInForce.DAY)
+
+    def sellable_qty(self, symbol):
+        """Shares actually sellable — holdings minus anything frozen by a
+        working order. Selling raw holdings can be rejected wholesale."""
+        q = available_qty(symbol=symbol)
+        if q is None or q <= 0:
+            q = position_holding_qty(symbol=symbol) or 0.0
+        return q
+
+    def sell_all(self, symbol, code, st, close):
+        qty = self.sellable_qty(symbol)
+        if qty < 1:
+            print("[exit deferred] " + code + ": nothing sellable right now "
+                  "(shares frozen by a working order) — retrying next session")
+            return
+        self.submit(symbol, qty, OrderSide.SELL, close)
+        # Reset only when the exit covered the whole position. v1 reset
+        # unconditionally, so a partial or unfilled exit wiped the ladder and
+        # the clock while shares were still held.
+        held = position_holding_qty(symbol=symbol) or 0.0
+        if qty >= held:
+            self.reset_episode(code, st)
 
     # ── measurements, all on closed bars ───────────────────────────────────
 
     def recent_high(self, symbol):
+        """Highest HIGH over the lookback, from closed bars."""
         high = None
         for i in range(0, self.high_lookback):
-            c = bar_close(symbol=symbol, bar_type=BarType.K_DAY,
-                          select=self._sel(i), session_type=THType.RTH)
-            if c is not None and c > 0:
-                if high is None or c > high:
-                    high = c
+            h = bar_high(symbol=symbol, bar_type=BarType.K_DAY,
+                         select=self._sel(i), session_type=THType.RTH)
+            if h is not None and h > 0:
+                if high is None or h > high:
+                    high = h
         return high
 
     def six_month_gain(self, symbol, close):
@@ -391,10 +525,11 @@ class Strategy(StrategyBase):
 
     def reset_episode(self, code, st):
         """An episode ends when the position is flat. The ladder re-arms from
-        rung one for the NEXT episode — exactly how the euphoria protocol is
-        reset by archiving its consult."""
+        rung one for the NEXT episode."""
         st["rungs_fired"] = []
         st["stages_taken"] = 0
         st["bars_held"] = 0
         st["starter_only"] = False
+        st["ref"] = 0.0
+        st["ref_qty"] = 0.0
         st["last_note"] = ""

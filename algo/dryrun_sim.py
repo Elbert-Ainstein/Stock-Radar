@@ -50,6 +50,13 @@ def position_pl_ratio(symbol=None, cost_price_model=None):
 def net_asset(currency=None): return BOOK["cash"] + BOOK["qty"]*_series()[-2]
 def total_cash(currency=None): return BOOK["cash"]
 def lot_size(symbol=None): return 1
+def available_qty(symbol=None): return BOOK["qty"]
+def bar_high(symbol=None, bar_type=None, select=2, session_type=None):
+    return bar_close(symbol=symbol, select=select)     # synthetic: no intrabar range
+def current_price(symbol=None, price_type=None): return _series()[-2]
+def place_limit(symbol=None, price=None, qty=None, side=None,
+                time_in_force=None, order_trade_session_type=None):
+    return place_market(symbol=symbol, qty=qty, side=side)
 def place_market(symbol=None, qty=None, side=None, time_in_force=None):
     px = _series()[-2]                      # fills at the settled reference price
     if side == "BUY":
@@ -154,3 +161,81 @@ if _manuals:
 else:
     _print("\n(no Algo_Manual found — signature check skipped; run "
            "verify_against_manual.py by hand before pasting)")
+
+# ── v2 regressions: the defects the platform-semantics review confirmed ────
+# Each drives the REAL code path. A test that passes because the setup never
+# reached the code under test is worse than no test.
+_print("\n" + "="*70 + "\nV2 FIX REGRESSIONS\n" + "="*70)
+
+def _fresh(prices, day, qty=0.0, cost=0.0, cash=100000.0):
+    BOOK.update(prices=prices, day=day, qty=qty, cost=cost, cash=cash, log=[], trades=[])
+    s = Strategy(); s.initialize()
+    s.sym1 = "US.TEST"; s.sym2 = None; s.sym3 = None; s.sym4 = None
+    return s
+
+# 1 · THE FLOOR. Drive buy_one_stage directly so the sizing path definitely
+#     runs, with cash exactly at the floor: it must refuse.
+_s = _fresh(p, 300)
+BOOK["cash"] = _s.floor_amount * 1.0                      # cash IS the floor
+_st = _s._st("US.TEST"); _st["close_now"] = p[298]
+_s.buy_one_stage("US.TEST", "US.TEST", _st, p[298], 10.0, 3)
+allok &= check("floor blocks the buy when cash is AT the floor",
+               not any(t[1] == "BUY" for t in BOOK["trades"])
+               and any("floor" in m for d, m in BOOK["log"]))
+
+# 1b · and with cash comfortably above it, the same call DOES buy — proving
+#      test 1 failed for the floor and not because the path was unreachable.
+_s = _fresh(p, 300, cash=100000.0)
+_st = _s._st("US.TEST"); _st["close_now"] = p[298]
+_s.buy_one_stage("US.TEST", "US.TEST", _st, p[298], 10.0, 3)
+allok &= check("same path DOES buy when cash is above the floor",
+               any(t[1] == "BUY" for t in BOOK["trades"]))
+
+# 2 · ANTI-PARABOLA FAILS CLOSED. Too little history to measure six months.
+#     The series must still present a VALID entry (regime + valley), or the
+#     function returns before the anti-parabola check and the test proves
+#     nothing.
+_short = [100.0]
+for _i in range(80): _short.append(_short[-1] * 1.004)    # rise
+for _i in range(14): _short.append(_short[-1] * 0.992)    # ~10% valley
+for _i in range(4):  _short.append(_short[-1] * 1.003)    # turn
+_s = _fresh(_short, len(_short) - 1)
+allok &= check("short history is unmeasurable (returns None)",
+               _s.six_month_gain("US.TEST", _short[-2]) is None)
+_st = _s._st("US.TEST"); _st["close_now"] = _short[-2]
+_s.consider_entry("US.TEST", "US.TEST", _st, _short[-2], _short[-3], 1.0, 2.0)
+allok &= check("unmeasurable 6m gain => STARTER ONLY (fails closed)",
+               _st["starter_only"] is True)
+
+# 3 · EXIT/ENTRY INTERLOCK. A fired rung must stop the adder — driven through
+#     manage_position, which is where the guard lives.
+_s = _fresh(p, 400, qty=100.0, cost=100.0)
+_st = _s._st("US.TEST")
+_st.update(rungs_fired=[1], stages_taken=1, ref=p[398] / 1.10,
+           ref_qty=100.0, close_now=p[398], reconciled=True)
+_s.manage_position("US.TEST", "US.TEST", _st, p[398],
+                   p[398] * 0.5)                          # trend well below: no exit
+allok &= check("a fired rung stops the adder buying it back",
+               not any(t[1] == "BUY" for t in BOOK["trades"]))
+
+# 3b · with no rung fired, the same setup DOES add — again proving 3 was a
+#      real block rather than an unreachable path.
+_s = _fresh(p, 400, qty=100.0, cost=100.0)
+_st = _s._st("US.TEST")
+_st.update(rungs_fired=[], stages_taken=1, ref=p[398] / 1.10,
+           ref_qty=100.0, close_now=p[398], reconciled=True)
+_s.manage_position("US.TEST", "US.TEST", _st, p[398], p[398] * 0.5)
+allok &= check("with no rung fired the adder still works",
+               any(t[1] == "BUY" for t in BOOK["trades"]))
+
+# 4 · RESTART RECONCILIATION. Shares on the books with empty state must NOT
+#     re-arm the ladder from rung one.
+_s = _fresh(p, 400, qty=100.0, cost=p[398] / 2.2)         # sitting on >100% gain
+_st = _s._st("US.TEST"); _st["close_now"] = p[398]
+_s._reconcile("US.TEST", "US.TEST", _st)
+allok &= check("restart adopts fully-staged state",
+               _st["stages_taken"] == _s.stages)
+allok &= check("restart marks already-passed rungs as fired",
+               1 in _st["rungs_fired"] and 2 in _st["rungs_fired"])
+
+_print("\nFINAL: " + ("all green" if allok else "FAILURES ABOVE"))

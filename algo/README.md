@@ -37,13 +37,24 @@ invented to make a backtest look good.
 
 ---
 
+## Schedule it correctly (v2 — v1 got this wrong)
+
+Trigger: **run at a specified time, ~15:50 ET**, not on the daily bar.
+
+US market orders are RTH-only per the manual, so a daily-bar trigger fires
+after the close and every order would be rejected live while filling happily
+in the backtest. Running just before the close puts execution inside RTH and
+costs nothing in discipline — the decision still reads `select=2`, the last
+CLOSED daily bar. Orders are limit orders (bounded slippage, and they work in
+extended sessions too).
+
 ## Parameters worth touching first
 
 All are exposed in the platform's parameter panel via `show_variable()`.
 
 | Parameter | Default | What it does |
 |---|---|---|
-| `floor_pct` | 20 | % of net assets never deployed. The sacred floor |
+| `floor_amount` | 40000 | FIXED dollars never deployed — Charter §V. Not a percentage: a % floor shrinks exactly when the book is losing |
 | `max_position_pct` | 25 | max % of *deployable* capital in one name |
 | `stages` | 3 | staged thirds — entries are built, not taken |
 | `trend_period` | 200 | the structural regime line |
