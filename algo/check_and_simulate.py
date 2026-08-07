@@ -568,14 +568,19 @@ def main() -> int:
         s.handle_data()
     warm = sum(1 for d, m in BOOK["log"] if "warming up" in m)
     errs = sum(1 for d, m in BOOK["log"] if m.startswith("[error]"))
-    check("warm-up is reported ONCE, not once per trigger", warm == 1)
+    check("warm-up reports progress, not once and then silence",
+          2 <= warm <= 5)
+    check("warm-up counts sessions toward the requirement",
+          any("session 25 of ~201" in m for d, m in BOOK["log"]))
     check("warm-up is not logged as an error", errs == 0)
     check("warm-up explains the session requirement",
-          any("sessions INSIDE the backtest window" in m for d, m in BOOK["log"]))
+          any("must accumulate INSIDE the run" in m for d, m in BOOK["log"]))
+    check("warm-up names the knob that shortens it",
+          any("Lower trend_period" in m for d, m in BOOK["log"]))
     check("first-trigger date is the first CALL, not the first data",
           any("first evaluated on 2020-01-01" in m for d, m in BOOK["log"]))
     _out("       " + str(warm) + " warm-up line(s) across 60 triggers "
-         "(v2.7 would have logged 60 errors)")
+         "(v2.7 logged one ERROR per trigger — 22,118 in a real run)")
 
     _out("\nRESULT: " + ("all green" if allok[0] else "FAILURES ABOVE"))
     return 0 if allok[0] else 1

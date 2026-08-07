@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  THE SETTLED-BASIS LADDER  ·  v2.8  ·  warm-up is not an error
+#  THE SETTLED-BASIS LADDER  ·  v2.9  ·  warm-up reports its progress
 #
 #  The Portfolio Machine's risk discipline, made mechanical and backtestable.
 #  One file to paste: every rule, every parameter and the whole rationale are
@@ -265,6 +265,7 @@ class Strategy(StrategyBase):
                 "reconciled": False,
                 "tradable": True,
                 "type_checked": False,
+                "warmup_ticks": 0,
             }
         return self.state[code]
 
@@ -361,9 +362,12 @@ class Strategy(StrategyBase):
         if not st["type_checked"]:
             st["type_checked"] = True
             print("[first trigger] " + code + " first evaluated on " +
-                  str(device_time().date()) + " — if that is far from your "
-                  "backtest start date, the TRIGGER is limiting the run, not "
-                  "the period. Use a daily candle trigger for long histories.")
+                  str(device_time().date()) + ". Two things bound when trades "
+                  "can start: (1) if this date is far from your backtest "
+                  "start, the TRIGGER is clamping the run — intraday history "
+                  "is short, use a daily candle; (2) from this date, add ~" +
+                  str(self.trend_period + 1) + " sessions of warm-up before "
+                  "the first possible entry.")
             try:
                 kind = get_symbol_type(symbol=symbol)
                 if kind == SymbolType.INDEX or kind == SymbolType.PLATE:
@@ -399,14 +403,20 @@ class Strategy(StrategyBase):
                       bar_type=BarType.K_DAY, data_type=DataType.CLOSE,
                       select=self._sel(0), session_type=THType.RTH)
         except Exception as e:
-            if st["last_note"] != "warmup":
-                print("[warming up] " + code + ": indicators not ready (" +
-                      str(e)[:70] + "). The " + str(self.trend_period) +
-                      "-bar trend needs " + str(self.trend_period + 1) +
-                      " sessions INSIDE the backtest window — no pre-period "
-                      "history is served. Start the backtest that many "
-                      "sessions earlier than the trades you want to see.")
-                st["last_note"] = "warmup"
+            # COUNT the warm-up sessions and report progress. One silent line
+            # tells you nothing; a countdown tells you exactly when this
+            # symbol becomes tradable and therefore whether the run is broken
+            # or merely young.
+            st["warmup_ticks"] = st["warmup_ticks"] + 1
+            need = self.trend_period + 1
+            if st["warmup_ticks"] == 1 or st["warmup_ticks"] % 25 == 0:
+                print("[warming up] " + code + ": session " +
+                      str(st["warmup_ticks"]) + " of ~" + str(need) +
+                      " — indicators not ready (" + str(e)[:50] + "). No "
+                      "history is served from before the backtest window, so "
+                      "the " + str(self.trend_period) + "-bar trend must "
+                      "accumulate INSIDE the run. Lower trend_period to "
+                      "shorten this, or start the backtest earlier.")
             return
 
         if close is None or trend is None or close <= 0 or trend <= 0:

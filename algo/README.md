@@ -41,18 +41,24 @@ same untouched cash.
 
 ## Zero trades? Check these first
 
-1. **Is the trigger intraday?** See above — a 1h trigger bounds the run to
+1. **Is it still warming up?** With `trend_period=200` the first entry is
+   impossible until ~201 sessions — about **ten months** — after the first
+   trigger, because no history is served from before the backtest window. On a
+   Jan-2025 start that is November 2025 before anything can happen. The log
+   now counts it: `[warming up] US.MSFT: session 47 of ~201`. Lower
+   `trend_period` (100 → ~5 months, 50 → ~2.5) or start earlier.
+2. **Is the trigger intraday?** See above — a 1h trigger bounds the run to
    whatever intraday history exists, no matter what period you set. The Log's
    `[first trigger]` line names the first date the strategy was ever asked to
    think.
-2. **Is the Trigger Symbol an index?** `.IXIC`, `.SPX` and the like have
+3. **Is the Trigger Symbol an index?** `.IXIC`, `.SPX` and the like have
    prices, so every rule evaluates perfectly and nothing is ever buyable. The
    strategy now says `[NOT TRADABLE]` once and stops. Set the trigger to real
    tickers.
-3. **Read the Log tab.** Every refusal is printed with its reason — `[gap]`,
+4. **Read the Log tab.** Every refusal is printed with its reason — `[gap]`,
    `[no-trade] sources disagree`, `[error]`. A run with no trades and no log
    lines means the strategy never got a trigger at all.
-4. **Warm-up** (below): a 200-day trend needs 201 closed bars.
+5. **Warm-up** (below): a 200-day trend needs 201 closed bars.
 
 ## Two things about the backtest dialog
 
