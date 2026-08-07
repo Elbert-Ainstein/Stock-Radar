@@ -303,15 +303,31 @@ def _load_thesis_horizon(ticker: str) -> Optional[float]:
     """Per-name thesis horizon in years (config/thesis_horizons.json).
 
     Lesson L1 (2026-07-02): the clamp table's 12-18mo clock must be a declared,
-    per-name parameter, not a silent constant. Returns None when unset (the
-    gate then uses its default and the verdict still states the clock)."""
+    per-name parameter, not a silent constant. Returns None only when the file
+    or key is genuinely absent; every OTHER failure warns loudly (review fix
+    2026-07-02 — a trailing comma used to silently revert ALL names to the
+    default clock while the operator believed the feature was active)."""
+    import json as _json
+    path = REPO_ROOT / "config" / "thesis_horizons.json"
+    if not path.exists():
+        return None
     try:
-        import json as _json
-        path = REPO_ROOT / "config" / "thesis_horizons.json"
         data = _json.loads(path.read_text())
-        v = data.get(ticker.upper())
-        return float(v) if isinstance(v, (int, float)) else None
-    except Exception:
+    except (OSError, ValueError) as e:
+        print(f"  [thesis_horizon] WARNING: {path.name} unreadable ({e}) — ALL names "
+              f"fall back to the default clock", file=sys.stderr, flush=True)
+        return None
+    v = data.get(ticker.upper())
+    if v is None or isinstance(v, bool):  # bool is an int subclass — reject
+        if isinstance(v, bool):
+            print(f"  [thesis_horizon] WARNING: {ticker} horizon is boolean {v!r} — "
+                  f"ignored, default clock used", file=sys.stderr, flush=True)
+        return None
+    try:
+        return float(v)  # accepts int/float AND numeric strings like "3.0"
+    except (TypeError, ValueError):
+        print(f"  [thesis_horizon] WARNING: {ticker} horizon {v!r} is not numeric — "
+              f"ignored, default clock used", file=sys.stderr, flush=True)
         return None
 
 
@@ -930,9 +946,14 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
     # Lesson L1 (2026-07-02): the gate is judged on the thesis's OWN clock —
     # per-name horizon from config/thesis_horizons.json, default 1.25y
     # (identical to the original table), stated with every verdict.
-    from trade_gate import enforce_trade_gate, format_enforcement
-    parsed, _tg = enforce_trade_gate(parsed, spot,
-                                     horizon_years=_load_thesis_horizon(ticker))
+    # ALWAYS pass an explicit operator horizon (config or default): review fix
+    # 2026-07-02 — the gate must never fall through to a model-emitted clock.
+    from trade_gate import DEFAULT_HORIZON_YEARS, enforce_trade_gate, format_enforcement
+    _h_cfg = _load_thesis_horizon(ticker)
+    parsed, _tg = enforce_trade_gate(
+        parsed, spot,
+        horizon_years=_h_cfg if _h_cfg is not None else DEFAULT_HORIZON_YEARS,
+    )
     if _tg:
         print(f"  [trade_gate] {ticker}: {format_enforcement(_tg)}", flush=True)
         if (_tg.get("conviction_after") == "BROKEN"
@@ -976,6 +997,12 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
         if should_run_model_d(_arch):
             _shares = getattr(fin, "shares_diluted", None)
             if _shares and _shares > 0:
+                # Bracket clock note (review 2026-07-02): floor_horizon_years
+                # deliberately stays at its 1.25y default — risk_adj_target is
+                # still prompt-pinned to a 12-18-month date regardless of
+                # config/thesis_horizons.json (the gate scales conservative-
+                # only for the same reason). Thread the configured horizon
+                # here ONLY when the prompt becomes horizon-aware (L3 batch).
                 _eng = parsed.get("risk_adj_target") or parsed.get("thesis_target")
                 _md = model_d_for_ticker(ticker, context=text[:12000],
                                          shares=float(_shares), engine_target=_eng)
@@ -990,6 +1017,19 @@ def run_one(ticker: str, *, trigger_reason: str = "manual", supabase: bool = Tru
                 print("  [model_d] skipped — no diluted share count", flush=True)
     except Exception as e:
         print(f"  [model_d] skipped — {e}", file=sys.stderr, flush=True)
+
+    # L5 (2026-07-02, advisory): kill triggers must be dated external signposts.
+    try:
+        from kill_condition_eval import lint_kill_triggers
+        _kt = parsed.get("kill_triggers") or []
+        _lint = lint_kill_triggers(_kt, _arch)
+        if _lint:
+            print(f"  [kill_lint] {ticker}: {len(_lint)}/{len(_kt)} trigger(s) below "
+                  f"signpost grade (dated, external, falsifiable):", flush=True)
+            for _w in _lint[:5]:
+                print(f"    - {_w}", flush=True)
+    except Exception as _le:
+        print(f"  [kill_lint] skipped — {_le}", file=sys.stderr, flush=True)
 
     # L4 (2026-07-08): every run emits its parameter block — horizon clock,
     # post-scaling clamp table, archetype/dcf_role, allowlist size — logged

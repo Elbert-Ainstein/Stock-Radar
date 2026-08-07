@@ -1,0 +1,7 @@
+# Runtime artifacts regenerated per pass — out/ is a render target.
+# data/ (prices, log) IS tracked: the repo is the book's memory (law 6).
+out/*
+!out/.gitkeep
+data/cron.log
+__pycache__/
+.pytest_cache/

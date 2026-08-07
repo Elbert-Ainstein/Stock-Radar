@@ -469,6 +469,7 @@ interface PortfolioContext {
   signals: any[];
   pipelineRun: any | null;
   theses: Record<string, any>;
+  thesesError?: string | null;
 }
 
 async function buildContext(): Promise<PortfolioContext> {
@@ -496,6 +497,13 @@ async function buildContext(): Promise<PortfolioContext> {
     ),
   ]);
 
+  // Review fix 2026-07-02: supabase-js resolves errors into {data:null,error}
+  // (no Promise.all rejection), so an unchecked error silently turned into
+  // "no thesis run recorded" for every ticker — a false verdict source.
+  if (thesesRes.error) {
+    console.error("[ask] theses query failed:", thesesRes.error.message);
+  }
+
   const theses: Record<string, any> = {};
   for (const t of thesesRows as any[]) {
     if (t.ticker && !theses[t.ticker]) theses[t.ticker] = t; // latest per ticker
@@ -506,10 +514,14 @@ async function buildContext(): Promise<PortfolioContext> {
     signals: signalsRes.data || [],
     pipelineRun: pipelineRes.data,
     theses,
+    thesesError: thesesRes.error ? String(thesesRes.error.message || thesesRes.error) : null,
   };
 }
 
-function thesisVerdictLine(t: any | undefined): string {
+function thesisVerdictLine(t: any | undefined, queryError?: string | null): string {
+  if (queryError) {
+    return `THESIS DATA UNAVAILABLE (query error: ${queryError.slice(0, 120)}) — say the verdict of record could not be loaded; do NOT claim no run exists and do NOT give a buy/sell verdict`;
+  }
   if (!t) return "no thesis run recorded — decline to give a buy/sell verdict; suggest running one";
   const num = (v: any) => (typeof v === "number" ? `$${v.toFixed(0)}` : "?");
   const parts = [
@@ -536,7 +548,10 @@ function buildPortfolioSummaryText(ctx: PortfolioContext): string {
     const bearish = signals.filter((sig: any) => sig.signal === "bearish").length;
     const scenarios = s.scenarios || {};
     const archetype = s.archetype ? (typeof s.archetype === "string" ? s.archetype : s.archetype.primary || "?") : "?";
-    return `${s.ticker}: score=${s.composite_score || "?"}, signals=${bullish}B/${bearish}Be/${signals.length}T, archetype=${archetype}, base=$${scenarios.base?.price?.toFixed?.(0) ?? scenarios.base?.price ?? "?"}, kill=${s.kill_condition_eval?.status || "?"}`;
+    // Review fix 2026-07-02: the refresh tool must carry the verdict of
+    // record too, or a long conversation's freshest data would cite only
+    // the display-only legacy scenarios.
+    return `${s.ticker}: score=${s.composite_score || "?"}, signals=${bullish}B/${bearish}Be/${signals.length}T, archetype=${archetype}, base=$${scenarios.base?.price?.toFixed?.(0) ?? scenarios.base?.price ?? "?"}, kill=${s.kill_condition_eval?.status || "?"} | VERDICT: ${thesisVerdictLine(ctx.theses[s.ticker], ctx.thesesError)}`;
   }).join("\n");
 }
 
@@ -565,7 +580,7 @@ function buildSystemPrompt(ctx: PortfolioContext): string {
     return `### ${s.ticker} — ${s.name || ""}
 Sector: ${s.sector || "N/A"} | Archetype: ${archetype}
 Price: $${s.price_data?.price || "?"} | Market cap: ${s.price_data?.market_cap_b ? `$${s.price_data.market_cap_b.toFixed(1)}B` : "?"}
-VERDICT OF RECORD (latest thesis run — authoritative for buy/sell): ${thesisVerdictLine(ctx.theses[s.ticker])}
+VERDICT OF RECORD (latest thesis run — authoritative for buy/sell): ${thesisVerdictLine(ctx.theses[s.ticker], ctx.thesesError)}
 Composite score: ${s.composite_score || "?"}/100
 Signal consensus: ${bullish}B / ${bearish}Be / ${neutral}N (${signals.length} total)
 Thesis: ${s.thesis || "none"}

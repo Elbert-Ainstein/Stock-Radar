@@ -29,6 +29,22 @@ esac
 
 LOG="$LOGDIR/$JOB.log"
 cd "$SCRIPTS" || { echo "[$(ts)] FAIL $JOB: cannot cd $SCRIPTS" >> "$LOG"; exit 1; }
+
+# Self-update (2026-07-02): the cron host must never run stale code — "pull on
+# the cron machine" was a recurring manual chore after every merge. --ff-only
+# is safe: it refuses (and we log + continue on the CURRENT code) if the local
+# checkout has diverged or has uncommitted work. Opt out: STOCKRADAR_NO_PULL=1.
+if [ -z "${STOCKRADAR_NO_PULL:-}" ]; then
+  if PULL_OUT=$(git -C "$REPO" pull --ff-only 2>&1); then
+    case "$PULL_OUT" in
+      *"Already up to date"*) : ;;
+      *) echo "[$(ts)] SELF-UPDATE $JOB: $PULL_OUT" >> "$LOG" ;;
+    esac
+  else
+    echo "[$(ts)] SELF-UPDATE SKIPPED $JOB (running current code): $PULL_OUT" >> "$LOG"
+  fi
+fi
+
 echo "[$(ts)] START $JOB — $DESC" >> "$LOG"
 if "$PY" "$SCRIPT" >> "$LOG" 2>&1; then
   echo "[$(ts)] OK $JOB" >> "$LOG"

@@ -28,6 +28,7 @@ See docs/event_target_plan.md §5, §6 for the design.
 from __future__ import annotations
 import os
 import re
+import sys
 import json
 import math
 import hashlib
@@ -449,7 +450,6 @@ def reason_events(events: list[dict], stock_context: dict) -> list[dict]:
     # scale expected_contribution_pct. Re-enable deliberately via
     # CALIBRATION_APPLY=1 once the math is fixed.
     try:
-        import os
         from calibration import get_event_calibration_ratios
         cal_ratios = get_event_calibration_ratios()
         apply_ratios = os.environ.get("CALIBRATION_APPLY", "") == "1"

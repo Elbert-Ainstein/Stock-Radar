@@ -197,13 +197,18 @@ def _ensure_stocks_seeded():
         print(f"  [seed] Could not check/seed stocks table (non-fatal): {e}")
 
 
-def run_single_ticker(ticker: str):
+def run_single_ticker(ticker: str) -> bool:
     """Run pipeline for a single newly-added stock.
 
     Checks for a cancellation signal between each stage so that if the
     user deletes the stock while the pipeline is running, we stop early
     instead of wasting API calls.
+
+    Returns True unless a load-bearing stage (analyst or thesis) failed —
+    review fix 2026-07-02: a fully failed mini-pipeline used to exit 0 and
+    the add route logged "complete". Cancellation counts as success.
     """
+    stage_ok = {"analyst": True, "thesis": True}
     # Set up a run_id so signals/analysis can be saved to Supabase
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_mini_" + uuid.uuid4().hex[:4]
     set_run_id(run_id)
@@ -223,7 +228,7 @@ def run_single_ticker(ticker: str):
         print(f"  [CANCELLED] {ticker} was deleted — halting mini-pipeline before scouts")
         _clear_progress()
         os.environ.pop("PIPELINE_TICKER_FILTER", None)
-        return
+        return True
 
     mini_scouts = [
         ("quant", "scout_quant"),
@@ -257,7 +262,7 @@ def run_single_ticker(ticker: str):
         print(f"  [CANCELLED] {ticker} was deleted — halting mini-pipeline before analyst")
         _clear_progress()
         os.environ.pop("PIPELINE_TICKER_FILTER", None)
-        return
+        return True
 
     _write_progress("analyst", f"Running analyst for {ticker}...", len(mini_scouts) + 1, total_stages)
     try:
@@ -266,13 +271,14 @@ def run_single_ticker(ticker: str):
         print(f"  [OK] Analyst done for {ticker}")
     except Exception as e:
         print(f"  [FAIL] Analyst failed for {ticker}: {e}")
+        stage_ok["analyst"] = False
 
     # ── Stage 3: Model generation ──
     if _is_cancelled(ticker):
         print(f"  [CANCELLED] {ticker} was deleted — halting mini-pipeline before model generation")
         _clear_progress()
         os.environ.pop("PIPELINE_TICKER_FILTER", None)
-        return
+        return True
 
     _write_progress("model", f"Generating target model for {ticker}...", len(mini_scouts) + 2, total_stages)
     try:
@@ -292,7 +298,7 @@ def run_single_ticker(ticker: str):
         print(f"  [CANCELLED] {ticker} was deleted — halting mini-pipeline before thesis run")
         _clear_progress()
         os.environ.pop("PIPELINE_TICKER_FILTER", None)
-        return
+        return True
 
     _write_progress("thesis", f"Generating thesis for {ticker}...", total_stages, total_stages + 1)
     try:
@@ -301,11 +307,15 @@ def run_single_ticker(ticker: str):
         print(f"  [OK] Thesis generated for {ticker}")
     except Exception as e:
         print(f"  [FAIL] Thesis run failed for {ticker}: {e}")
+        stage_ok["thesis"] = False
 
     _write_progress("done", f"{ticker} pipeline complete", total_stages, total_stages)
     # Clear ticker filter so subsequent calls (e.g. queued tickers) are not restricted
     os.environ.pop("PIPELINE_TICKER_FILTER", None)
-    print(f"\n  Mini-pipeline for {ticker} complete!")
+    ok = all(stage_ok.values())
+    print(f"\n  Mini-pipeline for {ticker} " + ("complete!" if ok else
+          f"finished WITH FAILURES ({', '.join(k for k, v in stage_ok.items() if not v)})"))
+    return ok
 
 
 def run():
@@ -343,12 +353,12 @@ def run():
 
     # Single-ticker mode (called from stock add)
     if single_ticker:
-        run_single_ticker(single_ticker)
+        single_ok = run_single_ticker(single_ticker)
         if auto_thesis_after:
             print("  [auto-thesis] flag accepted but skipped — the mini-pipeline "
                   "already ran the thesis inline (Stage 4)")
         _clear_progress()
-        return True
+        return single_ok
 
     # Generate unique run ID
     mode_tag = "scouts" if scouts_only else ("rebuild" if rebuild_only else "full")
@@ -365,7 +375,10 @@ def run():
     if not scouts_only:
         scouts.append("analyst")
         scouts.append("feedback")
-        if not free_only:
+        # Review fix 2026-07-02: honor --no-models in the advertised stage
+        # list too — pipeline_runs / Health panel / progress totals previously
+        # claimed a "models" stage that never executed.
+        if not free_only and not no_models:
             scouts.append("models")
     total_stages = len(scouts)
 
@@ -736,6 +749,7 @@ def run():
                     wl_t = _get_wl_t()
                     thesis_count = 0
                     thesis_errors = 0
+                    sweep_verdicts = []  # L4 zero-result auto-diagnosis input
                     for s in wl_t:
                         t = s["ticker"]
                         if _is_cancelled(t):
@@ -752,12 +766,28 @@ def run():
                             if row and not row.get("dry_run"):
                                 thesis_count += 1
                                 print(f"  [OK] {t} thesis generated")
+                                sweep_verdicts.append({
+                                    "ticker": t,
+                                    "ratio": row.get("risk_adj_ev_ratio"),
+                                    "horizon_years": row.get("thesis_horizon_years"),
+                                    "conviction": row.get("conviction"),
+                                })
                             else:
                                 print(f"  [SKIP] {t} — no thesis returned")
                         except Exception as te:
                             thesis_errors += 1
                             print(f"  [FAIL] {t} thesis error: {te}")
                     print(f"\n  Theses generated: {thesis_count}/{len(wl_t)} (errors: {thesis_errors})")
+                    # L4 (2026-07-02): a sweep that clamps EVERYTHING must
+                    # diagnose itself — tape vs ruler — never end in a shrug.
+                    try:
+                        from trade_gate import gate_artifact_analysis, is_actionable
+                        if sweep_verdicts and not any(
+                            is_actionable(v["conviction"]) for v in sweep_verdicts
+                        ):
+                            print("\n" + gate_artifact_analysis(sweep_verdicts), flush=True)
+                    except Exception as ge:
+                        print(f"  [gate-artifact] diagnosis failed (non-fatal): {ge}")
                 except Exception as e:
                     print(f"  Thesis stage failed: {e}")
                     print("  Continuing without thesis updates...")

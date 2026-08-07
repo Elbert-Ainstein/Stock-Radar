@@ -1,5 +1,5 @@
 ---
-version: v1
+version: v2
 model: claude-opus-4-8
 max_tokens: 8000
 temperature: 0.2
@@ -26,9 +26,11 @@ The logic paragraph should read like this (don't just emit numbers — the human
 > **Rough target range: $X–$Y over 12 months.** Logic: [current revenue run-rate or NTM EPS] × [reasonable multiple range from comps] = [implied market cap range] ÷ [shares] = [price range]. Upside case ($Y): [what drives the high end — acceleration / re-rating / catalyst]. Downside case ($Z): [trough revenue × trough multiple = downside price]. Current price $P = [X-Y]% upside with [downside]% downside in bad case.
 
 Rules:
-- Every number in the paragraph must trace to an input from the three models or research findings. No orphan multiples.
-- If the three models disagree wildly on the multiple, weight by their confidence levels and show your weighting.
-- The downside_price must come from Model C if Model C had high confidence, OR from the bottom of Model A's range otherwise.
+- Every number in the paragraph must trace to a seated panelist's input or a research finding. No orphan multiples.
+- When panelists disagree wildly, weight by confidence AND against declared bias: a bear call from a seat that declared a bear failure mode is weak evidence; the SAME call from the Owner seat (`case_supportable: false`) is strong evidence. Show your weighting.
+- The downside_price comes from the Adversary if its confidence was HIGH; otherwise from the lowest credible floor among the Fundamentalist, Capital-Cycle and Base-Rate seats — name which one you used.
+- The upside must be built from the Owner's chain, and may only use links marked EVIDENCED or PLAUSIBLE. A range whose high end rests on a HOPED link is not a target, it is a wish — say so and lower the high end.
+- If any seat reported `facts_unanswerable`, the range must widen, not narrow. Declared ignorance widens bands; it never sharpens them.
 - DO NOT produce a single point target. The output is always a range.
 
 
@@ -85,9 +87,10 @@ Notes from the operator on this ticker. The three models above each addressed th
 **Ticker:** [TICKER]
 **Spot price:** [PRICE]
 
-**Model A:** [MODEL_A_JSON]
-**Model B:** [MODEL_B_JSON]
-**Model C:** [MODEL_C_JSON]
+**The seated panel** (each verdict labeled with its school and declared bias):
+
+[PANEL_JSON]
+
 **Corpus callosum:** [CC_JSON]
 **Research findings (if any):** [RESEARCH_FINDINGS]
 

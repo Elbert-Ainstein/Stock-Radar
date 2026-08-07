@@ -839,15 +839,21 @@ def update_stock_in_supabase(ticker: str, model_config: dict, research_text: str
         # kill_condition are OPERATOR-OWNED fields — the scheduled regeneration
         # was overwriting hand-edited kill conditions twice daily. Only seed
         # them when the row has none (new ticker); never overwrite.
+        # Review fix (same day): fail CLOSED on the eligibility read — a
+        # transient Supabase error must skip seeding entirely, not look like
+        # an empty row and overwrite the operator's text anyway.
         try:
             existing = (sb.table("stocks").select("thesis,kill_condition")
                         .eq("ticker", ticker).limit(1).execute().data or [{}])[0]
-        except Exception:
-            existing = {}
-        if model_config.get("thesis") and not (existing.get("thesis") or "").strip():
-            update["thesis"] = model_config["thesis"]
-        if model_config.get("kill_condition") and not (existing.get("kill_condition") or "").strip():
-            update["kill_condition"] = model_config["kill_condition"]
+        except Exception as seed_err:
+            existing = None
+            print(f"  [{ticker}] WARN: could not check seed eligibility ({seed_err}) — "
+                  f"NOT seeding thesis/kill_condition this run", file=sys.stderr)
+        if existing is not None:
+            if model_config.get("thesis") and not (existing.get("thesis") or "").strip():
+                update["thesis"] = model_config["thesis"]
+            if model_config.get("kill_condition") and not (existing.get("kill_condition") or "").strip():
+                update["kill_condition"] = model_config["kill_condition"]
 
         # Derive target_price from base scenario
         base_price = model_config.get("scenarios", {}).get("base", {}).get("price")

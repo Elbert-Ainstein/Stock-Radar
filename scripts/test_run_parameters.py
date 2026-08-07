@@ -86,10 +86,15 @@ def test_sub_min_solution_collapses_to_zero():
     assert rp.horizon_to_reach(0.99, 0.95) == 0.0
 
 
-def test_band_edge_ratio_flips_with_a_longer_clock():
-    # 0.90 vs the 0.95 bar: h = 1.25·ln(0.90)/ln(0.95) ≈ 2.57y
-    h = rp.horizon_to_reach(0.90, 0.95)
-    assert abs(h - DEFAULT_HORIZON_YEARS * math.log(0.90) / math.log(0.95)) < 0.01
+def test_below_native_bar_no_clock_helps():
+    # Conservative-only floor: 0.90 is below the native 0.95 bar, and long
+    # clocks never lower the bar (the two-sided formula's ~2.57y answer was
+    # a promise the enforced table would not honor — confirmed defect).
+    assert rp.horizon_to_reach(0.90, 0.95) is None
+    # At/above the native bar the sub-default formula still applies:
+    # 0.96 clears once the (short-clock-raised) bar drops to it, ~0.65y.
+    h = rp.horizon_to_reach(0.96, 0.95)
+    assert abs(h - DEFAULT_HORIZON_YEARS * math.log(0.96) / math.log(0.95)) < 0.01
 
 
 def test_deep_ratio_no_horizon_fixes_it():
@@ -146,8 +151,11 @@ def test_trade_gate_kill_names_bands_and_prices():
     # Ratio each band needs + the implied risk-adj target at spot 100.
     assert "LOW/10% needs ratio ≥ 0.95" in joined and "≥ 95" in joined
     assert "HIGH/35% needs ratio ≥ 1.25" in joined
-    # The L1 question: a ~3.4y clock flips 0.87 to LOW-actionable.
-    assert "clock would make it LOW-actionable" in joined
+    # The L1 question under the conservative-only floor: 0.87 is below the
+    # native bar, so no clock fixes it — and the diagnosis says so instead
+    # of promising one.
+    assert "no in-bounds horizon fixes this ratio" in joined
+    assert "clock would make it LOW-actionable" not in joined
 
 
 def test_deep_ratio_says_market_not_ruler():
@@ -195,10 +203,15 @@ def test_model_emitted_refusal_distinguished_from_gate_clamp():
     assert "model-emitted verdict" in d["killed_by"]
 
 
-def test_longer_clock_row_uses_scaled_threshold():
-    # On a 3y clock the LOW bar is 0.95^(3/1.25) ≈ 0.8840 — ratio 0.90 clears it.
+def test_longer_clock_never_loosens_the_bar():
+    # Conservative-only floor: on a 3y clock the LOW bar STAYS 0.95 (the
+    # prompt pins targets to 12-18mo; loosening was a confirmed defect).
+    # Ratio 0.90 remains gate-killed and the diagnosis must not promise a
+    # clock that the enforced table will not honor.
     d = rp.diagnose_verdict(_row(ratio=0.90, horizon=3.0))
-    assert "model-emitted verdict" in d["killed_by"]
+    assert "trade gate" in d["killed_by"] and "0.95" in d["killed_by"]
+    assert any("no in-bounds horizon" in c for c in d["what_would_change"])
+    assert not any("clock would make it" in c for c in d["what_would_change"])
 
 
 # ─── sweep ───────────────────────────────────────────────────────────

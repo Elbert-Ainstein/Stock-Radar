@@ -791,13 +791,22 @@ def build_context(ticker: str, *, override_suspect_recent: bool = False,
 # ────────────────────────────────────────────────────────────────────
 
 def run_one_model(role: str, ctx: dict, allowed_domains: list[str]) -> dict:
-    name_map = {
-        "a": "model_a_fundamentals",
-        "b": "model_b_regime",
-        "c": "model_c_adversarial",
-    }
-    front, body = load_prompt(name_map[role])
-    prompt = fill(body, label=f"model_{role}", **ctx)
+    """One panelist. The roster lives in socratic_panel.py (2026-07-28): the
+    seat's prompt, its school, and its declared failure mode travel together,
+    and every seat receives the same two discipline blocks — who else is in
+    the room ([PANEL_ROSTER]) and which facts are admissible
+    ([WATCHED_FACTS], operator directive: focus on the facts that matter)."""
+    from socratic_panel import (BY_KEY, format_lineage, format_panel_roster,
+                                load_roster)
+    from watched_facts import format_watched_facts
+
+    panelist = BY_KEY[role]
+    front, body = load_prompt(panelist.prompt)
+    prompt = fill(body, label=f"model_{role}",
+                  panel_roster=format_panel_roster(load_roster()),
+                  watched_facts=format_watched_facts(ctx["ticker"]),
+                  lineage=format_lineage(panelist),
+                  **ctx)
 
     result = call_sonnet(
         prompt,
@@ -831,14 +840,19 @@ def run_round_1_parallel(ctx: dict, allowed_domains: list[str]) -> dict[str, dic
     """
     from consensus import self_consistency_n, aggregate_samples
 
+    from socratic_panel import load_roster, panel_version
+
     ticker = ctx["ticker"]
     n = self_consistency_n()
-    roles = ("a", "b", "c")
+    active = load_roster()
+    roles = tuple(p.key for p in active)
+    print(f"  [round_1] panel: {panel_version(active)} "
+          f"({len(active)} seats)", flush=True)
 
     if n <= 1:
-        print(f"  [round_1] firing 3 parallel Sonnet calls for {ticker}...", flush=True)
+        print(f"  [round_1] firing {len(roles)} parallel Sonnet calls for {ticker}...", flush=True)
         results: dict[str, dict] = {}
-        with cf.ThreadPoolExecutor(max_workers=3) as pool:
+        with cf.ThreadPoolExecutor(max_workers=max(1, len(roles))) as pool:
             futures = {pool.submit(run_one_model, role, ctx, allowed_domains): role for role in roles}
             for fut in cf.as_completed(futures):
                 role = futures[fut]
@@ -898,6 +912,7 @@ def run_round_1_parallel(ctx: dict, allowed_domains: list[str]) -> dict[str, dic
 # ────────────────────────────────────────────────────────────────────
 
 def run_corpus_callosum(ctx: dict, round_1: dict[str, dict]) -> dict:
+    from socratic_panel import format_panel_json_block
     front, body = load_prompt("corpus_callosum")
     prompt = fill(
         body,
@@ -907,9 +922,7 @@ def run_corpus_callosum(ctx: dict, round_1: dict[str, dict]) -> dict:
         macro_context=ctx.get("macro_context", "(none)"),
         operator_notes=ctx.get("operator_notes", "(none)"),
         validated_corrections=ctx.get("validated_corrections", "(none)"),
-        model_a_json=json.dumps(round_1["a"]["parsed"], ensure_ascii=False, indent=2),
-        model_b_json=json.dumps(round_1["b"]["parsed"], ensure_ascii=False, indent=2),
-        model_c_json=json.dumps(round_1["c"]["parsed"], ensure_ascii=False, indent=2),
+        panel_json=format_panel_json_block(round_1),
     )
     result = call_sonnet(
         prompt,
@@ -1024,6 +1037,7 @@ def run_rough_target_range(
     """Final synthesis call. Takes Round-1 verdicts, corpus callosum output,
     and any research findings; produces the rough_target_range JSON.
     No web search — pure synthesis."""
+    from socratic_panel import format_panel_json_block
     front, body = load_prompt("rough_target_range")
     prompt = fill(
         body,
@@ -1034,9 +1048,7 @@ def run_rough_target_range(
         wave_context=ctx.get("wave_context", "(none)"),
         operator_notes=ctx.get("operator_notes", "(none)"),
         validated_corrections=ctx.get("validated_corrections", "(none)"),
-        model_a_json=json.dumps(round_1["a"]["parsed"], ensure_ascii=False, indent=2),
-        model_b_json=json.dumps(round_1["b"]["parsed"], ensure_ascii=False, indent=2),
-        model_c_json=json.dumps(round_1["c"]["parsed"], ensure_ascii=False, indent=2),
+        panel_json=format_panel_json_block(round_1),
         cc_json=json.dumps(cc["parsed"], ensure_ascii=False, indent=2),
         research_findings=json.dumps(research_findings, ensure_ascii=False, indent=2) if research_findings else "(none)",
     )
@@ -1140,15 +1152,24 @@ def write_to_supabase(
             raise RuntimeError("SUPABASE_URL / SUPABASE_ANON_KEY not set")
         sb = create_client(url, key)
 
+    from socratic_panel import load_roster, panel_version
+    _active = load_roster()
+    _seated = [p for p in _active if p.key in round_1]
+
     cc_parsed = cc["parsed"]
     row = {
         "ticker": ticker.upper(),
         "run_at": run_at.isoformat(),
         "mode": "socratic",
         "thesis_id": None,
-        "model_a": round_1["a"]["parsed"],
-        "model_b": round_1["b"]["parsed"],
-        "model_c": round_1["c"]["parsed"],
+        # Legacy columns stay populated when those seats are seated (the
+        # dashboard reads them); `panel` is the complete record keyed by
+        # stable panelist id — the a/b/c columns cannot hold 8 seats.
+        "model_a": (round_1.get("a") or {}).get("parsed"),
+        "model_b": (round_1.get("b") or {}).get("parsed"),
+        "model_c": (round_1.get("c") or {}).get("parsed"),
+        "panel": {p.id: round_1[p.key]["parsed"] for p in _seated},
+        "panel_version": panel_version(_active),
         "agreements": cc_parsed.get("agreements", []),
         "disagreements": cc_parsed.get("disagreements", []),
         "research_findings": [
@@ -1161,32 +1182,51 @@ def write_to_supabase(
         "rough_target_paragraph": target["parsed"].get("rough_target_paragraph"),
         "final_verdict": None,  # left for human via judgment card (Phase 5)
         "prompt_versions": {
-            "model_a": round_1["a"]["prompt_version"],
-            "model_b": round_1["b"]["prompt_version"],
-            "model_c": round_1["c"]["prompt_version"],
+            **{p.id: round_1[p.key]["prompt_version"] for p in _seated},
+            # legacy keys the cohort function reads by name
+            "model_a": (round_1.get("a") or {}).get("prompt_version"),
+            "model_b": (round_1.get("b") or {}).get("prompt_version"),
+            "model_c": (round_1.get("c") or {}).get("prompt_version"),
+            "panel": panel_version(_active),
             "corpus_callosum": cc["prompt_version"],
             "research_question": "v1" if research_findings else None,
             "rough_target_range": target["prompt_version"],
         },
         "spot_at_run": ctx["spot_raw"],
         "input_tokens": (
-            sum(round_1[r]["input_tokens"] for r in "abc")
+            sum(round_1[p.key]["input_tokens"] for p in _seated)
             + cc["input_tokens"]
             + sum(f.get("input_tokens", 0) for f in research_findings)
             + target["input_tokens"]
         ),
         "output_tokens": (
-            sum(round_1[r]["output_tokens"] for r in "abc")
+            sum(round_1[p.key]["output_tokens"] for p in _seated)
             + cc["output_tokens"]
             + sum(f.get("output_tokens", 0) for f in research_findings)
             + target["output_tokens"]
         ),
         "web_search_count": (
-            sum(round_1[r]["web_search_count"] for r in "abc")
+            sum(round_1[p.key]["web_search_count"] for p in _seated)
             + sum(f.get("web_search_count", 0) for f in research_findings)
         ),
     }
-    result = sb.table("socratic_analyses").insert(row).execute()
+    import re as _re
+    result = None
+    for _ in range(len(row) + 1):   # dynamic budget (the prediction_logger lesson)
+        try:
+            result = sb.table("socratic_analyses").insert(row).execute()
+            break
+        except Exception as e:
+            m = (_re.search(r"column \"?([a-zA-Z_][a-zA-Z0-9_]*)\"? .*does not exist", str(e))
+                 or _re.search(r"Could not find the '([a-zA-Z_][a-zA-Z0-9_]*)' column", str(e)))
+            if m and m.group(1) in row:
+                bad = m.group(1)
+                print(f"  [supabase] column '{bad}' missing in socratic_analyses — "
+                      f"stripping and retrying (apply supabase/PENDING.sql to persist it).",
+                      file=sys.stderr, flush=True)
+                row = {k: v for k, v in row.items() if k != bad}
+                continue
+            raise
     if not result.data:
         print(
             "  [supabase] socratic_analyses insert returned empty data "

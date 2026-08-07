@@ -1,5 +1,5 @@
 ---
-version: v1
+version: v2
 model: claude-opus-4-8
 max_tokens: 8000
 temperature: 0.2
@@ -86,13 +86,12 @@ Notes from the operator on this ticker. The three models above each received the
 **Ticker:** [TICKER]
 **Spot price:** [PRICE]
 
-**Model A verdict (fundamentals):**
-[MODEL_A_JSON]
+**The seated panel's verdicts** — each labeled with the school it argues from
+and the failure mode it declared for itself. Weight a verdict against its own
+bias: a Capital-Cycle bear call is less surprising than a Capital-Cycle bull
+call, and an Owner bull case with `case_supportable: false` is the strongest
+bear signal on the page.
 
-**Model B verdict (regime):**
-[MODEL_B_JSON]
-
-**Model C verdict (adversarial):**
-[MODEL_C_JSON]
+[PANEL_JSON]
 
 Compare. Produce the JSON. Begin.

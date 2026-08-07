@@ -1,0 +1,55 @@
+# holdings.yaml — the book's seats. Editable without code (law: config is data).
+# Schema per seat:
+#   ticker:   exchange symbol (yfinance form; .HK suffix for Hong Kong)
+#   name:     display name
+#   shares:   share count            <- SEED_REPLACE from workbook
+#   cost:     average cost, native currency  <- SEED_REPLACE from workbook
+#   currency: USD | HKD (drives FX conversion in valuation)
+#   sleeve:   book sleeve tag (sleeve/factor cap monitors read this)
+#
+# SEED NOTE: tickers below are drawn from the build spec's own references so
+# the machine runs end-to-end on day one. Shares/costs are placeholders —
+# replace every SEED_REPLACE value from the live workbook before trusting
+# book valuation. Wire adjudication does NOT depend on these numbers.
+
+holdings:
+  - ticker: INTC
+    name: Intel
+    shares: 100          # SEED_REPLACE
+    cost: 30.00          # SEED_REPLACE
+    currency: USD
+    sleeve: turnaround
+
+  - ticker: MU
+    name: Micron
+    shares: 10           # SEED_REPLACE
+    cost: 650.00         # SEED_REPLACE
+    currency: USD
+    sleeve: memory
+
+  - ticker: SNDK
+    name: Sandisk
+    shares: 10           # SEED_REPLACE
+    cost: 900.00         # SEED_REPLACE
+    currency: USD
+    sleeve: memory
+
+  - ticker: "0981.HK"
+    name: SMIC (HK line)  # SEED_REPLACE — stands in for the book's HK seats
+    shares: 500           # SEED_REPLACE
+    cost: 20.00           # SEED_REPLACE (HKD)
+    currency: HKD
+    sleeve: china-semis
+
+# Cash is a seat too (valuation includes it; no price fetch).
+cash:
+  - currency: USD
+    amount: 0.00         # SEED_REPLACE
+
+# THE FLOOR (Charter §V): sacred living money. NEVER part of the investable
+# book — valuation reports it separately and never adds it to book totals.
+# No market outcome can reach it; new cash joins the floor first.
+floor:
+  amount: 40000.00
+  currency: USD
+  note: "sacred — never invested, never margined (Charter §V)"

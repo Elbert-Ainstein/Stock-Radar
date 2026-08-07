@@ -69,8 +69,8 @@ npm run dev      # http://localhost:3000  (build: npx next build)
 
 - **Tests:** `python -m pytest scripts/ -q` — ~200 deterministic tests, <1s, offline. The only expected failure without live providers is `test_engine_fixtures::test_skip_floor` (fixtures need network; re-capture pending on the operator machine).
 - **CI:** `.github/workflows/tests.yml` runs the suite on every push/PR. **Pre-commit hook is tracked** — install per clone with `bash scripts/hooks/install.sh`.
-- **Migrations:** `supabase/` is append-only SQL applied MANUALLY in the Supabase SQL editor; the live DB drifts from the files. Current consolidated pending file: `supabase/2026-07-02_consolidated_pending.sql` (seal fields + append-only RLS, kill_gate_override, model_d_bracket, strategic axis, quarantine flag — includes verification queries). Writers strip-and-retry unknown columns with stderr warnings; the stripped data is lost for that row, so apply migrations promptly. Do NOT trust `validate_schema` — it checks only the 5 legacy tables.
-- **Scheduled Actions run `main`.** Until the session branch merges, scheduled runs use old code (split-brain). `verify_model.py`'s Excel-parity leg is dead (needs a `recalc.py` that never existed) — "diffs=0" means *not checked*.
+- **Migrations (rolling pattern, 2026-07-02):** every unapplied migration lives in ONE idempotent file, `supabase/PENDING.sql` (dated files are archives). It auto-applies on merge to main via `.github/workflows/apply-migrations.yml` once the `SUPABASE_DB_URL` secret exists; until then it's the single thing to paste into the SQL editor, whenever convenient — writers strip missing columns loudly, nothing breaks in between. Do NOT trust `validate_schema` — it checks only the 5 legacy tables.
+- **Scheduled Actions run `main`; the cron host self-updates** (`stockradar_cron.sh` does a guarded `git pull --ff-only` before each job — no more manual pulls after merges). `verify_model.py`'s Excel-parity leg is dead (needs a `recalc.py` that never existed) — "diffs=0" means *not checked*.
 - **Backups:** prepared, not active — `docs/ops/BACKUP_PLAN_2026-07-02.md`.
 
 ---
@@ -83,6 +83,7 @@ npm run dev      # http://localhost:3000  (build: npx next build)
 4. **Facts over prediction** — the 5–10y structural state is the only allowed forward input; attention is a current-market fact, timing-only.
 5. **Seals are append-only** — never mutate `prediction_log`/`prediction_outcomes`; corrections are new rows or dated service-role migrations. The grader filters to genuine Socratic seals.
 6. **Money-path files (`run_thesis.py`, `run_socratic.py`, `finance_data.py`, `target_engine.py`, prompts) merge only with explicit owner approval.** Small logical commits; no "new"/"improvements" messages.
+7. **Supremacy clause (2026-07-28)** — Radar is the research cortex; `portfolio-machine/` is the brainstem and the only layer that touches the book. At the point of research these rules govern; at the point of action the Machine's laws (`portfolio-machine/CONSTITUTION.md`) govern. Radar output crosses exactly one interface — `scripts/radar_bridge.py`, one-way, plain text: thesis evidence into `data/evidence/<TICKER>.md` and kill signposts into `data/radar_proposed_wires.yaml` as PROPOSALS the operator ratifies by hand. Conviction and position size never cross as instructions. Rationale and open build items: `docs/decisions/RADAR_MACHINE_SYNTHESIS_2026-07-28.md`.
 
 ---
 

@@ -140,11 +140,30 @@ def test_long_clock_big_ratio_compares_honestly():
     assert clamp_for_ratio(2.50, horizon_years=3.0) == ("HIGH", 35.0)
 
 
-def test_long_clock_lowers_broken_threshold_too():
-    """0.90x is BROKEN on the native clock but a 3-year 0.90 (-3.4%/yr)
-    sits above the scaled BROKEN edge (0.95^2.4 ~= 0.884) -> LOW band."""
+def test_long_clock_never_loosens_broken_edge():
+    """CONSERVATIVE-ONLY scaling (2026-07-02 review fix): the thesis prompt
+    still pins risk_adj_target to a 12-18-month date, so a configured clock
+    may only TIGHTEN the gate — 0.90x stays BROKEN at every horizon until the
+    prompt is horizon-aware (two-sided honesty unlocks with the L3 batch)."""
     assert clamp_for_ratio(0.90) == ("BROKEN", 0.0)
-    assert clamp_for_ratio(0.90, horizon_years=3.0) == ("LOW", 10.0)
+    assert clamp_for_ratio(0.90, horizon_years=3.0) == ("BROKEN", 0.0)
+    assert clamp_for_ratio(0.949, horizon_years=10.0) == ("BROKEN", 0.0)
+    # Short clocks tighten the upper bands instead of loosening them:
+    assert clamp_for_ratio(1.20, horizon_years=0.5) == ("MEDIUM", 25.0)
+
+
+def test_config_clock_beats_model_emitted_clock():
+    """2026-07-02 review fix: the hard gate must not take timing instructions
+    from the model it exists to constrain. A model-emitted horizon that
+    conflicts with the operator's is IGNORED and flagged."""
+    parsed = {"risk_adj_target": 70.0, "conviction": "HIGH",
+              "position_size_pct": 35, "thesis_horizon_years": 10.0}
+    out, tg = enforce_trade_gate(parsed, spot=100.0, horizon_years=1.25)
+    assert tg["horizon_years"] == 1.25
+    assert tg["horizon_source"] == "config"
+    assert tg["model_horizon_ignored"] == 10.0
+    assert out["conviction"] == "BROKEN" and out["position_size_pct"] == 0.0
+    assert "IGNORED" in format_enforcement(tg)
 
 
 def test_enforce_reads_horizon_and_states_the_clock():

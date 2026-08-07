@@ -167,11 +167,19 @@ def horizon_to_reach(ratio: float, threshold: float) -> Optional[float]:
 
     ratio >= threshold^(h/1.25)  →  h >= 1.25·ln(ratio)/ln(threshold)
 
-    Returns 0.0 when any in-bounds clock clears it (h ≤ MIN bound — note a
-    ratio like 0.96 does NOT clear the bar on a sub-default clock, so the
-    early "already clears" answer must come from this formula, not from a
-    raw ratio-vs-0.95 comparison), a positive number of years when only a
-    long-enough clock flips it, and None when no in-bounds horizon does.
+    CONSERVATIVE-ONLY floor (trade_gate review fix, 2026-07-02): scaled
+    thresholds are floored at their native values — a clock longer than the
+    default NEVER lowers the bar (the prompt still pins risk_adj_target to
+    12–18 months; loosening against a mismatched number was a confirmed
+    defect). So a ratio BELOW the native threshold is target-bound: no
+    in-bounds horizon fixes it, and this returns None rather than promising
+    a clock the enforced table will not honor. For ratios at/above the
+    native bar the formula gives the smallest (sub-default) clock that
+    still clears — short clocks DO tighten.
+
+    Returns 0.0 when any in-bounds clock clears it, a positive number of
+    years when only a long-enough (≤ default) clock flips it, and None when
+    no in-bounds horizon does.
 
     Scope: this solves the LOW-actionability question only. Thresholds ≥ 1
     (MEDIUM/HIGH bands) TIGHTEN as the clock lengthens — reaching those is
@@ -184,6 +192,8 @@ def horizon_to_reach(ratio: float, threshold: float) -> Optional[float]:
         return None  # out of scope: the bar rises with horizon (see docstring)
     if ratio >= 1.0:
         return 0.0  # a ≥1x ratio clears any sub-1 bar on every clock
+    if ratio < threshold:
+        return None  # below the native bar: the floor means no clock helps
     h = DEFAULT_HORIZON_YEARS * math.log(ratio) / math.log(threshold)
     if h <= MIN_HORIZON_YEARS:
         return 0.0

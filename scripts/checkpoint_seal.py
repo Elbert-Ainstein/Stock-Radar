@@ -39,7 +39,11 @@ from typing import Any, Iterable, Optional
 JUDGMENT_FILES = ("analyst.py", "target_engine.py", "kill_condition_eval.py")
 
 # Socratic prompt_versions keys that count toward the cohort key.
-JUDGMENT_PROMPT_KEYS = ("model_a", "model_b", "model_c", "corpus_callosum")
+# "panel" (2026-07-28) carries the SEATED ROSTER id string: changing who sits
+# on the panel changes the instrument, so it must reset the calibration clock
+# even when no prompt version string moved. Comparing hit-rates across a
+# roster change would silently mix two different measuring devices.
+JUDGMENT_PROMPT_KEYS = ("model_a", "model_b", "model_c", "corpus_callosum", "panel")
 
 # Judgment prompt files whose `model:` frontmatter pins the reasoner. A model
 # swap here (e.g. sonnet-4-6 -> opus-4-8) is a clock-resetting change and must

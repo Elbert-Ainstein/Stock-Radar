@@ -117,10 +117,15 @@ def test_thesis_actionability_trigger():
 
 
 def test_thesis_trigger_respects_the_clock():
-    # On a 3y clock the LOW bound is 0.95^(3/1.25) ≈ 0.8840 → higher trigger.
+    # Conservative-only floor: a LONG clock never loosens the LOW bound, so
+    # the 3y trigger equals the native one; a SHORT clock raises the bar
+    # (0.95^(0.6/1.25) ≈ 0.9757) and therefore TIGHTENS the trigger.
     trig, _ = ds.derive_trigger_price(
         thesis_row={"risk_adj_target": 95.0, "thesis_horizon_years": 3.0})
-    assert trig > 100.0
+    assert abs(trig - 100.0) < 0.01
+    trig_short, _ = ds.derive_trigger_price(
+        thesis_row={"risk_adj_target": 95.0, "thesis_horizon_years": 0.6})
+    assert trig_short < 100.0
 
 
 def test_no_trigger_derivable_is_stated_not_invented():

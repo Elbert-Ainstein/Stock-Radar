@@ -279,7 +279,46 @@ def run_checkpoint(*, dry_run: bool = False, ticker: Optional[str] = None,
 
     print(f"[checkpoint] done — graded={graded} skipped(existing)={skipped} no_price={no_price} "
           f"excluded={excluded or 'none'}", flush=True)
+    _watchlist_gate_diagnosis(sb)
     return {"graded": graded, "skipped": skipped, "no_price": no_price, "excluded": excluded}
+
+
+def _watchlist_gate_diagnosis(sb) -> None:
+    """L4 relocation (review fix 2026-07-02): the zero-result diagnosis was
+    wired only into run_pipeline's thesis loop, which production sweeps never
+    execute (the dashboard bulk button spawns parallel rerun subprocesses; the
+    scheduled Action passes --no-thesis). The daily grader is the one process
+    that reliably runs on the host, so it checks the latest verdict per ticker
+    and prints the tape-vs-ruler analysis whenever the whole board is clamped.
+    Best-effort; never affects grading."""
+    try:
+        from trade_gate import gate_artifact_analysis, is_actionable
+        base_cols = "ticker,conviction,risk_adj_ev_ratio,run_at"
+        rows = None
+        for cols in (base_cols + ",thesis_horizon_years", base_cols):
+            try:
+                rows = (sb.table("theses").select(cols)
+                        .order("run_at", desc=True).limit(200).execute().data or [])
+                break
+            except Exception as e:
+                if "thesis_horizon_years" in str(e) and "thesis_horizon_years" in cols:
+                    continue  # pre-migration schema — retry without the clock column
+                raise
+        latest: dict[str, dict] = {}
+        for r in rows or []:
+            t = r.get("ticker")
+            if t and t not in latest:
+                latest[t] = r
+        if not latest:
+            return
+        if any(is_actionable(r.get("conviction")) for r in latest.values()):
+            return
+        entries = [{"ticker": t, "ratio": r.get("risk_adj_ev_ratio"),
+                    "horizon_years": r.get("thesis_horizon_years"),
+                    "conviction": r.get("conviction")} for t, r in latest.items()]
+        print(gate_artifact_analysis(entries), flush=True)
+    except Exception as e:
+        print(f"  [gate-artifact] watchlist diagnosis skipped — {e}", file=sys.stderr, flush=True)
 
 
 def main():

@@ -1,0 +1,97 @@
+# grades.yaml — factor scores as data; composite math lives in engine/grades.py
+# (IN CODE, not spreadsheet formulas — kills the off-by-one bug class forever:
+# scores are keyed by factor NAME, never by position).
+#
+# Methodology v1.2.1 per CONSTITUTION §III (Track C):
+#   Composite = Σ(weight × score), scores 0–100 per factor.
+#   Letters: >=91.5 A · >=88.5 A- · >=85.5 B+ · >=81.5 B · >=78.5 B- ·
+#            >=75.5 C+ · >=71.5 C · else D.
+#   Momentum-RISK is INVERTED: extended run = hazard = LOW score
+#   (>+100%/6mo = redline); deep drawdown = hazard drained = HIGH score.
+#   Every A/A- requires the seat's written one-line moat_answer ("if
+#   intelligence is free, what's left to pay for?") — engine enforces.
+#
+# Grade movement: evidence or methodology change (same-day backward
+# propagation across ALL seats, migration recorded with cause) — never mood
+# or price alone. Changes are PROPOSALS awaiting signature (append to
+# `proposals`; never edit `seats` unsigned).
+
+methodology:
+  version: "1.2.1"
+  factors:                 # name: weight (fractions summing to 1.00)
+    moat_durability: 0.25
+    growth: 0.20
+    valuation: 0.15
+    profitability: 0.15
+    evidence_revisions: 0.10
+    momentum_risk: 0.10    # INVERTED — FOMO hazard, not trend quality
+    cycle_risk: 0.05
+  letter_bands:            # lower bound (inclusive) per letter, descending
+    A: 91.5
+    A-: 88.5
+    B+: 85.5
+    B: 81.5
+    B-: 78.5
+    C+: 75.5
+    C: 71.5
+    # below C -> D
+  notes:
+    - "v1.1: FY29+ consensus de-weighted in evidence_revisions — low-N
+       placeholder models; distrust the number, respect the shape"
+    - "v1.2: commoditization screen — the food chain (§II) tiers dock
+       conditional T2 moats below unconditional T3/T4"
+    - "v1.2.1: momentum_risk redline — a seat flagged by the anti-parabola
+       screen (+100%/6mo) may not score momentum_risk above 20 that day"
+  migrations:
+    - { from: "1.0", to: "1.1", date: "SEED_REPLACE", cause: "FY29+ consensus de-weight" }
+    - { from: "1.1", to: "1.2", date: "SEED_REPLACE", cause: "commoditization screen / food chain" }
+    - { from: "1.2", to: "1.2.1", date: "2026-07-28", cause: "momentum redline + food-chain reference cases" }
+
+# Track definitions (CONSTITUTION §III / §IV). Track Z seats are NOT graded on
+# this rubric — they carry the seven-fingerprint scorecard instead.
+tracks:
+  C: "1->n compounders — graded on the v1.2.1 rubric above"
+  Z: "0->1 category creators — seven fingerprints (§IV); Sleeve-only sizing,
+      staged thirds, power-law expectations; grading a Z on the C rubric
+      kills it falsely"
+
+# Pre-registered responses (§III): dated, named triggers with automatic grade
+# moves — recorded here so consistency is enforceable. SEED example from the
+# constitution's own text.
+pre_registered:
+  - trigger: "named MSFT ITSM bundle announcement"      # SEED_REPLACE detail
+    seat: NOW
+    move: "A- -> B+"
+    status: armed
+
+# Scores 0-100 per factor, keyed by name. tier = food-chain tier (§II).
+# SEED_REPLACE every score from the live grade sheet.
+seats:
+  INTC:
+    track: C
+    tier: T4
+    scores: { moat_durability: 62, growth: 55, valuation: 78, profitability: 48,
+              evidence_revisions: 60, momentum_risk: 70, cycle_risk: 45 }   # SEED_REPLACE
+    moat_answer: "SEED_REPLACE — one line: if intelligence is free, what's left to pay for?"
+  MU:
+    track: C
+    tier: T4
+    scores: { moat_durability: 74, growth: 85, valuation: 60, profitability: 76,
+              evidence_revisions: 80, momentum_risk: 35, cycle_risk: 40 }   # SEED_REPLACE
+    moat_answer: "SEED_REPLACE — atoms & electrons: smarter AI orders more DRAM/HBM"
+  SNDK:
+    track: C
+    tier: T4
+    scores: { moat_durability: 66, growth: 82, valuation: 55, profitability: 70,
+              evidence_revisions: 78, momentum_risk: 25, cycle_risk: 35 }   # SEED_REPLACE
+    moat_answer: "SEED_REPLACE — NAND supply discipline through the 2027 sunset"
+  "0981.HK":
+    track: C
+    tier: T4
+    scores: { moat_durability: 60, growth: 65, valuation: 70, profitability: 55,
+              evidence_revisions: 58, momentum_risk: 60, cycle_risk: 30 }   # SEED_REPLACE
+    moat_answer: "SEED_REPLACE — mainland foundry scarcity under export controls"
+
+# Machine-appended grade-change proposals (operator signs in conversation).
+# Never auto-applied.
+proposals: []

@@ -32,6 +32,20 @@ but because the ruler is wrong for the object.
 derivable by hand from the annualized bands; default-horizon behavior byte-identical
 to the pre-change gate (regression-tested).
 
+**Same-day review corrections (both confirmed adversarially):**
+1. **Conservative-only scaling until the prompt knows the clock.** thesis_v3.md
+   Step 6 still pins `risk_adj_target` to a 12–18-month date, so two-sided
+   scaling would loosen the BROKEN edge against a mismatched number. Scaled
+   thresholds are floored at their native values — a configured clock can only
+   TIGHTEN the gate. Two-sided honesty (and threading the clock into Model D's
+   bracket) unlocks when the prompt carries `[THESIS_HORIZON]` (L3 batch).
+2. **The operator's clock always wins.** The gate initially read a
+   `thesis_horizon_years` field from the model's own closing JSON ahead of the
+   config — i.e., the model could choose the ruler it was judged by. Fixed:
+   config/default is always passed explicitly; a conflicting model-emitted
+   horizon is ignored and flagged (`horizon_source` / `model_horizon_ignored`
+   in the enforcement record).
+
 ## L2 — Discovery and allocation are different machines (dual-mode gating)
 
 The moat framework finds structural elites the market has priced. Only the

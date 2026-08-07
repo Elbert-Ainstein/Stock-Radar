@@ -21,3 +21,5 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run deterministic suite
         run: python -m pytest scripts/ -q -k "not skip_floor"
+      - name: Portfolio Machine constitution + regressions
+        run: python -m pytest portfolio-machine/tests -q

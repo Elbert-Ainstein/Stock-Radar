@@ -1,0 +1,33 @@
+# catalysts.yaml — dated events that auto-arm event passes (Phase 5 wires the
+# scheduler; Phase 1 already validates and lists them). Editable without code.
+#
+# Schema per catalyst:
+#   date:    YYYY-MM-DD (exchange-local date of the event)
+#   ticker:  seat it concerns (or BOOK for book-level events)
+#   what:    one line — what happens
+#   pass:    which pass arms (event | radar | premarket-note)
+#
+# SEED NOTE: dates below are the four the spec names (Aug 5, Aug 13, Aug 18,
+# Sep 29 2026). Attach the right tickers/descriptions from the workbook —
+# ticker/what fields are SEED_REPLACE placeholders.
+
+catalysts:
+  - date: 2026-08-05
+    ticker: BOOK        # SEED_REPLACE
+    what: "Dated catalyst per workbook (Aug 5)"   # SEED_REPLACE
+    pass: event
+
+  - date: 2026-08-13
+    ticker: BOOK        # SEED_REPLACE
+    what: "Dated catalyst per workbook (Aug 13)"  # SEED_REPLACE
+    pass: event
+
+  - date: 2026-08-18
+    ticker: BOOK        # SEED_REPLACE
+    what: "Dated catalyst per workbook (Aug 18)"  # SEED_REPLACE
+    pass: event
+
+  - date: 2026-09-29
+    ticker: BOOK
+    what: "Sep 29 reset (see clauses.yaml sep-29-reset)"
+    pass: event
