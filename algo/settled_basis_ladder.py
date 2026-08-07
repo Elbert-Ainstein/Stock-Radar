@@ -107,6 +107,21 @@ class Strategy(StrategyBase):
         base = 2 if self.use_settled else 1
         return base + offset
 
+    def _dp(self, value, places=1):
+        """Round to N decimals using the platform's SINGLE-ARGUMENT round().
+
+        The platform's round(value) takes no precision argument — Python's
+        two-argument form is rejected by the editor. Scale, round, unscale.
+        Kept as one helper so every log line formats the same way and a future
+        edit cannot reintroduce round(x, 2) by habit.
+        """
+        if value is None:
+            return 0.0
+        factor = 1.0
+        for _ in range(places):
+            factor = factor * 10.0
+        return round(value * factor) / factor
+
     def _st(self, code):
         if code not in self.state:
             self.state[code] = {
@@ -185,14 +200,14 @@ class Strategy(StrategyBase):
     def manage_position(self, symbol, code, st, close, trend):
         qty = position_holding_qty(symbol=symbol)
         pl = position_pl_ratio(symbol=symbol, cost_price_model=CostPriceModel.AVG)
-        pl_pct = (pl or 0) * 100.0
+        pl_pct = (pl or 0.0) * 100.0
 
         # 1 · STRUCTURAL STOP — a settled close below the trend is a thesis
         #     break. Not a wobble, not noise: the structure that justified
         #     owning it is gone.
         if close < trend:
             print("[EXIT structural] " + code + ": settled close " + str(close) +
-                  " < trend(" + str(self.trend_period) + ") " + str(round(trend, 2)) +
+                  " < trend(" + str(self.trend_period) + ") " + str(self._dp(trend, 2)) +
                   " — thesis structure broken, full exit")
             place_market(symbol=symbol, qty=qty, side=OrderSide.SELL,
                          time_in_force=TimeInForce.DAY)
@@ -202,7 +217,7 @@ class Strategy(StrategyBase):
         # 2 · HARD STOP — the backstop against permanent loss. The floor is
         #     sacred; a single name may not be the reason it is touched.
         if pl_pct <= -self.hard_stop_pct:
-            print("[EXIT hard-stop] " + code + ": " + str(round(pl_pct, 1)) +
+            print("[EXIT hard-stop] " + code + ": " + str(self._dp(pl_pct, 1)) +
                   "% — permanent-loss backstop, full exit")
             place_market(symbol=symbol, qty=qty, side=OrderSide.SELL,
                          time_in_force=TimeInForce.DAY)
@@ -214,7 +229,7 @@ class Strategy(StrategyBase):
         #     it is an opinion being funded by hope. (rules.adjudicate_signposts)
         if st["bars_held"] >= self.horizon_days and pl_pct < self.min_progress_pct:
             print("[EXIT signpost] " + code + ": " + str(st["bars_held"]) +
-                  " sessions held, only " + str(round(pl_pct, 1)) +
+                  " sessions held, only " + str(self._dp(pl_pct, 1)) +
                   "% — the window closed without progress, exit")
             place_market(symbol=symbol, qty=qty, side=OrderSide.SELL,
                          time_in_force=TimeInForce.DAY)
@@ -235,7 +250,7 @@ class Strategy(StrategyBase):
                 if slice_qty >= 1:
                     tag = " (euphoria protocol: 2x cost)" if level >= 100 else ""
                     print("[TRIM rung " + str(rung_id) + "] " + code + ": +" +
-                          str(round(pl_pct, 1)) + "% >= " + str(level) + "% — selling " +
+                          str(self._dp(pl_pct, 1)) + "% >= " + str(level) + "% — selling " +
                           str(trim) + "% (" + str(slice_qty) + " sh)" + tag)
                     place_market(symbol=symbol, qty=slice_qty, side=OrderSide.SELL,
                                  time_in_force=TimeInForce.DAY)
@@ -290,7 +305,7 @@ class Strategy(StrategyBase):
         gain6m = self.six_month_gain(symbol, close)
         if gain6m is not None and gain6m >= self.parabola_pct:
             if not st["starter_only"]:
-                print("[anti-parabola] " + code + ": +" + str(round(gain6m, 0)) +
+                print("[anti-parabola] " + code + ": +" + str(self._dp(gain6m, 0)) +
                       "% in ~6m — STARTER SIZE ONLY for this episode "
                       "(Charter §V sizing law + Momentum-RISK redline)")
             st["starter_only"] = True
@@ -330,22 +345,22 @@ class Strategy(StrategyBase):
         full_target = deployable * (self.max_position_pct / 100.0)
         stage_value = full_target / max_stages
 
-        cash_available = total_cash(currency=Currency.USD) or 0
-        spendable = min(stage_value, cash_available)
+        cash_available = total_cash(currency=Currency.USD) or 0.0
+        spendable = min(stage_value, cash_available * 1.0)   # both args float (platform type-checks)
         if spendable <= 0:
             print("[no-trade] " + code + ": floor and cash leave nothing "
                   "deployable — the floor is not a buffer")
             return
 
         qty = floor(spendable / close)
-        lot = lot_size(symbol=symbol) or 1
+        lot = lot_size(symbol=symbol) or 1.0
         if lot > 1:
             qty = floor(qty / lot) * lot
         if qty < 1:
             print("[no-trade] " + code + ": stage size below one tradable unit")
             return
 
-        why = ("valley -" + str(round(drawdown_pct, 1)) + "% from high, turning"
+        why = ("valley -" + str(self._dp(drawdown_pct, 1)) + "% from high, turning"
                if drawdown_pct is not None else "adding on proof above cost")
         print("[BUY stage " + str(st["stages_taken"] + 1) + "/" + str(max_stages) +
               "] " + code + ": " + str(qty) + " sh @ ~" + str(close) +

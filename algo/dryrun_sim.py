@@ -135,3 +135,22 @@ allok &= check("no standing reason repeats daily",
                max([sum(1 for d,m in log if "sources disagree" in m) for log in (l1,l2,l3)]) <= 3)
 allok &= check("S3 never entered", not any(t[1]=="BUY" for t in t3))
 _print("\nRESULT: " + ("all green" if allok else "FAILURES ABOVE"))
+
+# ── static gate: the editor's rules, checked before any of this matters ─────
+# v1 shipped with seven editor errors that a mechanism test cannot see. If a
+# manual is on hand, run the signature checker as part of the dry run.
+import glob as _glob, os as _os, subprocess as _sub
+_manuals = _glob.glob(_os.path.expanduser("~/.claude/uploads/**/*Algo_Manual*.md"),
+                      recursive=True)
+if _manuals:
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    _r = _sub.run([sys.executable, _os.path.join(_here, "verify_against_manual.py"),
+                   _os.path.join(_here, "settled_basis_ladder.py"), _manuals[0]],
+                  capture_output=True, text=True)
+    _print("\n" + "="*70 + "\nSTATIC CHECK vs MANUAL\n" + "="*70)
+    _print("  " + (_r.stdout.strip() or "(no output)").replace("\n", "\n  "))
+    if _r.returncode != 0:
+        _print("\nRESULT: STATIC VIOLATIONS — the editor will reject this file")
+else:
+    _print("\n(no Algo_Manual found — signature check skipped; run "
+           "verify_against_manual.py by hand before pasting)")

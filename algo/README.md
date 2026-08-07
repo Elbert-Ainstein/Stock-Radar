@@ -56,6 +56,23 @@ All are exposed in the platform's parameter panel via `show_variable()`.
 
 ---
 
+## Before you paste it into the editor
+
+```bash
+# 1 · does every call match the manual's documented signature?
+python3 algo/verify_against_manual.py algo/settled_basis_ladder.py <Algo_Manual.md>
+
+# 2 · do the constitutional rules still fire when they should?
+python3 algo/dryrun_sim.py
+```
+
+The first script exists because v1 shipped with seven editor errors: this
+platform's `round()` takes **one** argument (no precision) and `min()`
+type-checks its arguments as float — so `min(x, total_cash(...) or 0)` is
+rejected for the `or 0`. Verifying that a function NAME exists proves nothing
+about how it is called. The checker now reproduces the editor's error list
+exactly, including the case where the int comes from a *previous* assignment.
+
 ## How to judge the result honestly
 
 A backtest that looks good on one symbol proves nothing. Three tests before you
