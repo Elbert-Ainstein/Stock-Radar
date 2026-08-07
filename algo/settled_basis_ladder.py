@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  THE SETTLED-BASIS LADDER  ·  v2.2  ·  editor-clean
+#  THE SETTLED-BASIS LADDER  ·  v2.3  ·  12 symbols
 #
 #  The Portfolio Machine's risk discipline, made mechanical and backtestable.
 #  One file to paste: every rule, every parameter and the whole rationale are
@@ -136,12 +136,33 @@ class Strategy(StrategyBase):
         # let the position stack past its cap. `_reconcile()` handles that.
         self.state = {}
         self.last_run_day = ""
+        # Dollars committed during the CURRENT pass. total_cash() does not
+        # drop until an order fills, so with several symbols evaluated in one
+        # pass each would size against the same untouched cash and the book
+        # could commit far more than it holds. Reset every pass.
+        self.committed = 0.0
 
     def trigger_symbols(self):
+        # Twelve slots. Fill as many as you want to test; empty ones are
+        # skipped by _symbols(). The platform allows up to 50 — to add more,
+        # append a `self.symN = declare_trig_symbol()` line here AND its entry
+        # in _symbols() below. Both places, or the slot is declared but never
+        # evaluated.
+        #
+        # If the editor insists every declared slot be filled, delete the
+        # trailing lines here and the matching entries in _symbols().
         self.sym1 = declare_trig_symbol()
         self.sym2 = declare_trig_symbol()
         self.sym3 = declare_trig_symbol()
         self.sym4 = declare_trig_symbol()
+        self.sym5 = declare_trig_symbol()
+        self.sym6 = declare_trig_symbol()
+        self.sym7 = declare_trig_symbol()
+        self.sym8 = declare_trig_symbol()
+        self.sym9 = declare_trig_symbol()
+        self.sym10 = declare_trig_symbol()
+        self.sym11 = declare_trig_symbol()
+        self.sym12 = declare_trig_symbol()
 
     def custom_indicator(self):
         pass
@@ -235,7 +256,9 @@ class Strategy(StrategyBase):
 
     def _symbols(self):
         out = []
-        for s in (self.sym1, self.sym2, self.sym3, self.sym4):
+        for s in (self.sym1, self.sym2, self.sym3, self.sym4,
+                  self.sym5, self.sym6, self.sym7, self.sym8,
+                  self.sym9, self.sym10, self.sym11, self.sym12):
             try:
                 if s is not None and self._code(s) not in ("", "None"):
                     out.append(s)
@@ -294,6 +317,7 @@ class Strategy(StrategyBase):
             return
 
         any_ok = False
+        self.committed = 0.0
         for symbol in self._symbols():
             try:
                 self.evaluate_one(symbol)
@@ -497,7 +521,9 @@ class Strategy(StrategyBase):
         # cash — which includes the floor's dollars — so a drawdown could
         # spend the sacred reserve. Only cash ABOVE the floor is deployable.
         cash_now = total_cash(currency=Currency.USD) or 0.0
-        cash_above_floor = cash_now - floor_dollars
+        # Subtract what earlier symbols already committed in this same pass:
+        # limit orders do not reduce total_cash until they fill.
+        cash_above_floor = cash_now - floor_dollars - self.committed
         if cash_above_floor <= 0:
             if st["last_note"] != "floor":
                 print("[no-trade] " + code + ": cash is at or below the " +
@@ -526,6 +552,7 @@ class Strategy(StrategyBase):
               "] " + code + ": " + str(qty) + " sh @ ~" + str(self._dp(px, 2)) +
               " — " + why + (" [STARTER ONLY]" if st["starter_only"] else ""))
         self.submit(symbol, qty, OrderSide.BUY, close)
+        self.committed = self.committed + qty * px
 
         # Our own reference cost, in the same adjusted space as the bars.
         total_ref = st["ref"] * st["ref_qty"] + close * qty
@@ -575,7 +602,16 @@ class Strategy(StrategyBase):
     # ── measurements, all on closed bars ───────────────────────────────────
 
     def recent_high(self, symbol):
-        """Highest HIGH over the lookback, from closed bars."""
+        """Highest HIGH over the lookback, from closed bars.
+
+        COST: one call per bar of `high_lookback`, per FLAT symbol, per day
+        (a held symbol never runs this). With a large basket that adds up —
+        `high_lookback` is the knob if a backtest feels slow.
+
+        Deliberately NOT bar_custom: that aggregates on a FIXED GRID, so it
+        answers "the high of a 60-day block" rather than "the high of the last
+        60 bars". It would be one call instead of sixty and quietly change
+        what a valley means."""
         high = None
         for i in range(0, self.high_lookback):
             h = bar_high(symbol=symbol, bar_type=BarType.K_DAY,

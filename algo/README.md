@@ -13,6 +13,17 @@ Everything else — the translation from the constitution's laws, every
 parameter, the three acceptance tests, the known limitations — lives in the
 file's header, so there is one place to keep current.
 
+## Symbols
+
+Twelve trigger slots (`sym1`…`sym12`); fill as many as you want, empty ones are
+skipped. To go further — the platform allows 50 — add a `declare_trig_symbol()`
+line in `trigger_symbols()` **and** its entry in `_symbols()`; both places, or
+the slot is declared but never evaluated.
+
+Note `max_position_pct` is a per-name cap, not a target: with 25% of deployable
+capital per name, at most four positions can be full size, and the rest are
+rationed by cash in the order they are evaluated.
+
 ## Before pasting
 
 ```bash

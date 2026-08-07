@@ -188,6 +188,9 @@ class _Enum:
 
 BOOK = {"prices": [], "day": 0, "qty": 0.0, "cost": 0.0, "cash": 100000.0,
         "log": [], "trades": []}
+# Per-symbol holdings for multi-symbol tests; the single-symbol scenarios keep
+# using BOOK["qty"] so their arithmetic stays simple.
+MULTI = {"on": False, "qty": {}, "cost": {}}
 _out = print
 
 
@@ -222,6 +225,8 @@ def _stub_namespace():
             BOOK["cash"] += px * qty
             if BOOK["qty"] <= 0:
                 BOOK["qty"], BOOK["cost"] = 0.0, 0.0
+        if MULTI["on"]:          # a resting limit order has NOT filled yet:
+            BOOK["cash"] += px * qty if side == "BUY" else -px * qty
         BOOK["trades"].append((BOOK["day"], side, qty, round(px, 2)))
         return "SIMORDER"
 
@@ -308,7 +313,8 @@ def main() -> int:
                     log=[], trades=[])
         s = Strategy()
         s.initialize()
-        s.sym1, s.sym2, s.sym3, s.sym4 = "US.TEST", None, None, None
+        for _i in range(1, 13):
+            setattr(s, "sym" + str(_i), "US.TEST" if _i == 1 else None)
         _out("\n" + "=" * 70 + "\n" + label + "\n" + "=" * 70)
         for d in range(len(prices)):
             BOOK["day"] = d
@@ -321,7 +327,8 @@ def main() -> int:
                     log=[], trades=[])
         s = Strategy()
         s.initialize()
-        s.sym1, s.sym2, s.sym3, s.sym4 = "US.TEST", None, None, None
+        for _i in range(1, 13):
+            setattr(s, "sym" + str(_i), "US.TEST" if _i == 1 else None)
         return s
 
     p = [100.0]
@@ -444,6 +451,35 @@ def main() -> int:
     check("restart adopts fully-staged state", st["stages_taken"] == s.stages)
     check("restart marks already-passed rungs as fired",
           1 in st["rungs_fired"] and 2 in st["rungs_fired"])
+
+    # Cash contention: total_cash() does not fall until a limit order fills,
+    # so without pass-level tracking every symbol in one pass sizes against
+    # the same untouched cash. With 12 slots that over-commits badly.
+    s = fresh(p, 300)
+    for _i in range(1, 13):
+        setattr(s, "sym" + str(_i), "US.TEST" + str(_i))
+    BOOK["cash"] = 60000.0                       # 20k above the 40k floor
+    MULTI["on"] = True                           # orders rest unfilled
+    # Measure ACTUAL dollars ordered, from the trade log — not from the
+    # strategy's own counter, which is the very thing under test.
+    per_symbol = []
+    for _i in range(1, 13):
+        code = "US.TEST" + str(_i)
+        stx = s._st(code)
+        stx["close_now"] = p[298]
+        before = len(BOOK["trades"])
+        s.buy_one_stage(code, code, stx, p[298], 10.0, 3)
+        spent = sum(tr[2] * tr[3] for tr in BOOK["trades"][before:]
+                    if tr[1] == "BUY")
+        per_symbol.append(spent)
+    total = sum(per_symbol)
+    check("12 symbols in one pass cannot over-commit cash",
+          total <= 20000.0 + 1.0)
+    check("...and the later symbols were the ones cut off",
+          per_symbol[0] > 0 and per_symbol[-1] == 0)
+    MULTI["on"] = False
+    _out("       ordered $" + str(round(total, 2)) + " of $20000 deployable "
+         "across " + str(sum(1 for c in per_symbol if c > 0)) + " symbols")
 
     _out("\nRESULT: " + ("all green" if allok[0] else "FAILURES ABOVE"))
     return 0 if allok[0] else 1
