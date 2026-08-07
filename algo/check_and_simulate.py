@@ -602,13 +602,15 @@ def main() -> int:
     for d in range(40):
         BOOK["day"] = d
         s.handle_data()
+    # Match the TAG at line start: the first-trigger message mentions
+    # "[NO DATA]" in its guidance text, so a substring test counts it twice.
     check("no-price-data is reported as NO DATA, not warm-up",
-          any("[NO DATA]" in m for d, m in BOOK["log"])
-          and not any("warming up" in m for d, m in BOOK["log"]))
+          any(m.startswith("[NO DATA]") for d, m in BOOK["log"])
+          and not any(m.startswith("[warming up]") for d, m in BOOK["log"]))
     check("...and it warns that one such symbol clamps the whole run",
           any("CLAMP THE WHOLE BACKTEST" in m for d, m in BOOK["log"]))
     check("...said once, not once per trigger",
-          sum(1 for d, m in BOOK["log"] if "[NO DATA]" in m) == 1)
+          sum(1 for d, m in BOOK["log"] if m.startswith("[NO DATA]")) == 1)
 
     _out("\nRESULT: " + ("all green" if allok[0] else "FAILURES ABOVE"))
     return 0 if allok[0] else 1
