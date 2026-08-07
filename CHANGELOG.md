@@ -2,6 +2,16 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-07-28] A backtestable strategy: the discipline made mechanical (`algo/`)
+
+Operator asked for a strategy to backtest, built from this system. `algo/settled_basis_ladder.py` renders the Portfolio Machine's **risk discipline** — not its research — as a moomoo/FUTU algo strategy, with `algo/README.md` explaining the translation and `algo/dryrun_sim.py` proving the mechanics offline.
+
+**The translation:** law 2 becomes `select=2` on every read (on this platform `select=1` is the bar still FORMING — the INTC $91.63→$92.52 flip in platform form) plus a once-per-calendar-day gate, so an intraday trigger cannot make it act on an intraday number; two-source cross-check becomes an entry requiring the structural regime AND a turning valley to agree, with disagreement logged and no action taken; the sacred floor becomes `net_asset × (1 − floor_pct)` that nothing may borrow from; anti-parabola becomes starter-size-only, one stage, for any name up ≥100% in six months; valley-entry doctrine (§IV "drawdowns are the queue, not the hazard") becomes buy-the-pullback-inside-strength and never a breakout; staged thirds, pre-declared exit ladders (rung 2 IS the euphoria protocol at 2× cost), the dated signpost as a time stop, and a settled close below trend as a thesis break.
+
+**Stated honestly in the README:** this cannot test the theses — the panel's judgment is not mechanical. It tests one falsifiable question: does the discipline beat buy-and-hold on the names we track, on drawdown and worst-trade rather than CAGR? Three acceptance tests are specified, including flipping `use_settled` to False to MEASURE what peeking at unsettled prices is worth — if the edge depends on that, the edge is the lookahead the constitution exists to prevent. Known limitations (11 parameters will overfit if tuned per name; no fundamentals; trend-following chop) are listed up front.
+
+**Verification:** every platform call, enum type and enum member checked against the uploaded manual programmatically (no invented API). `python3 algo/dryrun_sim.py` = 11/11 mechanism assertions green across three synthetic paths — valley entry → three ladder rungs → structural exit; parabolic name capped at one starter stage; downtrend chop never entered; plus both sides of the anti-parabola threshold pinned. The dry run also caught a real defect before shipping: a standing no-trade reason printed every single day (200+ identical lines burying the actual decisions) — now logged once per state change.
+
 ## [2026-07-28] The research department grows: 8-seat panel with real philosophies · signal discipline · watchman refinements
 
 Three operator directives, one batch. **Acceptance: `pytest scripts/ -q` = 328 passed (was 288); `pytest portfolio-machine/tests -q` = 86 passed (was 60); both offline.**
