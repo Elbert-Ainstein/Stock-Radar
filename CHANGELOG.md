@@ -2,6 +2,14 @@
 
 All notable changes made to the project are documented here, with reasoning and impact.
 
+## [2026-07-28] algo: v2.1 — one self-contained file
+
+Operator: "everything in one file please." `algo/settled_basis_ladder.py` now carries the strategy, its full documentation (translation table, parameters, acceptance tests, limitations), and — below a clearly-marked banner — the offline self-test and the manual signature checker. `algo/dryrun_sim.py` and `algo/verify_against_manual.py` are deleted rather than duplicated, so there is one copy to keep current; `algo/README.md` is now a pointer.
+
+Safety of the embedded tooling: the self-test sits under `if __name__ == "__main__"`, which the broker never satisfies, and the only module-import-time dependency is `StrategyBase` — provided by a four-line `try/except NameError` shim so the file also runs standalone. Verified by simulating a broker load (inject `StrategyBase`, exec the file): `Strategy` is defined, the self-test does not execute, and nothing from it leaks into the namespace. The embedded checker strips at the banner before analysing, so it reports on the strategy only.
+
+**Acceptance: `python3 algo/settled_basis_ladder.py <manual>` = 19/19 mechanism and regression checks green + "clean — every call matches the manual's signature"; broker-load simulation shows zero self-test leakage.**
+
 ## [2026-07-28] A backtestable strategy: the discipline made mechanical (`algo/`)
 
 Operator asked for a strategy to backtest, built from this system. `algo/settled_basis_ladder.py` renders the Portfolio Machine's **risk discipline** — not its research — as a moomoo/FUTU algo strategy, with `algo/README.md` explaining the translation and `algo/dryrun_sim.py` proving the mechanics offline.
